@@ -1,7 +1,5 @@
 import { useMemo, useState } from 'react';
-import { BookOpen, BarChart3, TrendingUp, AlertCircle } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
-import StatCard from '../../components/StatCard';
 import { students } from '../../data/mockData';
 
 const subjectList = ['Tamil', 'English', 'Mathematics', 'Science', 'Social Science'];
@@ -114,12 +112,6 @@ export default function AcademicTracking() {
         title="Academic Tracking"
         subtitle="Track quarterly, half-yearly, and annual academic performance with subject-wise diagnostic observations and learning behavior notes."
       />
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard title="Average Performance" value={`${avgPercentage}%`} icon={TrendingUp} trend="Current term" trendUp={avgPercentage >= 70} />
-        <StatCard title="High Performing" value={improved} icon={BookOpen} trend="≥75%" trendUp={true} />
-        <StatCard title="Needs Support" value={atRisk} icon={AlertCircle} trend="<60%" trendUp={false} />
-      </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -240,44 +232,6 @@ export default function AcademicTracking() {
               })}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="h-5 w-5 text-indigo-600" />
-            <h3 className="text-base font-bold text-slate-900">Subject-wise Trend</h3>
-          </div>
-          <div className="space-y-4">
-            {subjectSummary.map((entry) => (
-              <div key={entry.subject}>
-                <div className="mb-1 flex justify-between text-sm">
-                  <span className="font-medium text-slate-700">{entry.subject}</span>
-                  <span className="text-slate-500">{entry.avg}%</span>
-                </div>
-                <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-blue-500" style={{ width: `${entry.avg}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-          <h3 className="text-base font-bold text-slate-900 mb-4">Narrative Intervention Notes</h3>
-          <div className="space-y-4">
-            {summaryRows.map((row) => (
-              <div key={`notes-${row.id}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="font-semibold text-slate-800">{row.student}</p>
-                  <span className="text-xs bg-indigo-100 text-indigo-700 rounded-full px-2 py-1">{row.percentage}%</span>
-                </div>
-                <p className="text-sm text-slate-600 mb-2"><span className="font-semibold text-slate-700">Key improvement:</span> {row.narrative}</p>
-                <p className="text-sm text-slate-600"><span className="font-semibold text-slate-700">Support needed:</span> {row.support}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </div>
