@@ -52,7 +52,7 @@ To use an AWS RDS Postgres instance, set the `DATABASE_URL` environment variable
 postgres://<DB_USER>:<DB_PASSWORD>@<DB_HOST>:<DB_PORT>/<DB_NAME>
 ```
 
-You can place the URL in a `.env` file at the project root (see `.env.sample`) for local development. The settings will fall back to `db.sqlite3` when `DATABASE_URL` is not set.
+You can place the URL in a `.env` file at the project root (see `.env.example`) for local development. The project is configured for Postgres only and does not use SQLite.
 
 After setting `DATABASE_URL`, run:
 

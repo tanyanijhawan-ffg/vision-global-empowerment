@@ -1,22 +1,33 @@
 from rest_framework import serializers
 
-from services.models.student_profile import StudentProfile
+from school.models.student import Student
+from school.serializers.center import CenterSerializer
+from school.models.center import Center
 
 
 class StudentProfileSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source='student_id', read_only=True)
+    centre = CenterSerializer(read_only=True)
+    centre_id = serializers.PrimaryKeyRelatedField(
+        queryset=Center.objects.all(), write_only=True, source='centre'
+    )
+
     class Meta:
-        model = StudentProfile
+        model = Student
         fields = [
-            'student_id', 'admission_number', 'center', 'roll_number',
-            'first_name', 'middle_name', 'last_name',
-            'gender', 'date_of_birth', 'blood_group',
-            'nationality', 'religion', 'caste', 'student_photo',
-            'email', 'mobile_number',
-            'address_line1', 'address_line2', 'city', 'state', 'country', 'postal_code',
-            'class_id', 'section_id',
-            'admission_date', 'previous_school',
-            'aadhar_number', 'birth_certificate_number',
-            'emergency_contact_name', 'emergency_contact_number',
-            'status', 'created_by', 'created_date',
-            'modified_by', 'modified_date',
+            'id',
+            'full_name',
+            'nick_name',
+            'gender',
+            'dob',
+            'age',
+            'photo',
+            'school_name',
+            'school_type',
+            'class_grade',
+            'medium_of_instruction',
+            'attendance_pattern',
+            'previous_academic_performance',
+            'centre',
+            'centre_id',
         ]

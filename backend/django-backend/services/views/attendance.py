@@ -14,17 +14,14 @@ class AttendanceCreateView(generics.CreateAPIView):
 
 class AttendanceListView(generics.ListAPIView):
     permission_classes = [IsAdminOrReadOnly]
-    queryset = Attendance.objects.select_related('student', 'student__center', 'student__role').all()
+    queryset = Attendance.objects.select_related('student', 'student__centre').all()
     serializer_class = AttendanceSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['date', 'present', 'student__center__id', 'student__role__id']
+    filterset_fields = ['attendance_date', 'status', 'student__centre__centre_id']
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        center_id = self.request.query_params.get('center_id')
-        role_id = self.request.query_params.get('role_id')
+        center_id = self.request.query_params.get('center_id') or self.request.query_params.get('centre_id')
         if center_id is not None:
-            queryset = queryset.filter(student__center__id=center_id)
-        if role_id is not None:
-            queryset = queryset.filter(student__role__id=role_id)
+            queryset = queryset.filter(student__centre__centre_id=center_id)
         return queryset

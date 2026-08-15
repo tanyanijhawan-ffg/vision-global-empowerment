@@ -1,6 +1,6 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
-from django_filters.rest_framework import DjangoFilterBackend
 
 from school.models.student import Student
 from school.serializers.student import StudentSerializer
@@ -11,13 +11,20 @@ class StudentListView(generics.ListCreateAPIView):
     queryset = Student.objects.select_related('centre').all()
     serializer_class = StudentSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['centre__centre_id']
+    filterset_fields = ['centre__centre_id', 'gender', 'class_grade', 'school_name']
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        center_id = self.request.query_params.get('center_id')
-        if center_id is not None:
-            queryset = queryset.filter(centre__centre_id=center_id)
+        centre_id = self.request.query_params.get('centre_id') or self.request.query_params.get('center_id')
+        gender = self.request.query_params.get('gender')
+        class_grade = self.request.query_params.get('class_grade')
+
+        if centre_id is not None:
+            queryset = queryset.filter(centre__centre_id=centre_id)
+        if gender is not None:
+            queryset = queryset.filter(gender__iexact=gender)
+        if class_grade is not None:
+            queryset = queryset.filter(class_grade__iexact=class_grade)
         return queryset
 
 

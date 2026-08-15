@@ -94,26 +94,14 @@ WSGI_APPLICATION = 'vision_global_empowerment.wsgi.application'
 # This project is configured to use Postgres only.
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASE_URL = os.getenv('DATABASE_URL')
-if DATABASE_URL:
-    DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=False)
-    }
-else:
-    DB_NAME = os.getenv('DB_NAME')
-    if DB_NAME:
-        DATABASES = {
-            'default': {
-                'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
-                'NAME': 'Postgres',
-                'USER': os.getenv('DB_USER', 'postgres'),
-                'PASSWORD': os.getenv('DB_PASSWORD', 'forceforgood'),
-                'HOST': os.getenv('DB_HOST', 'localhost'),
-                'PORT': os.getenv('DB_PORT', '5432'),
-            }
-        }
-    else:
-        raise RuntimeError('Postgres database configuration not found. Set DATABASE_URL or DB_NAME environment variables.')
+DATABASE_URL = os.getenv('DATABASE_URL') or (
+    f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'forceforgood')}@"
+    f"{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'postgres')}"
+)
+
+DATABASES = {
+    'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=False)
+}
 
 # Allow specifying DEBUG and ALLOWED_HOSTS via env in production
 DEBUG = os.getenv('DJANGO_DEBUG', str(DEBUG)) == 'True'

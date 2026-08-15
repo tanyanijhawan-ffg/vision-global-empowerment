@@ -13,4 +13,17 @@ class AttendanceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Attendance
-        fields = ['id', 'student', 'student_id', 'date', 'present', 'note']
+        fields = [
+            'attendance_id',
+            'student',
+            'student_id',
+            'attendance_date',
+            'status',
+            'time_in',
+            'time_out',
+            'absence_reason',
+            'participation_level',
+            'attention_level',
+            'behaviour',
+            'tutor_observation',
+        ]

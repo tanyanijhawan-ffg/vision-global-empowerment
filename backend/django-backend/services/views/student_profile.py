@@ -1,35 +1,35 @@
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import generics
+from rest_framework.permissions import AllowAny
 
-from services.models.student_profile import StudentProfile
+from school.models.student import Student
 from services.serializers.student_profile import StudentProfileSerializer
-from services.permissions import IsAdminOrReadOnly
 
 
 class StudentProfileListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAdminOrReadOnly]
-    queryset = StudentProfile.objects.select_related('center').all()
+    permission_classes = [AllowAny]
+    queryset = Student.objects.select_related('centre').all()
     serializer_class = StudentProfileSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['center__id', 'gender', 'status', 'class_id', 'section_id']
+    filterset_fields = ['centre__centre_id', 'gender', 'class_grade']
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        center_id = self.request.query_params.get('center_id')
+        centre_id = self.request.query_params.get('centre_id') or self.request.query_params.get('center_id')
         gender = self.request.query_params.get('gender')
-        status = self.request.query_params.get('status')
-        if center_id is not None:
-            queryset = queryset.filter(center__id=center_id)
+        class_grade = self.request.query_params.get('class_grade')
+
+        if centre_id is not None:
+            queryset = queryset.filter(centre__centre_id=centre_id)
         if gender is not None:
             queryset = queryset.filter(gender__iexact=gender)
-        if status is not None:
-            queryset = queryset.filter(status__iexact=status)
+        if class_grade is not None:
+            queryset = queryset.filter(class_grade__iexact=class_grade)
         return queryset
 
 
 class StudentProfileRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAdminOrReadOnly]
-    queryset = StudentProfile.objects.select_related('center').all()
+    permission_classes = [AllowAny]
+    queryset = Student.objects.select_related('centre').all()
     serializer_class = StudentProfileSerializer
     lookup_field = 'student_id'
