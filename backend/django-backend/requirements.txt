@@ -1,6 +1,6 @@
-Django==4.2.16
-djangorestframework==3.15.2
-django-filter==24.3
+Django==6.0.7
+djangorestframework==3.17.1
+django-filter==26.1
 drf-yasg==1.21.15
 # Note: install a Postgres driver compatible with your Python version.
 # Use a version that supports Python 3.14.
