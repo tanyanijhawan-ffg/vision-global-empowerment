@@ -2,6 +2,18 @@ from .center import Center, Program, Region, District
 from .role import Role
 from .student import Student
 from .attendance import Attendance, LearningBehaviour, AcademicAssessment, SubjectScore
+from .assessment import (
+    Assessment,
+    AssessmentDiagnostic,
+    AssessmentScore,
+    AssessmentSubmission,
+    AssessmentType,
+    DiagnosticOption,
+    LearningBehaviourOption,
+    StudentLearningBehaviour,
+    StudentObservation,
+    Subject,
+)
 from .family import Family
 from .socio_economic import SocioEconomic
 from .vulnerability import VulnerabilityMaster, StudentVulnerability
@@ -19,6 +31,16 @@ __all__ = [
     'LearningBehaviour',
     'AcademicAssessment',
     'SubjectScore',
+    'Assessment',
+    'AssessmentDiagnostic',
+    'AssessmentScore',
+    'AssessmentSubmission',
+    'AssessmentType',
+    'DiagnosticOption',
+    'LearningBehaviourOption',
+    'StudentLearningBehaviour',
+    'StudentObservation',
+    'Subject',
     'Family',
     'SocioEconomic',
     'VulnerabilityMaster',
