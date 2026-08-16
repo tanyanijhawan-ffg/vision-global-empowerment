@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Layouts
 import AppLayout from './components/AppLayout';
@@ -50,41 +51,41 @@ function App() {
 
           {/* App Routes */}
           <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             
-            <Route path="/masters/regions" element={<RegionsList />} />
-            <Route path="/masters/districts" element={<DistrictsList />} />
-            <Route path="/masters/centres" element={<CentresList />} />
+            <Route path="/masters/regions" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><RegionsList /></ProtectedRoute>} />
+            <Route path="/masters/districts" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><DistrictsList /></ProtectedRoute>} />
+            <Route path="/masters/centres" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><CentresList /></ProtectedRoute>} />
             
-            <Route path="/students" element={<StudentsList />} />
-            <Route path="/students/new" element={<StudentRegistration />} />
-            <Route path="/students/:id" element={<StudentProfile />} />
+            <Route path="/students" element={<ProtectedRoute><StudentsList /></ProtectedRoute>} />
+            <Route path="/students/new" element={<ProtectedRoute><StudentRegistration /></ProtectedRoute>} />
+            <Route path="/students/:id" element={<ProtectedRoute><StudentProfile /></ProtectedRoute>} />
             
-            <Route path="/attendance" element={<AttendanceDashboard />} />
-            <Route path="/attendance/entry" element={<AttendanceEntry />} />
+            <Route path="/attendance" element={<ProtectedRoute><AttendanceDashboard /></ProtectedRoute>} />
+            <Route path="/attendance/entry" element={<ProtectedRoute><AttendanceEntry /></ProtectedRoute>} />
             
-            <Route path="/academics" element={<AcademicDashboard />} />
-            <Route path="/academics/entry" element={<AssessmentEntry />} />
-            <Route path="/academics/tracking" element={<AcademicTracking />} />
-            <Route path="/academics/:studentId" element={<AcademicProfile />} />
+            <Route path="/academics" element={<ProtectedRoute><AcademicDashboard /></ProtectedRoute>} />
+            <Route path="/academics/entry" element={<ProtectedRoute><AssessmentEntry /></ProtectedRoute>} />
+            <Route path="/academics/tracking" element={<ProtectedRoute><AcademicTracking /></ProtectedRoute>} />
+            <Route path="/academics/:studentId" element={<ProtectedRoute><AcademicProfile /></ProtectedRoute>} />
 
-            <Route path="/leadership" element={<LeadershipDashboard />} />
-            <Route path="/leadership/training" element={<LeadershipTrainingEntry />} />
+            <Route path="/leadership" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><LeadershipDashboard /></ProtectedRoute>} />
+            <Route path="/leadership/training" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><LeadershipTrainingEntry /></ProtectedRoute>} />
             
-            <Route path="/reports" element={<ReportsHub />} />
-            <Route path="/reports/students" element={<StudentReport />} />
-            <Route path="/reports/centres" element={<CentreReport />} />
-            <Route path="/reports/districts" element={<DistrictReport />} />
-            <Route path="/reports/regions" element={<RegionReport />} />
+            <Route path="/reports" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><ReportsHub /></ProtectedRoute>} />
+            <Route path="/reports/students" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><StudentReport /></ProtectedRoute>} />
+            <Route path="/reports/centres" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><CentreReport /></ProtectedRoute>} />
+            <Route path="/reports/districts" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><DistrictReport /></ProtectedRoute>} />
+            <Route path="/reports/regions" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><RegionReport /></ProtectedRoute>} />
             
-            <Route path="/users" element={<UsersList />} />
+            <Route path="/users" element={<ProtectedRoute minimumRole="SUPER_ADMIN"><UsersList /></ProtectedRoute>} />
             
-            <Route path="/settings" element={<SettingsLayout />}>
+            <Route path="/settings" element={<ProtectedRoute><SettingsLayout /></ProtectedRoute>}>
               <Route index element={<Navigate to="profile" replace />} />
               <Route path="profile" element={<ProfileSettings />} />
-              <Route path="organization" element={<OrgSettings />} />
-              <Route path="notifications" element={<NotificationSettings />} />
-              <Route path="theme" element={<ThemeSettings />} />
+              <Route path="organization" element={<ProtectedRoute minimumRole="SUPER_ADMIN"><OrgSettings /></ProtectedRoute>} />
+              <Route path="notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
+              <Route path="theme" element={<ProtectedRoute><ThemeSettings /></ProtectedRoute>} />
             </Route>
           </Route>
 

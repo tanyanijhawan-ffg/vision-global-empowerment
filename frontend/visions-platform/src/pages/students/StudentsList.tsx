@@ -4,11 +4,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import StatusChip from '../../components/StatusChip';
 import { fetchStudents, type StudentListItem } from '../../lib/api';
+import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
 
 export default function StudentsList() {
+  const currentUser = getCurrentUser();
   const [data, setData] = useState<StudentListItem[]>([]);
-  const [filterRegion, setFilterRegion] = useState('All');
-  const [filterCentre, setFilterCentre] = useState('All');
+  const [filterRegion, setFilterRegion] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.region : 'All');
+  const [filterCentre, setFilterCentre] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.centre : 'All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -42,17 +44,19 @@ export default function StudentsList() {
     };
   }, []);
 
+  const scopedData = useMemo(() => filterUserScopedRows(data, currentUser), [data, currentUser]);
+
   const availableRegions = useMemo(() => {
-    const set = new Set(data.map(student => student.region));
+    const set = new Set(scopedData.map(student => student.region));
     return ['All', ...Array.from(set).filter(Boolean)].sort();
-  }, [data]);
+  }, [scopedData]);
 
   const availableCentres = useMemo(() => {
-    const set = new Set(data.filter(student => filterRegion === 'All' || student.region === filterRegion).map(student => student.centre));
+    const set = new Set(scopedData.filter(student => filterRegion === 'All' || student.region === filterRegion).map(student => student.centre));
     return ['All', ...Array.from(set).filter(Boolean)].sort();
-  }, [data, filterRegion]);
+  }, [scopedData, filterRegion]);
 
-  const filteredData = data.filter(s => 
+  const filteredData = scopedData.filter(s => 
     (filterRegion === 'All' || s.region === filterRegion) &&
     (filterCentre === 'All' || s.centre === filterCentre)
   );

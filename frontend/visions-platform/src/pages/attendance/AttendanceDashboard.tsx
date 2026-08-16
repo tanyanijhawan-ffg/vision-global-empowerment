@@ -4,6 +4,7 @@ import PageHeader from '../../components/PageHeader';
 import StatCard from '../../components/StatCard';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { regions, districts, centres, students } from '../../data/mockData';
+import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
 
 const weekTrend = [
   { day: 'Mon', pct: 85 }, { day: 'Tue', pct: 82 }, { day: 'Wed', pct: 88 },
@@ -15,31 +16,36 @@ const sel = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-s
 type View = 'region' | 'district' | 'centre' | 'class';
 
 export default function AttendanceDashboard() {
+  const currentUser = getCurrentUser();
   const [view, setView] = useState<View>('region');
-  const [filterRegion, setFilterRegion] = useState('');
+  const [filterRegion, setFilterRegion] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.region : '');
   const [filterDistrict, setFilterDistrict] = useState('');
-  const [filterCentre, setFilterCentre] = useState('');
+  const [filterCentre, setFilterCentre] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.centre : '');
   const [filterClass, setFilterClass] = useState('');
 
+  const scopedStudents = useMemo(() => filterUserScopedRows(students, currentUser), [currentUser]);
+
   const filteredDistricts = useMemo(
-    () => districts.filter(d => !filterRegion || d.region === regions.find(r => r.id === filterRegion)?.name),
-    [filterRegion]
+    () => districts.filter(d => (!filterRegion || d.region === regions.find(r => r.id === filterRegion)?.name) && (!currentUser || currentUser.role === 'SUPER_ADMIN' || d.region === currentUser.region)),
+    [filterRegion, currentUser]
   );
   const filteredCentres = useMemo(
     () => centres.filter(c =>
       (!filterRegion || c.region === regions.find(r => r.id === filterRegion)?.name) &&
-      (!filterDistrict || c.district === districts.find(d => d.id === filterDistrict)?.name)
+      (!filterDistrict || c.district === districts.find(d => d.id === filterDistrict)?.name) &&
+      (!currentUser || currentUser.role === 'SUPER_ADMIN' || c.region === currentUser.region) &&
+      (currentUser?.role !== 'FACILITATOR' || c.name === currentUser.centre)
     ),
-    [filterRegion, filterDistrict]
+    [filterRegion, filterDistrict, currentUser]
   );
   const filteredStudents = useMemo(
-    () => students.filter(s =>
+    () => scopedStudents.filter(s =>
       (!filterRegion || s.region === regions.find(r => r.id === filterRegion)?.name) &&
       (!filterDistrict || s.district === districts.find(d => d.id === filterDistrict)?.name) &&
       (!filterCentre || s.centre === centres.find(c => c.id === filterCentre)?.name) &&
       (!filterClass || s.class === filterClass)
     ),
-    [filterRegion, filterDistrict, filterCentre, filterClass]
+    [scopedStudents, filterRegion, filterDistrict, filterCentre, filterClass]
   );
 
   const avgAttendance = filteredStudents.length

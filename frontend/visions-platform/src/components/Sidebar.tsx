@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getCurrentUser, getRouteAccess } from '../lib/auth';
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(' ');
 
@@ -61,6 +62,28 @@ const navItems = [
 
 export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (v: boolean) => void }) {
   const location = useLocation();
+  const currentUser = getCurrentUser();
+  const userRole = currentUser?.role ?? 'FACILITATOR';
+
+  const visibleNavItems = navItems
+    .filter((item) => {
+      if (item.children) {
+        const filteredChildren = item.children.filter((child) => getRouteAccess(userRole, child.path));
+        return filteredChildren.length > 0;
+      }
+
+      return item.path ? getRouteAccess(userRole, item.path) : true;
+    })
+    .map((item) => {
+      if (item.children) {
+        return {
+          ...item,
+          children: item.children.filter((child) => getRouteAccess(userRole, child.path)),
+        };
+      }
+      return item;
+    });
+
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     Masters: location.pathname.startsWith('/masters'),
     Attendance: location.pathname.startsWith('/attendance'),
@@ -92,7 +115,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
       {/* Nav */}
       <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
         <ul className="space-y-1 px-3">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             if (item.children) {
               const isGroupActive = item.children.some(child => location.pathname === child.path);

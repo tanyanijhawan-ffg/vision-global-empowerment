@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { ROLE_LABELS, USER_MAP, setCurrentUser } from '../lib/auth';
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -11,6 +12,15 @@ export default function Login() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const user = USER_MAP[email.trim().toLowerCase()];
+
+    if (!user || password !== 'Admin@123') {
+      alert('Invalid login. Try kavitha@visionsglobal.org / Admin@123');
+      return;
+    }
+
+    setCurrentUser(user);
     navigate('/dashboard');
   };
 
@@ -96,6 +106,13 @@ export default function Login() {
               <Link to="/forgot-password" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">
                 Forgot password?
               </Link>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Demo users: <br />
+              <span className="font-medium">kavitha@visionsglobal.org</span> - Super Admin <br />
+              <span className="font-medium">rajan@visionsglobal.org</span> - Regional Admin <br />
+              <span className="font-medium">meera@visionsglobal.org</span> - Facilitator
             </div>
 
             <button 
