@@ -46,14 +46,6 @@ const navItems = [
       { name: 'Tracking', path: '/academics/tracking' },
     ]
   },
-  {
-    name: 'Leadership',
-    icon: ShieldAlert,
-    children: [
-      { name: 'Dashboard', path: '/leadership' },
-      { name: 'Training', path: '/leadership/training' },
-    ]
-  },
   { name: 'Reports', icon: BarChart3, path: '/reports' },
   { name: 'Users', icon: ShieldAlert, path: '/users' },
   { name: 'Settings', icon: Settings, path: '/settings' },

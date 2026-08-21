@@ -23,8 +23,6 @@ import AcademicDashboard from './pages/academics/AcademicDashboard';
 import AssessmentEntry from './pages/academics/AssessmentEntry';
 import AcademicTracking from './pages/academics/AcademicTracking';
 import AcademicProfile from './pages/academics/AcademicProfile';
-import LeadershipDashboard from './pages/leadership/LeadershipDashboard';
-import LeadershipTrainingEntry from './pages/leadership/LeadershipTrainingEntry';
 import ReportsHub from './pages/reports/ReportsHub';
 import StudentReport from './pages/reports/StudentReport';
 import CentreReport from './pages/reports/CentreReport';
@@ -67,9 +65,6 @@ function App() {
             <Route path="/academics/entry" element={<AssessmentEntry />} />
             <Route path="/academics/tracking" element={<AcademicTracking />} />
             <Route path="/academics/:studentId" element={<AcademicProfile />} />
-
-            <Route path="/leadership" element={<LeadershipDashboard />} />
-            <Route path="/leadership/training" element={<LeadershipTrainingEntry />} />
             
             <Route path="/reports" element={<ReportsHub />} />
             <Route path="/reports/students" element={<StudentReport />} />
