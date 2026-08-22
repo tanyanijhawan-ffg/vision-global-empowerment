@@ -4,8 +4,10 @@ import PageHeader from '../../components/PageHeader';
 import StatusChip from '../../components/StatusChip';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { centres, regions, districts } from '../../data/mockData';
+import { getCurrentUser } from '../../lib/auth';
 
 export default function CentresList() {
+  const canManage = getCurrentUser()?.role === 'SUPER_ADMIN';
   const [data, setData] = useState(centres);
   const [filterRegion, setFilterRegion] = useState('All');
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -72,7 +74,7 @@ export default function CentresList() {
                 <th className="px-6 py-3">Students</th>
                 <th className="px-6 py-3">Avg Attendance</th>
                 <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3 text-right">Actions</th>
+                {canManage && <th className="px-6 py-3 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -111,7 +113,7 @@ export default function CentresList() {
                   <td className="px-6 py-4">
                     <StatusChip status={centre.status} />
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  {canManage && <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md hover:bg-indigo-50 transition-colors">
                         <Edit2 size={16} />
@@ -123,7 +125,7 @@ export default function CentresList() {
                         <Trash2 size={16} />
                       </button>
                     </div>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>

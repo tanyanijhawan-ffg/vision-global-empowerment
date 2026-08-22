@@ -12,9 +12,9 @@ import {
   ChevronDown,
   X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCurrentUser, getRouteAccess } from '../lib/auth';
+import { getCurrentUser, getRouteAccess, getUserInitials } from '../lib/auth';
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(' ');
 
@@ -25,7 +25,6 @@ const navItems = [
     icon: Map, 
     children: [
       { name: 'Regions', path: '/masters/regions' },
-      { name: 'Districts', path: '/masters/districts' },
       { name: 'Centres', path: '/masters/centres' },
     ]
   },
@@ -62,8 +61,14 @@ const navItems = [
 
 export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (v: boolean) => void }) {
   const location = useLocation();
-  const currentUser = getCurrentUser();
+  const [currentUser, setCurrentUser] = useState(getCurrentUser);
   const userRole = currentUser?.role ?? 'FACILITATOR';
+
+  useEffect(() => {
+    const refreshUser = () => setCurrentUser(getCurrentUser());
+    window.addEventListener('vge-auth-change', refreshUser);
+    return () => window.removeEventListener('vge-auth-change', refreshUser);
+  }, []);
 
   const visibleNavItems = navItems
     .filter((item) => {
@@ -194,12 +199,12 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
       <div className="p-4 border-t border-slate-800">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold shrink-0 border border-indigo-500/30">
-            KM
+              {getUserInitials(currentUser)}
           </div>
           {isOpen && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">Kavitha Mani</p>
-              <p className="text-xs text-slate-400 truncate">Super Admin</p>
+              <p className="text-sm font-medium text-white truncate">{currentUser?.name || 'User'}</p>
+              <p className="text-xs text-slate-400 truncate">{currentUser?.role === 'SUPER_ADMIN' ? 'Super Admin' : currentUser?.role === 'REGIONAL_ADMIN' ? 'Regional Admin' : 'Facilitator'}</p>
             </div>
           )}
         </div>

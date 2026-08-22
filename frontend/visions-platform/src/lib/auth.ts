@@ -10,6 +10,36 @@ export interface AppUser {
   status: 'Active' | 'Inactive';
 }
 
+export type BackendRoleName = 'super_admin' | 'regional_admin' | 'facilitator';
+
+const AUTH_TOKEN_KEY = 'vge_auth_token';
+
+export const getAuthHeaders = (): Record<string, string> => {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  return token ? { Authorization: `Token ${token}` } : {};
+};
+
+export const setAuthToken = (token: string) => {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+};
+
+export const clearAuthToken = () => {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+};
+
+export function normalizeRole(role?: string | null): Role {
+  switch (role) {
+    case 'super_admin':
+      return 'SUPER_ADMIN';
+    case 'regional_admin':
+      return 'REGIONAL_ADMIN';
+    case 'facilitator':
+      return 'FACILITATOR';
+    default:
+      return 'FACILITATOR';
+  }
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
   REGIONAL_ADMIN: 'Regional Admin',
@@ -20,36 +50,6 @@ export const ROLE_HIERARCHY: Record<Role, number> = {
   SUPER_ADMIN: 3,
   REGIONAL_ADMIN: 2,
   FACILITATOR: 1,
-};
-
-export const USER_MAP: Record<string, AppUser> = {
-  'kavitha@visionsglobal.org': {
-    id: 'U-001',
-    name: 'Kavitha Mani',
-    email: 'kavitha@visionsglobal.org',
-    role: 'SUPER_ADMIN',
-    region: 'All',
-    centre: 'All',
-    status: 'Active',
-  },
-  'rajan@visionsglobal.org': {
-    id: 'U-002',
-    name: 'Rajan Pillai',
-    email: 'rajan@visionsglobal.org',
-    role: 'REGIONAL_ADMIN',
-    region: 'Tamil Nadu South',
-    centre: 'All',
-    status: 'Active',
-  },
-  'meera@visionsglobal.org': {
-    id: 'U-004',
-    name: 'Meera Nair',
-    email: 'meera@visionsglobal.org',
-    role: 'FACILITATOR',
-    region: 'Tamil Nadu South',
-    centre: 'Madurai Centre A',
-    status: 'Active',
-  },
 };
 
 export const getCurrentUser = (): AppUser | null => {
@@ -65,10 +65,37 @@ export const getCurrentUser = (): AppUser | null => {
 
 export const setCurrentUser = (user: AppUser) => {
   localStorage.setItem('vge_user', JSON.stringify(user));
+  window.dispatchEvent(new Event('vge-auth-change'));
+};
+
+export const setCurrentUserFromApi = (payload: {
+  id?: number | string;
+  username?: string;
+  email?: string;
+  full_name?: string;
+  role?: string;
+  region_id?: number | null;
+  region_name?: string | null;
+}) => {
+  const backendUser = payload ?? {};
+  const user: AppUser = {
+    id: String(backendUser.id ?? backendUser.username ?? 'unknown'),
+    name: backendUser.full_name || backendUser.username || 'User',
+    email: backendUser.email || backendUser.username || '',
+    role: normalizeRole(backendUser.role),
+    region: backendUser.region_name || 'All',
+    centre: 'All',
+    status: 'Active',
+  };
+
+  setCurrentUser(user);
+  return user;
 };
 
 export const clearCurrentUser = () => {
   localStorage.removeItem('vge_user');
+  clearAuthToken();
+  window.dispatchEvent(new Event('vge-auth-change'));
 };
 
 export const getUserInitials = (user: AppUser | null) => {
@@ -120,9 +147,8 @@ export const filterUserScopedRows = <T extends { region?: string | null; centre?
 export const getRouteAccess = (role: Role, path: string) => {
   const routeRules: Record<string, Role[]> = {
     '/dashboard': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
-    '/masters/regions': ['SUPER_ADMIN', 'REGIONAL_ADMIN'],
-    '/masters/districts': ['SUPER_ADMIN', 'REGIONAL_ADMIN'],
-    '/masters/centres': ['SUPER_ADMIN', 'REGIONAL_ADMIN'],
+    '/masters/regions': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
+    '/masters/centres': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
     '/students': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
     '/students/new': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
     '/attendance': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],

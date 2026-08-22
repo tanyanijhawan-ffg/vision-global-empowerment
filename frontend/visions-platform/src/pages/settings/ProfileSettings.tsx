@@ -1,42 +1,75 @@
+import { useEffect, useState } from 'react';
+import { getAuthHeaders, getCurrentUser, setCurrentUserFromApi } from '../../lib/auth';
+
+interface UserProfileResponse {
+  id: number | string;
+  username: string;
+  email: string;
+  full_name: string;
+  role: string;
+  region_id?: number | null;
+  region_name?: string | null;
+}
+
 export default function ProfileSettings() {
+  const currentUser = getCurrentUser();
+  const [profile, setProfile] = useState<UserProfileResponse | null>(null);
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    fetch(`/api/users/${currentUser.id}/`, { headers: { Accept: 'application/json', ...getAuthHeaders() } })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load profile.')))
+      .then((data: UserProfileResponse) => {
+        setProfile(data);
+        setFullName(data.full_name || '');
+        setEmail(data.email || '');
+      })
+      .catch(error => setStatus(error instanceof Error ? error.message : 'Unable to load profile.'));
+  }, [currentUser?.id]);
+
+  const save = async () => {
+    if (!profile) return;
+    setSaving(true);
+    setStatus('');
+    try {
+      const response = await fetch(`/api/users/${profile.id}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ full_name: fullName, email }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.detail || 'Unable to save profile.');
+      setProfile(payload);
+      setCurrentUserFromApi(payload);
+      setStatus('Profile saved.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to save profile.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const initials = (fullName || currentUser?.name || 'User').split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
+
   return (
     <div className="p-6 md:p-8">
-      <h2 className="text-lg font-bold text-slate-900 mb-6">Profile Settings</h2>
-      <div className="space-y-6 max-w-lg">
+      <h2 className="mb-6 text-lg font-bold text-slate-900">Profile Settings</h2>
+      <div className="max-w-lg space-y-6">
         <div className="flex items-center gap-6">
-          <div className="h-20 w-20 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-2xl font-bold border border-indigo-200">
-            KM
-          </div>
-          <div>
-            <button className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium shadow-sm hover:bg-slate-50 transition-colors">
-              Change Avatar
-            </button>
-            <p className="text-xs text-slate-500 mt-2">JPG, GIF or PNG. 1MB max.</p>
-          </div>
+          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-indigo-200 bg-indigo-100 text-2xl font-bold text-indigo-600">{initials}</div>
+          <div><p className="font-medium text-slate-900">{profile?.username || currentUser?.email}</p><p className="text-xs text-slate-500">{profile?.role === 'super_admin' ? 'Super Admin' : profile?.role === 'regional_admin' ? 'Regional Admin' : 'Facilitator'}</p></div>
         </div>
-        
         <div className="space-y-4 border-t border-slate-100 pt-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-700">First Name</label>
-              <input type="text" defaultValue="Kavitha" className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-slate-700">Last Name</label>
-              <input type="text" defaultValue="Mani" className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-700">Email Address</label>
-            <input type="email" defaultValue="kavitha@visionsglobal.org" disabled className="w-full px-3 py-2 bg-slate-50 border border-slate-200 text-slate-500 rounded-lg text-sm cursor-not-allowed" />
-          </div>
+          <label className="block text-sm font-medium text-slate-700">Full name<input value={fullName} onChange={event => setFullName(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-slate-700">Email address<input type="email" value={email} onChange={event => setEmail(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+          <div className="text-sm text-slate-500">Region: {profile?.region_name || 'Not assigned'}</div>
         </div>
-        
-        <div className="pt-6 flex justify-end">
-          <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-colors">
-            Save Changes
-          </button>
-        </div>
+        {status && <p className="text-sm text-slate-600">{status}</p>}
+        <div className="flex justify-end"><button type="button" disabled={saving || !profile} onClick={save} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{saving ? 'Saving...' : 'Save changes'}</button></div>
       </div>
     </div>
   );

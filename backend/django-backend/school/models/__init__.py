@@ -1,5 +1,6 @@
 from .center import Center, Program, Region, District
 from .role import Role
+from .user_profile import UserProfile
 from .student import Student
 from .attendance import Attendance, LearningBehaviour, AcademicAssessment, SubjectScore
 from .assessment import (
@@ -26,6 +27,7 @@ __all__ = [
     'Region',
     'District',
     'Role',
+    'UserProfile',
     'Student',
     'Attendance',
     'LearningBehaviour',

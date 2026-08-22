@@ -1,10 +1,17 @@
 import { Search, Bell, LogOut } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { clearCurrentUser, getCurrentUser, getUserInitials } from '../lib/auth';
 
 export default function Navbar({ toggleSidebar }: { toggleSidebar: () => void }) {
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
+  const [currentUser, setCurrentUser] = useState(getCurrentUser);
+
+  useEffect(() => {
+    const refreshUser = () => setCurrentUser(getCurrentUser());
+    window.addEventListener('vge-auth-change', refreshUser);
+    return () => window.removeEventListener('vge-auth-change', refreshUser);
+  }, []);
 
   const handleLogout = () => {
     clearCurrentUser();

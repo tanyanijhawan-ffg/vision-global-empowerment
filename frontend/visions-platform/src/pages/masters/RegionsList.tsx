@@ -4,8 +4,10 @@ import PageHeader from '../../components/PageHeader';
 import StatusChip from '../../components/StatusChip';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { regions } from '../../data/mockData';
+import { getCurrentUser } from '../../lib/auth';
 
 export default function RegionsList() {
+  const canManage = getCurrentUser()?.role === 'SUPER_ADMIN';
   const [data, setData] = useState(regions);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -57,7 +59,7 @@ export default function RegionsList() {
                 <th className="px-6 py-3">Centres</th>
                 <th className="px-6 py-3">Students</th>
                 <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3 text-right">Actions</th>
+                {canManage && <th className="px-6 py-3 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -71,7 +73,7 @@ export default function RegionsList() {
                   <td className="px-6 py-4">
                     <StatusChip status={region.status} />
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  {canManage && <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md hover:bg-indigo-50 transition-colors">
                         <Edit2 size={16} />
@@ -83,7 +85,7 @@ export default function RegionsList() {
                         <Trash2 size={16} />
                       </button>
                     </div>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>

@@ -1,4 +1,5 @@
 from .attendance import AttendanceCreateView, AttendanceListView
+from .auth import LoginView
 from .assessment import (
     AssessmentBehaviourView,
     AssessmentCreateView,
@@ -31,10 +32,14 @@ from .metadata import (
     SubjectMetadataListCreateView,
 )
 from .student import StudentListView, StudentRetrieveUpdateDestroyView
+from .user import UserDetailView, UserListCreateView
 
 __all__ = [
     'AttendanceCreateView',
     'AttendanceListView',
+    'LoginView',
+    'UserListCreateView',
+    'UserDetailView',
     'StudentListView',
     'StudentRetrieveUpdateDestroyView',
     'AssessmentTypeListView',

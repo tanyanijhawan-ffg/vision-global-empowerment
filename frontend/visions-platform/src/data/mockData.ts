@@ -63,16 +63,6 @@ export const students = [
   { id: 'VGE-2024-020', name: 'Gopalakrishnan Nair', gender: 'M', age: 13, class: '8', centre: 'Vellore Centre', region: 'Tamil Nadu North', district: 'Vellore', attendancePercent: 88, academicScore: 81, vulnerabilities: [], status: 'Active', date: '2024-02-03' },
 ];
 
-export const users = [
-  { id: 'U-001', name: 'Kavitha Mani', email: 'kavitha@visionsglobal.org', role: 'Super Admin', region: 'All', centre: 'All', status: 'Active', lastLogin: '2024-05-15 09:30 AM' },
-  { id: 'U-002', name: 'Rajan Pillai', email: 'rajan@visionsglobal.org', role: 'Regional Admin', region: 'Tamil Nadu South', centre: 'All', status: 'Active', lastLogin: '2024-05-15 08:45 AM' },
-  { id: 'U-003', name: 'Sundar Kumar', email: 'sundar@visionsglobal.org', role: 'Regional Admin', region: 'Karnataka', centre: 'All', status: 'Active', lastLogin: '2024-05-14 16:20 PM' },
-  { id: 'U-004', name: 'Meera Nair', email: 'meera@visionsglobal.org', role: 'Facilitator', region: 'Tamil Nadu South', centre: 'Madurai Centre A', status: 'Active', lastLogin: '2024-05-15 10:15 AM' },
-  { id: 'U-005', name: 'Dinesh Raj', email: 'dinesh@visionsglobal.org', role: 'Facilitator', region: 'Tamil Nadu North', centre: 'Chennai North Centre', status: 'Active', lastLogin: '2024-05-15 09:00 AM' },
-  { id: 'U-006', name: 'Preethi Selvam', email: 'preethi@visionsglobal.org', role: 'Facilitator', region: 'Andhra Pradesh', centre: 'Nellore Learning Centre', status: 'Active', lastLogin: '2024-05-14 17:30 PM' },
-  { id: 'U-007', name: 'Arun Vijay', email: 'arun@visionsglobal.org', role: 'Regional Admin', region: 'Kerala', centre: 'All', status: 'Active', lastLogin: '2024-05-13 11:10 AM' },
-  { id: 'U-008', name: 'Sujatha Krishnaswamy', email: 'sujatha@visionsglobal.org', role: 'Facilitator', region: 'Karnataka', centre: 'Bangalore Rural Hub', status: 'Active', lastLogin: '2024-05-15 08:15 AM' },
-];
 
 export const activities = [
   { id: 1, text: 'Meera Nair submitted attendance for Madurai Centre A', time: '2 hours ago', icon: 'attendance' },

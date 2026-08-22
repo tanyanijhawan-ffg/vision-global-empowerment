@@ -13,7 +13,6 @@ import ResetPassword from './pages/ResetPassword';
 // Pages - App
 import Dashboard from './pages/Dashboard';
 import RegionsList from './pages/masters/RegionsList';
-import DistrictsList from './pages/masters/DistrictsList';
 import CentresList from './pages/masters/CentresList';
 import StudentsList from './pages/students/StudentsList';
 import StudentRegistration from './pages/students/StudentRegistration';
@@ -53,9 +52,8 @@ function App() {
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             
-            <Route path="/masters/regions" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><RegionsList /></ProtectedRoute>} />
-            <Route path="/masters/districts" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><DistrictsList /></ProtectedRoute>} />
-            <Route path="/masters/centres" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><CentresList /></ProtectedRoute>} />
+            <Route path="/masters/regions" element={<ProtectedRoute><RegionsList /></ProtectedRoute>} />
+            <Route path="/masters/centres" element={<ProtectedRoute><CentresList /></ProtectedRoute>} />
             
             <Route path="/students" element={<ProtectedRoute><StudentsList /></ProtectedRoute>} />
             <Route path="/students/new" element={<ProtectedRoute><StudentRegistration /></ProtectedRoute>} />
