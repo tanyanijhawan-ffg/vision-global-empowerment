@@ -158,17 +158,11 @@ export default function StudentsList() {
                               <div className="font-medium text-slate-900 group-hover:text-indigo-600 transition-colors">
                                 {student.name}
                               </div>
-                              <div className="text-xs text-slate-500 mt-0.5">{student.id}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-slate-900">{student.gender}, {student.age} yrs</div>
-                          {student.vulnerabilities.length > 0 && (
-                            <div className="text-[10px] text-amber-600 font-medium mt-1 max-w-[150px] truncate" title={student.vulnerabilities.join(', ')}>
-                              {student.vulnerabilities[0]} {student.vulnerabilities.length > 1 && `+${student.vulnerabilities.length - 1}`}
-                            </div>
-                          )}
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-slate-900">{student.centre}</div>

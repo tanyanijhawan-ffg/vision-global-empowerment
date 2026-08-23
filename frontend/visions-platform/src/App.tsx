@@ -58,6 +58,7 @@ function App() {
             <Route path="/students" element={<ProtectedRoute><StudentsList /></ProtectedRoute>} />
             <Route path="/students/new" element={<ProtectedRoute><StudentRegistration /></ProtectedRoute>} />
             <Route path="/students/:id" element={<ProtectedRoute><StudentProfile /></ProtectedRoute>} />
+            <Route path="/students/:id/edit" element={<ProtectedRoute><StudentRegistration /></ProtectedRoute>} />
             
             <Route path="/attendance" element={<ProtectedRoute><AttendanceDashboard /></ProtectedRoute>} />
             <Route path="/attendance/entry" element={<ProtectedRoute><AttendanceEntry /></ProtectedRoute>} />

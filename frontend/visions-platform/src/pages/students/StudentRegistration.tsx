@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, User, GraduationCap, Users, Briefcase, HeartPulse, BrainCircuit, Target, MapPin } from 'lucide-react';
-import { regions, districts, centres } from '../../data/mockData';
+import { createStudent, fetchAttendanceCentres, fetchStudent, updateStudent, type AttendanceCentre, type StudentCreateInput } from '../../lib/api';
 
 const STEPS = [
   { id: 1, name: 'Identification', icon: User },
@@ -14,89 +14,98 @@ const STEPS = [
   { id: 8, name: 'Assignment', icon: MapPin },
 ];
 
-const inputCls = 'w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm';
+const inputCls = 'w-full min-w-0 h-10 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm';
 const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
 const sectionTitle = 'text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6 first:mt-0';
 
+type RegistrationData = Omit<StudentCreateInput, 'photo' | 'centre_id'> & {
+  photo: File | null;
+  centre_id: string;
+  family_data: Record<string, string | number>;
+  socio_economic_data: Record<string, string | boolean>;
+  vulnerabilities_data: Array<{ name: string; remarks?: string }>;
+  motivation_data: Array<{ category: string; reason: string; narrative?: string }>;
+  aspirations_data: { career_goal: string; interests: string; strengths: string };
+};
+
+const initialRegistrationData: RegistrationData = {
+  full_name: '', nick_name: '', gender: '', dob: '', photo: null, school_name: '',
+  school_type: '', class_grade: '', medium_of_instruction: '', attendance_pattern: '',
+  previous_academic_performance: '', centre_id: '',
+  family_data: {}, socio_economic_data: {}, vulnerabilities_data: [],
+  motivation_data: [],
+  aspirations_data: { career_goal: '', interests: '', strengths: '' },
+};
+
+type FieldChange = (field: keyof RegistrationData, value: RegistrationData[keyof RegistrationData]) => void;
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <label className={labelCls}>{label}</label>
       {children}
     </div>
   );
 }
 
-function Step1() {
+function calculateAge(dob: string) {
+  if (!dob) return '';
+  const birthDate = new Date(`${dob}T00:00:00`);
+  if (Number.isNaN(birthDate.getTime())) return '';
+  const today = new Date();
+  const birthdayPassed = today.getMonth() > birthDate.getMonth() || (today.getMonth() === birthDate.getMonth() && today.getDate() >= birthDate.getDate());
+  return today.getFullYear() - birthDate.getFullYear() - (birthdayPassed ? 0 : 1);
+}
+
+function Step1({ data, onChange, studentId, existingPhoto }: { data: RegistrationData; onChange: FieldChange; studentId?: string; existingPhoto?: string | null }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field label="Student ID (Auto-generated)">
-          <input type="text" value="VGE-2024-042" readOnly className={inputCls + ' bg-slate-50 text-slate-500'} />
+          <input type="text" value={studentId ?? ''} readOnly className={inputCls + ' bg-slate-50 text-slate-500'} />
         </Field>
         <Field label="Full Name *">
-          <input type="text" placeholder="Enter full name" className={inputCls} />
+          <input type="text" value={data.full_name} onChange={e => onChange('full_name', e.target.value)} placeholder="Enter full name" className={inputCls} />
         </Field>
         <Field label="Nickname / Call Name">
-          <input type="text" placeholder="Nickname" className={inputCls} />
+          <input type="text" value={data.nick_name} onChange={e => onChange('nick_name', e.target.value)} placeholder="Nickname" className={inputCls} />
         </Field>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field label="Date of Birth *">
-          <input type="date" className={inputCls} />
+          <input type="date" value={data.dob} onChange={e => onChange('dob', e.target.value)} className={inputCls} />
         </Field>
         <Field label="Gender *">
-          <select className={inputCls}>
+          <select value={data.gender} onChange={e => onChange('gender', e.target.value)} className={inputCls}>
             <option value="">Select gender</option>
             <option>Female</option>
             <option>Male</option>
             <option>Other</option>
           </select>
         </Field>
-        <Field label="Religion">
-          <select className={inputCls}>
-            <option value="">Select religion</option>
-            <option>Hindu</option>
-            <option>Muslim</option>
-            <option>Christian</option>
-            <option>Other</option>
-          </select>
+        <Field label="Age (Auto-calculated)">
+          <input type="text" value={calculateAge(data.dob) ? `${calculateAge(data.dob)} years` : ''} readOnly className={inputCls + ' bg-slate-50 text-slate-500'} />
         </Field>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Caste / Community">
-          <input type="text" placeholder="e.g. SC, ST, OBC, General" className={inputCls} />
-        </Field>
-        <Field label="Mother Tongue">
-          <select className={inputCls}>
-            <option value="">Select language</option>
-            <option>Tamil</option>
-            <option>Telugu</option>
-            <option>Kannada</option>
-            <option>Malayalam</option>
-            <option>Hindi</option>
-            <option>Other</option>
-          </select>
-        </Field>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Aadhar Number">
-          <input type="text" placeholder="XXXX XXXX XXXX" maxLength={14} className={inputCls} />
-        </Field>
-        <Field label="Contact Number">
-          <input type="tel" placeholder="+91 XXXXX XXXXX" className={inputCls} />
-        </Field>
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="w-full md:max-w-md"><Field label="Student Photograph *">
+          <div className="flex items-center gap-3">
+            {existingPhoto && <img src={existingPhoto} alt="Current student photograph" className="h-16 w-16 rounded-lg object-cover border border-slate-200 shrink-0" />}
+            <input type="file" accept="image/*" onChange={e => onChange('photo', e.target.files?.[0] ?? null)} className={inputCls + ' px-2 text-xs file:mr-2 file:border-0 file:bg-transparent file:text-xs file:font-medium'} />
+          </div>
+          {existingPhoto && <p className="mt-1 text-xs text-slate-500">Current photo saved. Choose a new file only to replace it.</p>}
+        </Field></div>
       </div>
     </div>
   );
 }
 
-function Step2() {
+function Step2({ data, onChange }: { data: RegistrationData; onChange: FieldChange }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field label="Current Class / Grade *">
-          <select className={inputCls}>
+          <select value={data.class_grade} onChange={e => onChange('class_grade', e.target.value)} className={inputCls}>
             <option value="">Select class</option>
             {[1,2,3,4,5,6,7,8,9,10,11,12].map(c => (
               <option key={c}>Class {c}</option>
@@ -106,219 +115,191 @@ function Step2() {
           </select>
         </Field>
         <Field label="School Name">
-          <input type="text" placeholder="School / institution name" className={inputCls} />
+          <input type="text" value={data.school_name} onChange={e => onChange('school_name', e.target.value)} placeholder="School / institution name" className={inputCls} />
         </Field>
         <Field label="School Type">
-          <select className={inputCls}>
+          <select value={data.school_type} onChange={e => onChange('school_type', e.target.value)} className={inputCls}>
             <option value="">Select type</option>
             <option>Government</option>
-            <option>Government Aided</option>
             <option>Private</option>
-            <option>Madrasa</option>
           </select>
         </Field>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Medium of Instruction">
-          <select className={inputCls}>
+          <select value={data.medium_of_instruction} onChange={e => onChange('medium_of_instruction', e.target.value)} className={inputCls}>
             <option value="">Select medium</option>
             <option>Tamil Medium</option>
             <option>English Medium</option>
-            <option>Telugu Medium</option>
-            <option>Kannada Medium</option>
-            <option>Malayalam Medium</option>
           </select>
         </Field>
-        <Field label="Attendance Rate at School (%)">
-          <input type="number" min={0} max={100} placeholder="e.g. 75" className={inputCls} />
-        </Field>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="First Generation Learner?">
-          <select className={inputCls}>
-            <option value="">Select</option>
-            <option>Yes</option>
-            <option>No</option>
-          </select>
-        </Field>
-        <Field label="Special Educational Needs">
-          <select className={inputCls}>
-            <option value="">None</option>
-            <option>Learning Disability</option>
-            <option>Visual Impairment</option>
-            <option>Hearing Impairment</option>
-            <option>Physical Disability</option>
-            <option>Other</option>
+        <Field label="School Attendance Pattern">
+          <select value={data.attendance_pattern} onChange={e => onChange('attendance_pattern', e.target.value)} className={inputCls}>
+            <option value="">Select pattern</option>
+            <option>Regular</option>
+            <option>Irregular</option>
           </select>
         </Field>
       </div>
-      <Field label="Academic Remarks">
-        <textarea rows={2} placeholder="Any notable academic background or challenges..." className={inputCls} />
+      <Field label="Previous Academic Performance">
+        <textarea value={data.previous_academic_performance} onChange={e => onChange('previous_academic_performance', e.target.value)} rows={2} placeholder="Last known academic performance..." className={inputCls + ' h-auto'} />
       </Field>
     </div>
   );
 }
 
-function Step3() {
+function Step3({ data, onChange }: { data: RegistrationData; onChange: FieldChange }) {
   return (
     <div className="space-y-4">
       <p className={sectionTitle}>Parent / Guardian Details</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field label="Father's Name">
-          <input type="text" placeholder="Father's full name" className={inputCls} />
+          <input type="text" value={data.family_data.father_name ?? ''} onChange={e => onChange('family_data', { ...data.family_data, father_name: e.target.value })} placeholder="Father's full name" className={inputCls} />
         </Field>
         <Field label="Father's Occupation">
-          <input type="text" placeholder="e.g. Daily wage labourer" className={inputCls} />
+          <input type="text" value={data.family_data.father_occupation ?? ''} onChange={e => onChange('family_data', { ...data.family_data, father_occupation: e.target.value })} placeholder="e.g. Daily wage labourer" className={inputCls} />
         </Field>
         <Field label="Father's Education">
-          <select className={inputCls}>
+          <select value={data.family_data.father_education ?? ''} onChange={e => onChange('family_data', { ...data.family_data, father_education: e.target.value })} className={inputCls}>
             <option value="">Select</option>
-            <option>Illiterate</option>
-            <option>Primary (1–5)</option>
-            <option>Middle (6–8)</option>
-            <option>Secondary (9–10)</option>
-            <option>Higher Secondary</option>
-            <option>Graduate</option>
+            <option>Primary</option>
+            <option>Upper Primary</option>
+            <option>Graduation</option>
+            <option>Post graduation</option>
           </select>
         </Field>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field label="Mother's Name">
-          <input type="text" placeholder="Mother's full name" className={inputCls} />
+          <input type="text" value={data.family_data.mother_name ?? ''} onChange={e => onChange('family_data', { ...data.family_data, mother_name: e.target.value })} placeholder="Mother's full name" className={inputCls} />
         </Field>
         <Field label="Mother's Occupation">
-          <input type="text" placeholder="e.g. Homemaker, Domestic worker" className={inputCls} />
+          <input type="text" value={data.family_data.mother_occupation ?? ''} onChange={e => onChange('family_data', { ...data.family_data, mother_occupation: e.target.value })} placeholder="e.g. Homemaker, Domestic worker" className={inputCls} />
         </Field>
         <Field label="Mother's Education">
-          <select className={inputCls}>
+          <select value={data.family_data.mother_education ?? ''} onChange={e => onChange('family_data', { ...data.family_data, mother_education: e.target.value })} className={inputCls}>
             <option value="">Select</option>
-            <option>Illiterate</option>
-            <option>Primary (1–5)</option>
-            <option>Middle (6–8)</option>
-            <option>Secondary (9–10)</option>
-            <option>Higher Secondary</option>
-            <option>Graduate</option>
+            <option>Primary</option>
+            <option>Upper Primary</option>
+            <option>Graduation</option>
+            <option>Post graduation</option>
           </select>
+        </Field>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Field label="Guardian (if applicable)">
+          <input value={data.family_data.guardian ?? ''} onChange={e => onChange('family_data', { ...data.family_data, guardian: e.target.value })} placeholder="Guardian name" className={inputCls} />
+        </Field>
+        <Field label="Parent Phone Number">
+          <input type="tel" value={data.family_data.parent_phone ?? ''} onChange={e => onChange('family_data', { ...data.family_data, parent_phone: e.target.value })} placeholder="Phone number" className={inputCls} />
+        </Field>
+        <Field label="School-Going Children">
+          <input type="number" min={0} value={data.family_data.school_going_children ?? ''} onChange={e => onChange('family_data', { ...data.family_data, school_going_children: e.target.value ? Number(e.target.value) : '' })} placeholder="Number" className={inputCls} />
         </Field>
       </div>
       <p className={sectionTitle}>Family Composition</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Field label="Family Type">
-          <select className={inputCls}>
-            <option value="">Select</option>
-            <option>Nuclear</option>
-            <option>Joint / Extended</option>
-            <option>Single Parent</option>
-            <option>Orphan</option>
-            <option>Guardian Care</option>
-          </select>
-        </Field>
-        <Field label="No. of Siblings">
-          <input type="number" min={0} max={20} placeholder="0" className={inputCls} />
+        <Field label="Number of Family Members">
+          <input type="number" min={1} max={50} value={data.family_data.family_members ?? ''} onChange={e => onChange('family_data', { ...data.family_data, family_members: e.target.value ? Number(e.target.value) : '' })} placeholder="Number" className={inputCls} />
         </Field>
         <Field label="Birth Order">
-          <input type="number" min={1} max={20} placeholder="e.g. 2 (second child)" className={inputCls} />
+          <input type="number" min={1} max={20} value={data.family_data.birth_order ?? ''} onChange={e => onChange('family_data', { ...data.family_data, birth_order: e.target.value ? Number(e.target.value) : '' })} placeholder="e.g. 2 (second child)" className={inputCls} />
         </Field>
       </div>
     </div>
   );
 }
 
-function Step4() {
+function Step4({ data, onChange }: { data: RegistrationData; onChange: FieldChange }) {
+  const setSocio = (field: string, value: string | boolean) => onChange('socio_economic_data', { ...data.socio_economic_data, [field]: value });
+  const booleanValue = (field: string) => data.socio_economic_data[field] === true ? 'Yes' : data.socio_economic_data[field] === false ? 'No' : '';
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Monthly Household Income (₹)">
-          <select className={inputCls}>
-            <option value="">Select range</option>
-            <option>Below ₹3,000</option>
-            <option>₹3,000 – ₹6,000</option>
-            <option>₹6,000 – ₹10,000</option>
-            <option>₹10,000 – ₹20,000</option>
-            <option>Above ₹20,000</option>
-          </select>
+        <Field label="Caste Category">
+          <input value={typeof data.socio_economic_data.caste_category === 'string' ? data.socio_economic_data.caste_category : ''} onChange={e => setSocio('caste_category', e.target.value)} placeholder="SC, ST, BC, General" className={inputCls} />
         </Field>
-        <Field label="Primary Income Source">
-          <select className={inputCls}>
-            <option value="">Select</option>
-            <option>Daily Wage Labour</option>
-            <option>Agriculture</option>
-            <option>Small Business</option>
-            <option>Salaried Employment</option>
-            <option>No Regular Income</option>
-            <option>Other</option>
+        <Field label="Tribe Name (if applicable)">
+          <input value={typeof data.socio_economic_data.tribe_name === 'string' ? data.socio_economic_data.tribe_name : ''} onChange={e => setSocio('tribe_name', e.target.value)} placeholder="Tribe name" className={inputCls} />
+        </Field>
+        <Field label="Religion">
+          <input value={typeof data.socio_economic_data.religion === 'string' ? data.socio_economic_data.religion : ''} onChange={e => setSocio('religion', e.target.value)} placeholder="Religion" className={inputCls} />
+        </Field>
+        <Field label="Monthly Household Income (₹)">
+          <select value={typeof data.socio_economic_data.income_range === 'string' ? data.socio_economic_data.income_range : ''} onChange={e => setSocio('income_range', e.target.value)} className={inputCls}>
+            <option value="">Select range</option>
+            <option>Below ₹72,000</option>
+            <option>₹72,000 – ₹3,00,000</option>
+            <option>Above ₹3,00,000</option>
           </select>
         </Field>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Housing Condition">
-          <select className={inputCls}>
+          <select value={typeof data.socio_economic_data.house_type === 'string' ? data.socio_economic_data.house_type : ''} onChange={e => setSocio('house_type', e.target.value)} className={inputCls}>
             <option value="">Select</option>
             <option>Permanent (Pucca)</option>
             <option>Semi-permanent (Semi-Pucca)</option>
             <option>Temporary (Kutcha)</option>
-            <option>Homeless / Shelter</option>
           </select>
         </Field>
-        <Field label="BPL Card Holder?">
-          <select className={inputCls}>
+        <Field label="Ownership">
+          <select value={typeof data.socio_economic_data.ownership === 'string' ? data.socio_economic_data.ownership : ''} onChange={e => setSocio('ownership', e.target.value)} className={inputCls}>
             <option value="">Select</option>
-            <option>Yes</option>
-            <option>No</option>
-            <option>Not Known</option>
+            <option>Own</option>
+            <option>Rent</option>
           </select>
         </Field>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field label="Access to Electricity">
-          <select className={inputCls}>
+          <select value={booleanValue('electricity')} onChange={e => setSocio('electricity', e.target.value === 'Yes')} className={inputCls}>
             <option>Yes</option>
             <option>No</option>
             <option>Partial</option>
           </select>
         </Field>
         <Field label="Access to Clean Water">
-          <select className={inputCls}>
+          <select value={booleanValue('drinking_water')} onChange={e => setSocio('drinking_water', e.target.value === 'Yes')} className={inputCls}>
             <option>Yes</option>
             <option>No</option>
             <option>Partial</option>
           </select>
         </Field>
-        <Field label="Access to Smartphone/Internet">
-          <select className={inputCls}>
+        <Field label="Study Space at Home">
+          <select value={booleanValue('study_space')} onChange={e => setSocio('study_space', e.target.value === 'Yes')} className={inputCls}>
             <option>Yes</option>
             <option>No</option>
-            <option>Shared</option>
+            <option value="">Select</option>
           </select>
         </Field>
       </div>
-      <Field label="Government Benefits Received">
-        <input type="text" placeholder="e.g. Mid-day meal, Scholarship, Amma scheme" className={inputCls} />
+      <Field label="Access to Toilet">
+        <select value={booleanValue('toilet')} onChange={e => setSocio('toilet', e.target.value === 'Yes')} className={inputCls}>
+          <option value="">Select</option><option>Yes</option><option>No</option>
+        </select>
       </Field>
     </div>
   );
 }
 
 const VULNERABILITIES = [
-  'First Generation Learner',
-  'Single Parent Family',
-  'Migrant Family',
-  'Extreme Poverty',
-  'Orphan (one parent)',
-  'Orphan (both parents)',
-  'Child Labour Risk',
-  'Early Marriage Risk',
-  'Domestic Violence',
-  'Substance Abuse in Family',
-  'Chronic Illness in Family',
+  'First-generation learner',
+  'Single parent',
+  'Orphan / semi-orphan',
+  'Migrant family',
+  'Child labour risk',
   'Disability',
-  'Street Child',
-  'Trafficking Risk',
+  'Chronic illness',
+  'Extreme poverty',
 ];
 
-function Step5() {
-  const [selected, setSelected] = useState<string[]>([]);
-  const toggle = (v: string) => setSelected(s => s.includes(v) ? s.filter(x => x !== v) : [...s, v]);
+function Step5({ data, onChange }: { data: RegistrationData; onChange: FieldChange }) {
+  const selected = data.vulnerabilities_data.map(item => item.name);
+  const toggle = (name: string) => {
+    const next = selected.includes(name) ? data.vulnerabilities_data.filter(item => item.name !== name) : [...data.vulnerabilities_data, { name }];
+    onChange('vulnerabilities_data', next);
+  };
 
   return (
     <div className="space-y-5">
@@ -340,188 +321,123 @@ function Step5() {
           ))}
         </div>
       </div>
-      <Field label="Risk Assessment Level">
-        <select className={inputCls}>
-          <option value="">Select level</option>
-          <option>Low Risk</option>
-          <option>Moderate Risk</option>
-          <option>High Risk</option>
-          <option>Critical</option>
-        </select>
-      </Field>
-      <Field label="Additional Vulnerability Notes">
-        <textarea rows={3} placeholder="Describe any specific circumstances not listed above..." className={inputCls} />
+      <Field label="Other Vulnerability">
+        <textarea value={data.vulnerabilities_data.find(item => item.name === 'Other')?.remarks ?? ''} onChange={e => {
+          const withoutOther = data.vulnerabilities_data.filter(item => item.name !== 'Other');
+          onChange('vulnerabilities_data', e.target.value ? [...withoutOther, { name: 'Other', remarks: e.target.value }] : withoutOther);
+        }} rows={3} placeholder="Describe any other vulnerability..." className={inputCls + ' h-auto'} />
       </Field>
     </div>
   );
 }
 
-const MOTIVATIONS = [
-  'Wants to study further',
-  'Likes learning new things',
-  'Inspired by a role model',
-  'Family support / encouragement',
-  'Peer influence (positive)',
-  'Wants to improve family income',
-  'Enjoys sports / arts',
-  'Participates actively in programme',
-];
+const MOTIVATION_GROUPS = {
+  'Academic Reasons': ['Unable to understand school lessons', 'Poor academic performance', 'Weak in reading/writing', 'Weak in specific subjects'],
+  'Home Environment': ['No study support at home', 'Parents are not educated', 'No quiet place to study'],
+  Vulnerability: ['Risk of dropping out', 'Irregular schooling'],
+  'Personal Motivation': ['Interested in learning', 'Wants to improve English', 'Wants to read books', 'Curious learner'],
+  'Social Influence': ['Friends attend', 'Parent insisted', 'Teacher recommended'],
+  'Developmental Needs': ['Needs discipline', 'Needs confidence building', 'Needs guidance'],
+} as const;
 
-function Step6() {
-  const [selected, setSelected] = useState<string[]>([]);
-  const toggle = (v: string) => setSelected(s => s.includes(v) ? s.filter(x => x !== v) : [...s, v]);
+const NARRATIVE_FIELDS = ['Child’s life situation before joining', 'Family challenges', 'Academic challenges', 'Behavioral challenges', 'Expectations from program'];
 
+function Step6({ data, onChange }: { data: RegistrationData; onChange: FieldChange }) {
+  const selected = data.motivation_data.filter(item => !item.category.startsWith('Narrative')).map(item => item.reason);
+  const toggle = (category: string, reason: string) => {
+    const exists = data.motivation_data.some(item => item.category === category && item.reason === reason);
+    const next = exists
+      ? data.motivation_data.filter(item => !(item.category === category && item.reason === reason))
+      : [...data.motivation_data, { category, reason }];
+    onChange('motivation_data', next);
+  };
+  const setNarrative = (reason: string, narrative: string) => {
+    const without = data.motivation_data.filter(item => !(item.category === 'Narrative' && item.reason === reason));
+    onChange('motivation_data', [...without, { category: 'Narrative', reason, narrative }]);
+  };
   return (
     <div className="space-y-5">
       <div>
-        <p className={sectionTitle}>Motivation Indicators</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {MOTIVATIONS.map(m => (
-            <label key={m} className={`flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors ${
-              selected.includes(m) ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 hover:border-slate-300 text-slate-700'
-            }`}>
-              <input
-                type="checkbox"
-                checked={selected.includes(m)}
-                onChange={() => toggle(m)}
-                className="w-4 h-4 accent-emerald-600"
-              />
-              <span className="text-sm font-medium">{m}</span>
-            </label>
-          ))}
+        <p className={sectionTitle}>Select All Applicable Reasons</p>
+        {Object.entries(MOTIVATION_GROUPS).map(([category, reasons]) => <div key={category} className="mb-4">
+          <p className="text-sm font-semibold text-slate-700 mb-2">{category}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {reasons.map(reason => (
+              <label key={reason} className={`flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors ${
+                selected.includes(reason) ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 hover:border-slate-300 text-slate-700'
+              }`}>
+                <input type="checkbox" checked={selected.includes(reason)} onChange={() => toggle(category, reason)} className="w-4 h-4 accent-emerald-600" />
+                <span className="text-sm font-medium">{reason}</span>
+              </label>
+            ))}
+          </div>
+        </div>)}
+      </div>
+      <div>
+        <p className={sectionTitle}>Mandatory Facilitator Narratives</p>
+        <div className="space-y-3">
+          {NARRATIVE_FIELDS.map(field => <Field key={field} label={`${field} *`}>
+            <textarea value={data.motivation_data.find(item => item.category === 'Narrative' && item.reason === field)?.narrative ?? ''} onChange={e => setNarrative(field, e.target.value)} rows={2} className={inputCls + ' h-auto'} />
+          </Field>)}
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Motivation Score (Facilitator Assessment)">
-          <select className={inputCls}>
-            <option value="">Select</option>
-            <option>1 – Very Low</option>
-            <option>2 – Low</option>
-            <option>3 – Moderate</option>
-            <option>4 – High</option>
-            <option>5 – Very High</option>
-          </select>
-        </Field>
-        <Field label="Key Strengths Observed">
-          <input type="text" placeholder="e.g. Punctual, Curious, Good listener" className={inputCls} />
-        </Field>
-      </div>
-      <Field label="Facilitator Observation Notes">
-        <textarea rows={3} placeholder="Describe the student's attitude, energy, engagement in the programme..." className={inputCls} />
-      </Field>
     </div>
   );
 }
 
-function Step7() {
+function Step7({ data, onChange }: { data: RegistrationData; onChange: FieldChange }) {
+  const setAspiration = (field: 'career_goal' | 'interests' | 'strengths', value: string) => onChange('aspirations_data', { ...data.aspirations_data, [field]: value });
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Short-Term Goal (1–2 years)">
-          <input type="text" placeholder="e.g. Pass Class 10 with good marks" className={inputCls} />
-        </Field>
-        <Field label="Long-Term Goal (5–10 years)">
-          <input type="text" placeholder="e.g. Become a teacher" className={inputCls} />
-        </Field>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Career Aspiration">
-          <select className={inputCls}>
-            <option value="">Select field</option>
-            <option>Education / Teaching</option>
-            <option>Healthcare / Nursing</option>
-            <option>Government / Civil Services</option>
-            <option>Engineering / Technology</option>
-            <option>Arts / Music / Sports</option>
-            <option>Business / Entrepreneur</option>
-            <option>Agriculture</option>
-            <option>Not Yet Decided</option>
-            <option>Other</option>
-          </select>
-        </Field>
-        <Field label="Higher Education Interest">
-          <select className={inputCls}>
-            <option value="">Select</option>
-            <option>Strongly Interested</option>
-            <option>Interested</option>
-            <option>Undecided</option>
-            <option>Not Interested</option>
-          </select>
-        </Field>
-      </div>
-      <Field label="Skills / Hobbies / Talents">
-        <input type="text" placeholder="e.g. Drawing, Cricket, Singing, Computer" className={inputCls} />
+      <Field label="What do you want to become?">
+        <textarea value={data.aspirations_data.career_goal} onChange={e => setAspiration('career_goal', e.target.value)} rows={3} placeholder="Record the student's aspiration..." className={inputCls + ' h-auto'} />
       </Field>
-      <Field label="Student's Own Words (What do you want to become?)">
-        <textarea rows={3} placeholder="Record the student's own statement about their future..." className={inputCls} />
+      <Field label="Interests (sports, arts, reading, etc.)">
+        <textarea value={data.aspirations_data.interests} onChange={e => setAspiration('interests', e.target.value)} rows={3} placeholder="Sports, arts, reading, or other interests..." className={inputCls + ' h-auto'} />
+      </Field>
+      <Field label="Strengths Observed">
+        <textarea value={data.aspirations_data.strengths} onChange={e => setAspiration('strengths', e.target.value)} rows={3} placeholder="Strengths observed by the facilitator..." className={inputCls + ' h-auto'} />
       </Field>
     </div>
   );
 }
 
-function Step8() {
-  const [selectedRegion, setSelectedRegion] = useState('');
-  const filteredDistricts = districts.filter(d => !selectedRegion || d.region === regions.find(r => r.id === selectedRegion)?.name);
-  const [selectedDistrict, setSelectedDistrict] = useState('');
-  const filteredCentres = centres.filter(c => !selectedDistrict || c.district === districts.find(d => d.id === selectedDistrict)?.name);
-
+function Step8({ data, centres, onChange }: { data: RegistrationData; centres: AttendanceCentre[]; onChange: FieldChange }) {
+  const selectedCentre = centres.find(centre => centre.id === Number(data.centre_id));
+  const [selectedRegion, setSelectedRegion] = useState(selectedCentre?.region ?? '');
+  const [selectedDistrict, setSelectedDistrict] = useState(selectedCentre?.district ?? '');
+  useEffect(() => {
+    if (selectedCentre) {
+      setSelectedRegion(selectedCentre.region ?? '');
+      setSelectedDistrict(selectedCentre.district ?? '');
+    }
+  }, [selectedCentre?.id]);
+  const regions = [...new Set(centres.map(centre => centre.region).filter(Boolean))] as string[];
+  const districts = [...new Set(centres.filter(centre => centre.region === selectedRegion).map(centre => centre.district).filter(Boolean))] as string[];
+  const filteredCentres = centres.filter(centre => centre.region === selectedRegion && centre.district === selectedDistrict);
   return (
     <div className="space-y-4">
       <p className={sectionTitle}>Assign to Region & Centre</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field label="Region *">
-          <select className={inputCls} value={selectedRegion} onChange={e => { setSelectedRegion(e.target.value); setSelectedDistrict(''); }}>
+          <select className={inputCls} value={selectedRegion} onChange={e => { setSelectedRegion(e.target.value); setSelectedDistrict(''); onChange('centre_id', ''); }}>
             <option value="">Select region</option>
-            {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            {regions.map(region => <option key={region} value={region}>{region}</option>)}
           </select>
         </Field>
         <Field label="District *">
-          <select className={inputCls} value={selectedDistrict} onChange={e => setSelectedDistrict(e.target.value)}>
+          <select className={inputCls} value={selectedDistrict} onChange={e => { setSelectedDistrict(e.target.value); onChange('centre_id', ''); }}>
             <option value="">Select district</option>
-            {filteredDistricts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            {districts.map(district => <option key={district} value={district}>{district}</option>)}
           </select>
         </Field>
         <Field label="Centre *">
-          <select className={inputCls}>
+          <select className={inputCls} value={data.centre_id} onChange={e => onChange('centre_id', e.target.value)}>
             <option value="">Select centre</option>
-            {filteredCentres.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {filteredCentres.map(centre => <option key={centre.id} value={centre.id}>{centre.name}</option>)}
           </select>
         </Field>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Facilitator Assigned">
-          <input type="text" placeholder="Facilitator name" className={inputCls} />
-        </Field>
-        <Field label="Date of Enrolment *">
-          <input type="date" className={inputCls} defaultValue={new Date().toISOString().split('T')[0]} />
-        </Field>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Programme Track">
-          <select className={inputCls}>
-            <option value="">Select track</option>
-            <option>Academic Support</option>
-            <option>Life Skills</option>
-            <option>Leadership</option>
-            <option>Vocational Training</option>
-            <option>All Tracks</option>
-          </select>
-        </Field>
-        <Field label="Session Timing">
-          <select className={inputCls}>
-            <option value="">Select timing</option>
-            <option>Morning (7–9 AM)</option>
-            <option>Afternoon (3–5 PM)</option>
-            <option>Evening (5–7 PM)</option>
-            <option>Weekend</option>
-          </select>
-        </Field>
-      </div>
-      <Field label="Additional Enrolment Notes">
-        <textarea rows={2} placeholder="Any special arrangements, notes for the facilitator..." className={inputCls} />
-      </Field>
-
-      {/* Summary box */}
       <div className="mt-2 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
         <p className="text-sm font-semibold text-indigo-700 mb-1">✓ Ready to submit</p>
         <p className="text-xs text-indigo-600">Review all steps before submitting. The student record will be created and a unique ID will be assigned.</p>
@@ -530,32 +446,97 @@ function Step8() {
   );
 }
 
-const STEP_CONTENT: Record<number, React.ReactNode> = {
-  1: <Step1 />,
-  2: <Step2 />,
-  3: <Step3 />,
-  4: <Step4 />,
-  5: <Step5 />,
-  6: <Step6 />,
-  7: <Step7 />,
-  8: <Step8 />,
-};
-
 export default function StudentRegistration() {
+  const { id } = useParams();
   const [currentStep, setCurrentStep] = useState(1);
+  const [data, setData] = useState<RegistrationData>(initialRegistrationData);
+  const [centres, setCentres] = useState<AttendanceCentre[]>([]);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loadingStudent, setLoadingStudent] = useState(Boolean(id));
+  const [existingPhoto, setExistingPhoto] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleNext = () => {
+  useEffect(() => {
+    fetchAttendanceCentres().then(setCentres).catch(() => setError('Unable to load centres. Please try again.'));
+  }, []);
+
+  useEffect(() => {
+    if (!id) return;
+    fetchStudent(id).then(student => {
+      const cleanRecord = <T extends Record<string, unknown>>(record: T | null | undefined) => Object.fromEntries(Object.entries(record ?? {}).filter(([, value]) => value !== null)) as T;
+      setData({
+        ...initialRegistrationData,
+        ...student,
+        centre_id: String(student.centre.id),
+        photo: null,
+        family_data: cleanRecord(student.family) as RegistrationData['family_data'],
+        socio_economic_data: cleanRecord(student.socio_economic) as RegistrationData['socio_economic_data'],
+        vulnerabilities_data: (student.vulnerabilities ?? []).map(item => ({ name: item.name, ...(item.remarks ? { remarks: item.remarks } : {}) })),
+        motivation_data: (student.motivations ?? []).map(item => ({ category: item.category, reason: item.reason, ...(item.narrative ? { narrative: item.narrative } : {}) })),
+        aspirations_data: { career_goal: student.aspirations?.[0]?.career_goal ?? '', interests: student.aspirations?.[0]?.interests ?? '', strengths: student.aspirations?.[0]?.strengths ?? '' },
+      });
+      setExistingPhoto(student.photo);
+    }).catch(err => setError(err instanceof Error ? err.message : 'Unable to load student.')).finally(() => setLoadingStudent(false));
+  }, [id]);
+
+  const updateField: FieldChange = (field, value) => setData(current => ({ ...current, [field]: value }));
+
+  const renderStep = () => {
+    if (currentStep === 1) return <Step1 data={data} onChange={updateField} studentId={id} existingPhoto={existingPhoto} />;
+    if (currentStep === 2) return <Step2 data={data} onChange={updateField} />;
+    if (currentStep === 8) return <Step8 data={data} centres={centres} onChange={updateField} />;
+    if (currentStep === 3) return <Step3 data={data} onChange={updateField} />;
+    if (currentStep === 4) return <Step4 data={data} onChange={updateField} />;
+    if (currentStep === 5) return <Step5 data={data} onChange={updateField} />;
+    if (currentStep === 6) return <Step6 data={data} onChange={updateField} />;
+    return <Step7 data={data} onChange={updateField} />;
+  };
+
+  const handleNext = async () => {
+    setError('');
+    if (currentStep === 1 && (!data.full_name || !data.dob || !data.gender || (!data.photo && !existingPhoto))) {
+      setError('Full name, date of birth, gender, and student photograph are required.');
+      return;
+    }
+    if (currentStep === 2 && !data.class_grade) {
+      setError('Current class / grade is required.');
+      return;
+    }
+    if (currentStep === 6 && NARRATIVE_FIELDS.some(field => !data.motivation_data.find(item => item.category === 'Narrative' && item.reason === field)?.narrative?.trim())) {
+      setError('All five facilitator narratives are required.');
+      return;
+    }
     if (currentStep < 8) setCurrentStep(c => c + 1);
-    else navigate('/students');
+    else {
+      if (!data.centre_id) { setError('Centre is required.'); return; }
+      if (!data.photo && !existingPhoto) { setError('Student photograph is required.'); return; }
+      setSaving(true);
+      try {
+        if (id) {
+          const { photo, ...editableData } = data;
+          await updateStudent(id, { ...editableData, centre_id: Number(data.centre_id), ...(photo ? { photo } : {}) });
+          navigate(`/students/${id}`);
+        } else {
+          if (!data.photo) throw new Error('Student photograph is required.');
+          await createStudent({ ...data, centre_id: Number(data.centre_id), photo: data.photo });
+          navigate('/students');
+        }
+      } catch (submissionError) {
+        setError(submissionError instanceof Error ? submissionError.message : 'Unable to save student.');
+      } finally {
+        setSaving(false);
+      }
+    }
   };
 
   const handleBack = () => {
     if (currentStep > 1) setCurrentStep(c => c - 1);
   };
 
-  return (
-    <div className="max-w-4xl mx-auto pb-12">
+  if (loadingStudent) return <div className="max-w-4xl mx-auto p-8 text-slate-500">Loading student...</div>;
+
+  return <div className="max-w-4xl mx-auto pb-12">
       <div className="mb-6 flex items-center gap-4">
         <button
           onClick={() => navigate('/students')}
@@ -564,8 +545,8 @@ export default function StudentRegistration() {
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Student Registration</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Enroll a new student into the LEP system.</p>
+          <h1 className="text-2xl font-bold text-slate-900">{id ? 'Edit Student' : 'Student Registration'}</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{id ? 'Update the student profile.' : 'Enroll a new student into the LEP system.'}</p>
         </div>
       </div>
 
@@ -615,7 +596,8 @@ export default function StudentRegistration() {
               </h2>
               <span className="text-xs font-medium text-slate-400">Step {currentStep} of 8</span>
             </div>
-            {STEP_CONTENT[currentStep]}
+            {renderStep()}
+            {error && <p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}
           </div>
 
           <div className="pt-6 mt-6 border-t border-slate-100 flex items-center justify-between">
@@ -632,13 +614,13 @@ export default function StudentRegistration() {
             </button>
             <button
               onClick={handleNext}
-              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
+              disabled={saving}
+              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
             >
-              {currentStep === 8 ? 'Submit Registration' : 'Next Step →'}
+              {saving ? 'Saving...' : currentStep === 8 ? id ? 'Save Changes' : 'Submit Registration' : 'Next Step →'}
             </button>
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>;
 }

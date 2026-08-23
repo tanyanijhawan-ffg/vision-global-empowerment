@@ -59,6 +59,41 @@ export interface AttendanceInput {
 export interface AttendanceCentre {
   id: number;
   name: string;
+  district?: string;
+  region?: string;
+}
+
+export interface StudentCreateInput {
+  full_name: string;
+  nick_name?: string;
+  gender: string;
+  dob: string;
+  photo: File;
+  school_name?: string;
+  school_type?: string;
+  class_grade?: string;
+  medium_of_instruction?: string;
+  attendance_pattern?: string;
+  previous_academic_performance?: string;
+  centre_id: number;
+  family_data?: Record<string, string | number>;
+  socio_economic_data?: Record<string, string | boolean>;
+  vulnerabilities_data?: Array<{ name: string; remarks?: string }>;
+  motivation_data?: Array<{ category: string; reason: string; narrative?: string }>;
+  aspirations_data?: { career_goal?: string; interests?: string; strengths?: string };
+}
+
+export interface StudentRecord extends Omit<StudentCreateInput, 'photo' | 'centre_id'> {
+  id: number;
+  photo: string | null;
+  age: number | null;
+  centre: AttendanceCentre;
+  centre_id?: number;
+  family?: Record<string, string | number | null> | null;
+  socio_economic?: Record<string, string | boolean | null> | null;
+  vulnerabilities?: Array<{ name: string; remarks?: string | null }>;
+  motivations?: Array<{ category: string; reason: string; narrative?: string | null }>;
+  aspirations?: Array<{ career_goal?: string | null; interests?: string | null; strengths?: string | null }>;
 }
 
 export interface AttendanceIntelligenceSetting {
@@ -111,11 +146,17 @@ export async function saveAttendanceIntelligence(setting: AttendanceIntelligence
 
 interface StudentApiRecord {
   id: number;
+  gender?: string | null;
+  age?: number | null;
+  class_grade?: string | null;
+  dob?: string | null;
   full_name?: string;
   first_name?: string;
   last_name?: string;
   email?: string;
   joined_at?: string;
+  photo?: string | null;
+  vulnerabilities?: Array<{ name: string }>;
   centre?: {
     id?: number;
     name?: string;
@@ -126,6 +167,50 @@ interface StudentApiRecord {
     id?: number;
     name?: string;
   };
+}
+
+export async function fetchStudent(id: string): Promise<StudentRecord> {
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { headers: { Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`Failed to load student (${response.status})`);
+  return response.json() as Promise<StudentRecord>;
+}
+
+export async function updateStudent(id: string, input: Partial<StudentCreateInput>): Promise<StudentRecord> {
+  const body = new FormData();
+  Object.entries(input).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      body.append(key, value instanceof File ? value : typeof value === 'object' ? JSON.stringify(value) : String(value));
+    }
+  });
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'PATCH', headers: { Accept: 'application/json' }, body });
+  if (!response.ok) throw new Error(`Failed to update student (${response.status})`);
+  return response.json() as Promise<StudentRecord>;
+}
+
+export async function deleteStudent(id: string): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Failed to delete student (${response.status})`);
+}
+
+export async function createStudent(input: StudentCreateInput): Promise<StudentApiRecord> {
+  const body = new FormData();
+  Object.entries(input).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      body.append(key, value instanceof File ? value : typeof value === 'object' ? JSON.stringify(value) : String(value));
+    }
+  });
+
+  const response = await fetch(`${getApiBaseUrl()}/students/`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    body,
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as Record<string, string[] | string> | null;
+    const detail = payload ? Object.entries(payload).map(([field, message]) => `${field}: ${Array.isArray(message) ? message.join(', ') : message}`).join('; ') : '';
+    throw new Error(detail || `Failed to create student (${response.status})`);
+  }
+  return response.json() as Promise<StudentApiRecord>;
 }
 
 function getApiBaseUrl(): string {
@@ -144,8 +229,9 @@ function mapStudentRecord(record: StudentApiRecord): StudentListItem {
     .trim();
 
   const centerName = record.centre?.name || "Unknown centre";
-  const roleName = record.role?.name || "Student";
-  const joinedAt = record.joined_at ? new Date(record.joined_at).toLocaleDateString("en-IN") : "Unknown";
+  const className = record.class_grade || "Not provided";
+  const registeredDate = record.joined_at || record.dob;
+  const joinedAt = registeredDate ? new Date(registeredDate).toLocaleDateString("en-IN") : "Unknown";
 
   return {
     id: String(record.id),
@@ -154,13 +240,13 @@ function mapStudentRecord(record: StudentApiRecord): StudentListItem {
     region: record.centre?.region || "Unknown region",
     centre: centerName,
     centreId: record.centre?.id,
-    class: roleName,
-    gender: "Unknown",
-    age: 0,
+    class: className,
+    gender: record.gender || "Not provided",
+    age: record.age || 0,
     attendancePercent: 0,
     academicScore: 0,
     status: "Active",
-    vulnerabilities: [],
+    vulnerabilities: record.vulnerabilities?.map(item => item.name) || [],
     district: record.centre?.district || "Unknown district",
     date: joinedAt,
   };
