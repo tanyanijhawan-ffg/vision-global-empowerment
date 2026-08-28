@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from school.views.auth import LoginView, RegionListView
+from school.views.auth import LoginView, PasswordResetConfirmView, PasswordResetRequestView, RegionListView
 from school.views.user import UserDetailView, UserListCreateView
 from .views import (
     AttendanceCreateView,
@@ -12,6 +12,8 @@ from .views import (
 urlpatterns = [
     path('v1/', include('school.api_urls')),
     path('auth/login/', LoginView.as_view(), name='login'),
+    path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     path('regions/', RegionListView.as_view(), name='region-list'),
     path('users/', UserListCreateView.as_view(), name='user-list-create'),
     path('users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),

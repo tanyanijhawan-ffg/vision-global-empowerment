@@ -11,6 +11,7 @@ export default function StudentsList() {
   const [data, setData] = useState<StudentListItem[]>([]);
   const [filterRegion, setFilterRegion] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.region : 'All');
   const [filterCentre, setFilterCentre] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.centre : 'All');
+  const [filterClass, setFilterClass] = useState('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -56,9 +57,17 @@ export default function StudentsList() {
     return ['All', ...Array.from(set).filter(Boolean)].sort();
   }, [scopedData, filterRegion]);
 
+  const availableClasses = useMemo(() => {
+    const set = new Set(scopedData
+      .filter(student => (filterRegion === 'All' || student.region === filterRegion) && (filterCentre === 'All' || student.centre === filterCentre))
+      .map(student => student.class));
+    return ['All', ...Array.from(set).filter(Boolean)].sort();
+  }, [scopedData, filterRegion, filterCentre]);
+
   const filteredData = scopedData.filter(s => 
     (filterRegion === 'All' || s.region === filterRegion) &&
-    (filterCentre === 'All' || s.centre === filterCentre)
+    (filterCentre === 'All' || s.centre === filterCentre) &&
+    (filterClass === 'All' || s.class === filterClass)
   );
 
   return (
@@ -94,7 +103,7 @@ export default function StudentsList() {
               <Filter size={16} className="text-slate-400" />
               <select 
                 value={filterRegion}
-                onChange={(e) => { setFilterRegion(e.target.value); setFilterCentre('All'); }}
+                onChange={(e) => { setFilterRegion(e.target.value); setFilterCentre('All'); setFilterClass('All'); }}
                 className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
               >
                 <option value="All">All Regions</option>
@@ -104,13 +113,24 @@ export default function StudentsList() {
             
             <select 
               value={filterCentre}
-              onChange={(e) => setFilterCentre(e.target.value)}
+              onChange={(e) => { setFilterCentre(e.target.value); setFilterClass('All'); }}
               className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
               disabled={filterRegion === 'All'}
             >
               <option value="All">All Centres</option>
               {availableCentres.map(centre => (
                 <option key={centre} value={centre}>{centre}</option>
+              ))}
+            </select>
+
+            <select
+              value={filterClass}
+              onChange={(e) => setFilterClass(e.target.value)}
+              className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
+            >
+              <option value="All">All Classes</option>
+              {availableClasses.map(classGrade => (
+                <option key={classGrade} value={classGrade}>{classGrade}</option>
               ))}
             </select>
           </div>

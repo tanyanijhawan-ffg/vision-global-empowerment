@@ -1,5 +1,9 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
+from django.core import mail
 from django.test import TestCase
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from rest_framework.test import APIClient
 
 from school.models.center import Program, Region
@@ -128,3 +132,24 @@ class UserRBACAPITests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['user']['role'], 'regional_admin')
         self.assertEqual(response.data['user']['region_id'], self.region_north.region_id)
+
+    def test_password_reset_email_and_confirmation(self):
+        client = APIClient()
+
+        response = client.post('/api/auth/password-reset/', {'email': self.regional_user.email}, format='json')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('/reset-password?uid=', mail.outbox[0].body)
+
+        uid = urlsafe_base64_encode(force_bytes(self.regional_user.pk))
+        token = default_token_generator.make_token(self.regional_user)
+        response = client.post('/api/auth/password-reset/confirm/', {
+            'uid': uid,
+            'token': token,
+            'password': 'NewSecurePass123!',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.regional_user.refresh_from_db()
+        self.assertTrue(self.regional_user.check_password('NewSecurePass123!'))

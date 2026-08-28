@@ -39,10 +39,10 @@ const initialRegistrationData: RegistrationData = {
 
 type FieldChange = (field: keyof RegistrationData, value: RegistrationData[keyof RegistrationData]) => void;
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, invalid = false }: { label: string; children: React.ReactNode; invalid?: boolean }) {
   return (
     <div className="min-w-0">
-      <label className={labelCls}>{label}</label>
+      <label className={`${labelCls} ${invalid ? 'text-red-600' : ''}`}>{label}</label>
       {children}
     </div>
   );
@@ -57,26 +57,26 @@ function calculateAge(dob: string) {
   return today.getFullYear() - birthDate.getFullYear() - (birthdayPassed ? 0 : 1);
 }
 
-function Step1({ data, onChange, studentId, existingPhoto }: { data: RegistrationData; onChange: FieldChange; studentId?: string; existingPhoto?: string | null }) {
+function Step1({ data, onChange, studentId, existingPhoto, invalidFields }: { data: RegistrationData; onChange: FieldChange; studentId?: string; existingPhoto?: string | null; invalidFields: Set<string> }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field label="Student ID (Auto-generated)">
           <input type="text" value={studentId ?? ''} readOnly className={inputCls + ' bg-slate-50 text-slate-500'} />
         </Field>
-        <Field label="Full Name *">
-          <input type="text" value={data.full_name} onChange={e => onChange('full_name', e.target.value)} placeholder="Enter full name" className={inputCls} />
+        <Field label="Full Name *" invalid={invalidFields.has('full_name')}>
+          <input type="text" value={data.full_name} onChange={e => onChange('full_name', e.target.value)} placeholder="Enter full name" className={`${inputCls} ${invalidFields.has('full_name') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : ''}`} />
         </Field>
         <Field label="Nickname / Call Name">
           <input type="text" value={data.nick_name} onChange={e => onChange('nick_name', e.target.value)} placeholder="Nickname" className={inputCls} />
         </Field>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Field label="Date of Birth *">
-          <input type="date" value={data.dob} onChange={e => onChange('dob', e.target.value)} className={inputCls} />
+        <Field label="Date of Birth *" invalid={invalidFields.has('dob')}>
+          <input type="date" value={data.dob} onChange={e => onChange('dob', e.target.value)} className={`${inputCls} ${invalidFields.has('dob') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : ''}`} />
         </Field>
-        <Field label="Gender *">
-          <select value={data.gender} onChange={e => onChange('gender', e.target.value)} className={inputCls}>
+        <Field label="Gender *" invalid={invalidFields.has('gender')}>
+          <select value={data.gender} onChange={e => onChange('gender', e.target.value)} className={`${inputCls} ${invalidFields.has('gender') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : ''}`}>
             <option value="">Select gender</option>
             <option>Female</option>
             <option>Male</option>
@@ -88,10 +88,10 @@ function Step1({ data, onChange, studentId, existingPhoto }: { data: Registratio
         </Field>
       </div>
       <div className="flex flex-col md:flex-row gap-4">
-        <div className="w-full md:max-w-md"><Field label="Student Photograph *">
+        <div className="w-full md:max-w-md"><Field label="Student Photograph *" invalid={invalidFields.has('photo')}>
           <div className="flex items-center gap-3">
             {existingPhoto && <img src={existingPhoto} alt="Current student photograph" className="h-16 w-16 rounded-lg object-cover border border-slate-200 shrink-0" />}
-            <input type="file" accept="image/*" onChange={e => onChange('photo', e.target.files?.[0] ?? null)} className={inputCls + ' px-2 text-xs file:mr-2 file:border-0 file:bg-transparent file:text-xs file:font-medium'} />
+            <input type="file" accept="image/*" onChange={e => onChange('photo', e.target.files?.[0] ?? null)} className={`${inputCls} px-2 text-xs file:mr-2 file:border-0 file:bg-transparent file:text-xs file:font-medium ${invalidFields.has('photo') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : ''}`} />
           </div>
           {existingPhoto && <p className="mt-1 text-xs text-slate-500">Current photo saved. Choose a new file only to replace it.</p>}
         </Field></div>
@@ -100,12 +100,12 @@ function Step1({ data, onChange, studentId, existingPhoto }: { data: Registratio
   );
 }
 
-function Step2({ data, onChange }: { data: RegistrationData; onChange: FieldChange }) {
+function Step2({ data, onChange, invalidFields }: { data: RegistrationData; onChange: FieldChange; invalidFields: Set<string> }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Field label="Current Class / Grade *">
-          <select value={data.class_grade} onChange={e => onChange('class_grade', e.target.value)} className={inputCls}>
+        <Field label="Current Class / Grade *" invalid={invalidFields.has('class_grade')}>
+          <select value={data.class_grade} onChange={e => onChange('class_grade', e.target.value)} className={`${inputCls} ${invalidFields.has('class_grade') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : ''}`}>
             <option value="">Select class</option>
             {[1,2,3,4,5,6,7,8,9,10,11,12].map(c => (
               <option key={c}>Class {c}</option>
@@ -342,7 +342,7 @@ const MOTIVATION_GROUPS = {
 
 const NARRATIVE_FIELDS = ['Child’s life situation before joining', 'Family challenges', 'Academic challenges', 'Behavioral challenges', 'Expectations from program'];
 
-function Step6({ data, onChange }: { data: RegistrationData; onChange: FieldChange }) {
+function Step6({ data, onChange, invalidFields }: { data: RegistrationData; onChange: FieldChange; invalidFields: Set<string> }) {
   const selected = data.motivation_data.filter(item => !item.category.startsWith('Narrative')).map(item => item.reason);
   const toggle = (category: string, reason: string) => {
     const exists = data.motivation_data.some(item => item.category === category && item.reason === reason);
@@ -376,8 +376,8 @@ function Step6({ data, onChange }: { data: RegistrationData; onChange: FieldChan
       <div>
         <p className={sectionTitle}>Mandatory Facilitator Narratives</p>
         <div className="space-y-3">
-          {NARRATIVE_FIELDS.map(field => <Field key={field} label={`${field} *`}>
-            <textarea value={data.motivation_data.find(item => item.category === 'Narrative' && item.reason === field)?.narrative ?? ''} onChange={e => setNarrative(field, e.target.value)} rows={2} className={inputCls + ' h-auto'} />
+          {NARRATIVE_FIELDS.map(field => <Field key={field} label={`${field} *`} invalid={invalidFields.has(`narrative:${field}`)}>
+            <textarea value={data.motivation_data.find(item => item.category === 'Narrative' && item.reason === field)?.narrative ?? ''} onChange={e => setNarrative(field, e.target.value)} rows={2} className={`${inputCls} h-auto ${invalidFields.has(`narrative:${field}`) ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : ''}`} />
           </Field>)}
         </div>
       </div>
@@ -402,7 +402,7 @@ function Step7({ data, onChange }: { data: RegistrationData; onChange: FieldChan
   );
 }
 
-function Step8({ data, centres, onChange }: { data: RegistrationData; centres: AttendanceCentre[]; onChange: FieldChange }) {
+function Step8({ data, centres, onChange, invalidFields }: { data: RegistrationData; centres: AttendanceCentre[]; onChange: FieldChange; invalidFields: Set<string> }) {
   const selectedCentre = centres.find(centre => centre.id === Number(data.centre_id));
   const [selectedRegion, setSelectedRegion] = useState(selectedCentre?.region ?? '');
   const [selectedDistrict, setSelectedDistrict] = useState(selectedCentre?.district ?? '');
@@ -431,8 +431,8 @@ function Step8({ data, centres, onChange }: { data: RegistrationData; centres: A
             {districts.map(district => <option key={district} value={district}>{district}</option>)}
           </select>
         </Field>
-        <Field label="Centre *">
-          <select className={inputCls} value={data.centre_id} onChange={e => onChange('centre_id', e.target.value)}>
+        <Field label="Centre *" invalid={invalidFields.has('centre_id')}>
+          <select className={`${inputCls} ${invalidFields.has('centre_id') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : ''}`} value={data.centre_id} onChange={e => onChange('centre_id', e.target.value)}>
             <option value="">Select centre</option>
             {filteredCentres.map(centre => <option key={centre.id} value={centre.id}>{centre.name}</option>)}
           </select>
@@ -452,6 +452,7 @@ export default function StudentRegistration() {
   const [data, setData] = useState<RegistrationData>(initialRegistrationData);
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
   const [error, setError] = useState('');
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [loadingStudent, setLoadingStudent] = useState(Boolean(id));
   const [existingPhoto, setExistingPhoto] = useState<string | null>(null);
@@ -483,34 +484,36 @@ export default function StudentRegistration() {
   const updateField: FieldChange = (field, value) => setData(current => ({ ...current, [field]: value }));
 
   const renderStep = () => {
-    if (currentStep === 1) return <Step1 data={data} onChange={updateField} studentId={id} existingPhoto={existingPhoto} />;
-    if (currentStep === 2) return <Step2 data={data} onChange={updateField} />;
-    if (currentStep === 8) return <Step8 data={data} centres={centres} onChange={updateField} />;
+    if (currentStep === 1) return <Step1 data={data} onChange={updateField} studentId={id} existingPhoto={existingPhoto} invalidFields={invalidFields} />;
+    if (currentStep === 2) return <Step2 data={data} onChange={updateField} invalidFields={invalidFields} />;
+    if (currentStep === 8) return <Step8 data={data} centres={centres} onChange={updateField} invalidFields={invalidFields} />;
     if (currentStep === 3) return <Step3 data={data} onChange={updateField} />;
     if (currentStep === 4) return <Step4 data={data} onChange={updateField} />;
     if (currentStep === 5) return <Step5 data={data} onChange={updateField} />;
-    if (currentStep === 6) return <Step6 data={data} onChange={updateField} />;
+    if (currentStep === 6) return <Step6 data={data} onChange={updateField} invalidFields={invalidFields} />;
     return <Step7 data={data} onChange={updateField} />;
   };
 
   const handleNext = async () => {
     setError('');
-    if (currentStep === 1 && (!data.full_name || !data.dob || !data.gender || (!data.photo && !existingPhoto))) {
-      setError('Full name, date of birth, gender, and student photograph are required.');
-      return;
-    }
-    if (currentStep === 2 && !data.class_grade) {
-      setError('Current class / grade is required.');
-      return;
-    }
-    if (currentStep === 6 && NARRATIVE_FIELDS.some(field => !data.motivation_data.find(item => item.category === 'Narrative' && item.reason === field)?.narrative?.trim())) {
-      setError('All five facilitator narratives are required.');
-      return;
-    }
     if (currentStep < 8) setCurrentStep(c => c + 1);
     else {
-      if (!data.centre_id) { setError('Centre is required.'); return; }
-      if (!data.photo && !existingPhoto) { setError('Student photograph is required.'); return; }
+      const missingFields = [
+        !data.full_name && ['full_name', 1, 'Full name'],
+        !data.dob && ['dob', 1, 'Date of birth'],
+        !data.gender && ['gender', 1, 'Gender'],
+        !data.photo && !existingPhoto && ['photo', 1, 'Student photograph'],
+        !data.class_grade && ['class_grade', 2, 'Current class / grade'],
+        ...NARRATIVE_FIELDS.filter(field => !data.motivation_data.find(item => item.category === 'Narrative' && item.reason === field)?.narrative?.trim()).map(field => [`narrative:${field}`, 6, field]),
+        !data.centre_id && ['centre_id', 8, 'Centre'],
+      ].filter(Boolean) as [string, number, string][];
+      if (missingFields.length) {
+        setInvalidFields(new Set(missingFields.map(([field]) => field)));
+        setCurrentStep(missingFields[0][1]);
+        setError(`Complete the required fields before submitting: ${missingFields.map(([, , label]) => label).join(', ')}.`);
+        return;
+      }
+      setInvalidFields(new Set());
       setSaving(true);
       try {
         if (id) {

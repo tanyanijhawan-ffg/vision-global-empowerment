@@ -46,14 +46,6 @@ const navItems = [
       { name: 'Tracking', path: '/academics/tracking' },
     ]
   },
-  {
-    name: 'Leadership',
-    icon: ShieldAlert,
-    children: [
-      { name: 'Dashboard', path: '/leadership' },
-      { name: 'Training', path: '/leadership/training' },
-    ]
-  },
   { name: 'Reports', icon: BarChart3, path: '/reports' },
   { name: 'Users', icon: ShieldAlert, path: '/users' },
   { name: 'Settings', icon: Settings, path: '/settings' },
@@ -93,7 +85,6 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
     Masters: location.pathname.startsWith('/masters'),
     Attendance: location.pathname.startsWith('/attendance'),
     Academics: location.pathname.startsWith('/academics'),
-    Leadership: location.pathname.startsWith('/leadership'),
   });
 
   const toggleGroup = (name: string) => {
