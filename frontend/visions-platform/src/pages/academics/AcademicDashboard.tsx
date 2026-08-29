@@ -6,7 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { regions, districts, centres, students } from '../../data/mockData';
 import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
 
-const sel = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none shadow-sm';
+const sel = 'w-full appearance-none px-3 py-2 pr-8 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none shadow-sm';
 
 // Derive synthetic subject scores from academic score (realistic spread)
 function subjectScores(avgScore: number) {
