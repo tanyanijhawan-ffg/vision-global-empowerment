@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Filter, ChevronRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
+import MasterDataActions from '../../components/MasterDataActions';
 import StatusChip from '../../components/StatusChip';
 import { fetchStudents, type StudentListItem } from '../../lib/api';
 import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
@@ -15,6 +16,18 @@ export default function StudentsList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const loadStudents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setData(await fetchStudents());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load students');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -75,7 +88,8 @@ export default function StudentsList() {
       <PageHeader 
         title="Students" 
         subtitle="Manage student profiles, academic records, and attendance."
-        action={
+        action={<div className="flex flex-wrap items-center justify-end gap-2">
+          {currentUser?.role === 'SUPER_ADMIN' ? <MasterDataActions resource="students" onAdd={() => navigate('/students/new')} onUploaded={loadStudents} showAdd={false} /> : null}
           <Link 
             to="/students/new"
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
@@ -83,7 +97,7 @@ export default function StudentsList() {
             <Plus size={16} />
             Register Student
           </Link>
-        }
+        </div>}
       />
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
@@ -115,7 +129,6 @@ export default function StudentsList() {
               value={filterCentre}
               onChange={(e) => { setFilterCentre(e.target.value); setFilterClass('All'); }}
               className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
-              disabled={filterRegion === 'All'}
             >
               <option value="All">All Centres</option>
               {availableCentres.map(centre => (

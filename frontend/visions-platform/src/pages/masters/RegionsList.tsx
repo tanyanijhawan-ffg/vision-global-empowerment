@@ -1,22 +1,56 @@
-import { useState } from 'react';
-import { Search, Plus, MoreVertical, Edit2, Trash2 } from 'lucide-react';
-import PageHeader from '../../components/PageHeader';
+import { useEffect, useState } from 'react';
+import { Edit2, Search, Trash2, X } from 'lucide-react';
 import StatusChip from '../../components/StatusChip';
-import ConfirmDialog from '../../components/ConfirmDialog';
-import { regions } from '../../data/mockData';
-import { getCurrentUser } from '../../lib/auth';
+import PageHeader from '../../components/PageHeader';
+import MasterDataActions from '../../components/MasterDataActions';
+import { getAuthHeaders, getCurrentUser } from '../../lib/auth';
+
+type Region = { id: number; region_name: string; state: string | null; status: string | null };
+const blankRegion = { region_name: '', state: '', status: 'active' };
 
 export default function RegionsList() {
   const canManage = getCurrentUser()?.role === 'SUPER_ADMIN';
-  const [data, setData] = useState(regions);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [data, setData] = useState<Region[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState(blankRegion);
+  const [error, setError] = useState('');
 
-  const handleDelete = () => {
-    if (selectedRegion) {
-      setData(data.filter(r => r.id !== selectedRegion));
-    }
+  const loadRegions = async () => {
+    const response = await fetch('/api/masters/regions/', { headers: { ...getAuthHeaders(), Accept: 'application/json' } });
+    if (!response.ok) throw new Error('Unable to load regions.');
+    setData(await response.json());
+  };
+
+  useEffect(() => { loadRegions().catch(error => setError(error.message)); }, []);
+
+  const createRegion = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const response = await fetch(editingId ? `/api/masters/regions/${editingId}/` : '/api/masters/regions/', { method: editingId ? 'PATCH' : 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+    if (!response.ok) { setError('Unable to create region.'); return; }
+    await loadRegions();
+    setIsFormOpen(false);
+    setEditingId(null);
+    setForm(blankRegion);
+  };
+
+  const closeForm = () => {
+    setIsFormOpen(false);
+    setEditingId(null);
+    setForm(blankRegion);
+  };
+
+  const openAddForm = () => {
+    setEditingId(null);
+    setForm(blankRegion);
+    setIsFormOpen(true);
+  };
+
+  const deleteRegion = async (id: number) => {
+    if (!window.confirm('Delete this region and its linked records?')) return;
+    const response = await fetch(`/api/masters/regions/${id}/`, { method: 'DELETE', headers: getAuthHeaders() });
+    if (!response.ok) { setError('Unable to delete region.'); return; }
+    await loadRegions();
   };
 
   return (
@@ -25,13 +59,7 @@ export default function RegionsList() {
         title="Regions" 
         subtitle="Manage geographic regions and their assigned states."
         action={
-          <button 
-            onClick={() => setIsFormOpen(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus size={16} />
-            Add Region
-          </button>
+          canManage ? <MasterDataActions resource="regions" onAdd={openAddForm} onUploaded={() => loadRegions().catch(error => setError(error.message))} /> : undefined
         }
       />
 
@@ -55,37 +83,17 @@ export default function RegionsList() {
               <tr>
                 <th className="px-6 py-3">Region Name</th>
                 <th className="px-6 py-3">State</th>
-                <th className="px-6 py-3">Districts</th>
-                <th className="px-6 py-3">Centres</th>
-                <th className="px-6 py-3">Students</th>
                 <th className="px-6 py-3">Status</th>
-                {canManage && <th className="px-6 py-3 text-right">Actions</th>}
+                {canManage ? <th className="px-6 py-3 text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {data.map((region) => (
                 <tr key={region.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-6 py-4 font-medium text-slate-900">{region.name}</td>
-                  <td className="px-6 py-4">{region.state}</td>
-                  <td className="px-6 py-4">{region.districts}</td>
-                  <td className="px-6 py-4">{region.centres}</td>
-                  <td className="px-6 py-4">{region.students}</td>
-                  <td className="px-6 py-4">
-                    <StatusChip status={region.status} />
-                  </td>
-                  {canManage && <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md hover:bg-indigo-50 transition-colors">
-                        <Edit2 size={16} />
-                      </button>
-                      <button 
-                        onClick={() => { setSelectedRegion(region.id); setIsDeleteOpen(true); }}
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>}
+                  <td className="px-6 py-4 font-medium text-slate-900">{region.region_name}</td>
+                  <td className="px-6 py-4">{region.state || '-'}</td>
+                  <td className="px-6 py-4">{region.status ? <StatusChip status={region.status} /> : '-'}</td>
+                  {canManage ? <td className="px-6 py-4 text-right"><button onClick={() => { setEditingId(region.id); setForm({ region_name: region.region_name, state: region.state || '', status: region.status || 'active' }); setIsFormOpen(true); }} title="Edit region" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button><button onClick={() => deleteRegion(region.id)} title="Delete region" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button></td> : null}
                 </tr>
               ))}
             </tbody>
@@ -93,13 +101,8 @@ export default function RegionsList() {
         </div>
       </div>
 
-      <ConfirmDialog 
-        isOpen={isDeleteOpen}
-        onClose={() => setIsDeleteOpen(false)}
-        onConfirm={handleDelete}
-        title="Delete Region"
-        message="Are you sure you want to delete this region? This action cannot be undone and will affect linked districts and centres."
-      />
+      {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+      {isFormOpen ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><form onSubmit={createRegion} className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl space-y-4"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">{editingId ? 'Edit Region' : 'Add Region'}</h2><button type="button" onClick={closeForm} aria-label="Close"><X size={18} /></button></div><label className="block text-sm font-medium text-slate-700">Region Name *<input required value={form.region_name} onChange={event => setForm({ ...form, region_name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label><label className="block text-sm font-medium text-slate-700">State<input value={form.state} onChange={event => setForm({ ...form, state: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label><label className="block text-sm font-medium text-slate-700">Status<select value={form.status} onChange={event => setForm({ ...form, status: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="active">Active</option><option value="inactive">Inactive</option></select></label><button className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white">{editingId ? 'Save Region' : 'Add Region'}</button></form></div> : null}
     </div>
   );
 }
