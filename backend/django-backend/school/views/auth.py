@@ -38,6 +38,9 @@ class LoginView(APIView):
 
         token, _ = Token.objects.get_or_create(user=user)
 
+        role_name = profile.role.name if profile.role else None
+        normalized_role = 'community_educator' if role_name == 'facilitator' else role_name
+
         return Response({
             'token': token.key,
             'user': {
@@ -45,7 +48,8 @@ class LoginView(APIView):
                 'username': user.username,
                 'email': user.email,
                 'full_name': profile.full_name or user.get_full_name() or user.username,
-                'role': profile.role.name,
+                'mobile_number': profile.mobile_number or '',
+                'role': normalized_role,
                 'region_id': profile.region_id,
                 'region_name': profile.region.region_name if profile.region else None,
             }

@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { X, ShieldCheck, UserPlus } from 'lucide-react';
 import { getAuthHeaders } from '../lib/auth';
 
+interface RegionOption {
+  id: number;
+  name: string;
+}
+
 interface UserCreateDialogProps {
   open: boolean;
   onClose: () => void;
@@ -13,7 +18,7 @@ interface UserCreateDialogProps {
 const ROLE_OPTIONS = [
   { value: 'super_admin', label: 'Super Admin' },
   { value: 'regional_admin', label: 'Regional Admin' },
-  { value: 'facilitator', label: 'Facilitator' },
+  { value: 'community_educator', label: 'Community Educator' },
 ] as const;
 
 export default function UserCreateDialog({
@@ -26,64 +31,80 @@ export default function UserCreateDialog({
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'super_admin' | 'regional_admin' | 'facilitator'>('facilitator');
+  const [role, setRole] = useState<'super_admin' | 'regional_admin' | 'community_educator'>('community_educator');
   const [region, setRegion] = useState<number | ''>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([]);
 
-  const regionOptions = useMemo(() => {
-    const allRegions = [
-      { id: 1, name: 'North Region' },
-      { id: 2, name: 'South Region' },
-      { id: 3, name: 'East Region' },
-      { id: 4, name: 'West Region' },
-    ];
+  useEffect(() => {
+    if (!open) return;
 
+    fetch('/api/regions/', {
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((regions: RegionOption[]) => setRegionOptions(regions))
+      .catch(() => setRegionOptions([]));
+  }, [open]);
+
+  const filteredRegionOptions = useMemo(() => {
     if (currentUserRole === 'REGIONAL_ADMIN') {
-      return allRegions.filter((candidate) => candidate.name === currentUserRegion);
+      return regionOptions.filter((candidate) => candidate.name === currentUserRegion);
     }
 
-    return allRegions;
-  }, [currentUserRole, currentUserRegion]);
+    return regionOptions;
+  }, [currentUserRole, currentUserRegion, regionOptions]);
 
   useEffect(() => {
     if (!open) return;
 
     if (currentUserRole === 'REGIONAL_ADMIN') {
-      setRole('facilitator');
-      const firstRegion = regionOptions[0]?.id ?? '';
+      setRole('community_educator');
+      const firstRegion = filteredRegionOptions[0]?.id ?? '';
       setRegion(firstRegion);
     } else if (currentUserRole === 'SUPER_ADMIN') {
       setRole('regional_admin');
-      setRegion(regionOptions[0]?.id ?? '');
+      setRegion(filteredRegionOptions[0]?.id ?? '');
     } else {
-      setRole('facilitator');
+      setRole('community_educator');
       setRegion('');
     }
-  }, [open, currentUserRole, regionOptions]);
+  }, [open, currentUserRole, filteredRegionOptions]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
 
-    if (!username || !email || !password) {
-      setError('Username, email, and password are required.');
+    if (!fullName.trim() || !username.trim() || !email.trim() || !mobileNumber.trim() || !password || !region) {
+      setError('Full name, username, email, mobile number, password, and region are required.');
       return;
     }
 
-    if (currentUserRole === 'REGIONAL_ADMIN' && role !== 'facilitator') {
-      setError('Regional admins can only create facilitators.');
+    const digits = mobileNumber.replace(/\D/g, '');
+    const normalizedMobile = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+    if (!/^\d{10}$/.test(normalizedMobile)) {
+      setError('Mobile number must be a valid 10-digit number.');
       return;
     }
 
-    if (currentUserRole === 'REGIONAL_ADMIN' && (!region || String(region) !== String(regionOptions[0]?.id ?? ''))) {
-      setError('Regional admins can only create facilitators in their own region.');
+    if (currentUserRole === 'REGIONAL_ADMIN' && role !== 'community_educator') {
+      setError('Regional admins can only create community educators.');
+      return;
+    }
+
+    if (currentUserRole === 'REGIONAL_ADMIN' && (!region || String(region) !== String(filteredRegionOptions[0]?.id ?? ''))) {
+      setError('Regional admins can only create community educators in their own region.');
       return;
     }
 
     if (currentUserRole === 'FACILITATOR') {
-      setError('Facilitators cannot create users.');
+      setError('Community educators cannot create users.');
       return;
     }
 
@@ -102,6 +123,7 @@ export default function UserCreateDialog({
           email,
           password,
           full_name: fullName,
+          mobile_number: mobileNumber,
           role,
           region: Number(region),
         }),
@@ -119,6 +141,7 @@ export default function UserCreateDialog({
       setFullName('');
       setUsername('');
       setEmail('');
+      setMobileNumber('');
       setPassword('');
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : 'Unable to create user.';
@@ -184,6 +207,20 @@ export default function UserCreateDialog({
             </label>
 
             <label className="block text-sm font-medium text-slate-700">
+              Mobile number
+              <input
+                type="tel"
+                value={mobileNumber}
+                onChange={(e) => setMobileNumber(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                placeholder="e.g. 9876543210"
+                inputMode="numeric"
+                pattern="[0-9]{10}"
+                required
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
               Password
               <input
                 type="password"
@@ -199,7 +236,7 @@ export default function UserCreateDialog({
               Role
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value as 'super_admin' | 'regional_admin' | 'facilitator')}
+                onChange={(e) => setRole(e.target.value as 'super_admin' | 'regional_admin' | 'community_educator')}
                 disabled={currentUserRole !== 'SUPER_ADMIN'}
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:bg-slate-100"
               >
@@ -219,7 +256,7 @@ export default function UserCreateDialog({
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                 disabled={currentUserRole === 'FACILITATOR'}
               >
-                {regionOptions.map((item) => (
+                {filteredRegionOptions.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>

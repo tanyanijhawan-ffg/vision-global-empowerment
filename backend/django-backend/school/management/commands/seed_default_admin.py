@@ -21,7 +21,7 @@ class Command(BaseCommand):
         role_map = {
             'super_admin': Role.objects.get_or_create(name='super_admin')[0],
             'regional_admin': Role.objects.get_or_create(name='regional_admin')[0],
-            'facilitator': Role.objects.get_or_create(name='facilitator')[0],
+            'community_educator': Role.objects.get_or_create(name='community_educator')[0],
         }
 
         user, created = User.objects.get_or_create(

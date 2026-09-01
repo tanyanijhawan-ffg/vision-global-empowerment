@@ -50,10 +50,25 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
         if profile is None:
             return User.objects.none()
 
-        if getattr(profile.role, 'name', None) == 'super_admin':
-            return User.objects.select_related('profile__role', 'profile__region').all()
+        role_name = getattr(profile.role, 'name', None)
+        queryset = User.objects.select_related('profile__role', 'profile__region')
 
-        if getattr(profile.role, 'name', None) == 'regional_admin':
-            return User.objects.select_related('profile__role', 'profile__region').filter(profile__region_id=profile.region_id)
+        if role_name == 'super_admin':
+            return queryset.all()
+
+        if role_name == 'regional_admin':
+            if str(self.kwargs.get('pk')) == str(user.pk):
+                return queryset.filter(pk=user.pk)
+            return queryset.filter(profile__region_id=profile.region_id)
+
+        if str(self.kwargs.get('pk')) == str(user.pk):
+            return queryset.filter(pk=user.pk)
 
         return User.objects.none()
+
+    def perform_destroy(self, instance):
+        profile = getattr(instance, 'profile', None)
+        if profile and getattr(profile.role, 'name', None) == 'super_admin':
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Super admin users cannot be deleted.')
+        instance.delete()

@@ -62,6 +62,7 @@ class UserRBACAPITests(TestCase):
             'role': 'regional_admin',
             'region': self.region_south.region_id,
             'full_name': 'Regional Two',
+            'mobile_number': '+91 99999 11111',
         }, format='json')
 
         self.assertEqual(response.status_code, 201, response.data)
@@ -79,6 +80,7 @@ class UserRBACAPITests(TestCase):
             'role': 'facilitator',
             'region': self.region_north.region_id,
             'full_name': 'Facilitator Same',
+            'mobile_number': '+91 98888 22222',
         }, format='json')
 
         self.assertEqual(same_region_response.status_code, 201, same_region_response.data)
@@ -90,6 +92,7 @@ class UserRBACAPITests(TestCase):
             'role': 'facilitator',
             'region': self.region_south.region_id,
             'full_name': 'Facilitator Other',
+            'mobile_number': '+91 97777 33333',
         }, format='json')
 
         self.assertEqual(other_region_response.status_code, 403)
@@ -105,7 +108,77 @@ class UserRBACAPITests(TestCase):
             'role': 'regional_admin',
             'region': self.region_north.region_id,
             'full_name': 'Regional Try',
+            'mobile_number': '+91 96666 44444',
         }, format='json')
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_super_admin_can_create_community_educator_in_any_region(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.post('/api/users/', {
+            'username': 'community_educator',
+            'email': 'community@vision.org',
+            'password': 'TestPass123!',
+            'role': 'community_educator',
+            'region': self.region_south.region_id,
+            'full_name': 'Community Educator',
+            'mobile_number': '+91 95555 66666',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['role'], 'community_educator')
+        self.assertEqual(response.data['region_id'], self.region_south.region_id)
+
+    def test_super_admin_can_delete_non_super_admin_user(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.delete(f'/api/users/{self.facilitator_user.id}/')
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(User.objects.filter(id=self.facilitator_user.id).exists())
+
+    def test_community_educator_can_view_and_update_own_profile(self):
+        client = APIClient()
+        client.force_authenticate(user=self.facilitator_user)
+
+        response = client.get(f'/api/users/{self.facilitator_user.id}/')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['role'], 'community_educator')
+        self.assertIn('mobile_number', response.data)
+
+        patch_response = client.patch(f'/api/users/{self.facilitator_user.id}/', {
+            'mobile_number': '9876543210',
+            'full_name': 'Facilitator Updated'
+        }, format='json')
+
+        self.assertEqual(patch_response.status_code, 200, patch_response.data)
+        self.assertEqual(patch_response.data['mobile_number'], '9876543210')
+
+    def test_users_reject_invalid_mobile_numbers(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.post('/api/users/', {
+            'username': 'invalid_mobile_user',
+            'email': 'invalidmobile@vision.org',
+            'password': 'TestPass123!',
+            'role': 'community_educator',
+            'region': self.region_north.region_id,
+            'full_name': 'Invalid Mobile User',
+            'mobile_number': '12345',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('mobile_number', response.data)
+
+    def test_super_admin_cannot_delete_super_admin(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.delete(f'/api/users/{self.super_user.id}/')
 
         self.assertEqual(response.status_code, 403)
 
@@ -120,6 +193,7 @@ class UserRBACAPITests(TestCase):
             'role': 'facilitator',
             'region': self.region_north.region_id,
             'full_name': 'Facilitator Attempt',
+            'mobile_number': '+91 94444 77777',
         }, format='json')
 
         self.assertEqual(response.status_code, 403)

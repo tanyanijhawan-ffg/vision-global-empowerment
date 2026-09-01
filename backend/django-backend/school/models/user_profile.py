@@ -8,6 +8,7 @@ from .role import Role
 class UserProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
     full_name = models.CharField(max_length=150, blank=True, null=True)
+    mobile_number = models.CharField(max_length=20, blank=True, default='')
     role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name='user_profiles')
     region = models.ForeignKey(Region, on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profiles')
     created_by = models.ForeignKey(
