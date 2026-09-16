@@ -211,6 +211,8 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentA
     throw new Error(detail || `Failed to create student (${response.status})`);
   }
   return response.json() as Promise<StudentApiRecord>;
+}
+
 export interface AssessmentType {
   id: number;
   code: string;
@@ -223,6 +225,7 @@ export interface Subject {
   name: string;
   code?: string;
   classId?: number | null;
+  maxMarks?: number;
 }
 
 export interface Assessment {
@@ -269,6 +272,7 @@ export interface AssessmentObservation {
   keyImprovements: string;
   subjectsNeedingSupport: string;
   interventionPlan: string;
+  comments?: string;
 }
 
 export interface AssessmentStatistics {
@@ -343,9 +347,7 @@ export async function saveAttendance(input: AttendanceInput): Promise<Attendance
   return response.json() as Promise<AttendanceRecord>;
 }
 
-export async function fetchStudents(): Promise<StudentListItem[]> {
-  const response = await fetch(`${getApiBaseUrl()}/students/`, {
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers: {
@@ -391,8 +393,20 @@ export const createAssessment = (payload: {
   term: string;
   assessmentDate: string;
 }) => apiRequest<Assessment>("/v1/assessments/", { method: "POST", body: JSON.stringify(payload) });
-export const fetchAssessment = (assessmentId: number) => apiRequest<Assessment>(`/v1/assessments/${assessmentId}/`);
-export const fetchAssessments = () => apiRequest<Assessment[]>("/v1/assessments/");
+export const fetchAssessments = (params?: {
+  classId?: number;
+  assessmentTypeId?: number | '';
+  term?: string;
+  status?: string;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.classId) query.set('classId', String(params.classId));
+  if (params?.assessmentTypeId) query.set('assessmentTypeId', String(params.assessmentTypeId));
+  if (params?.term) query.set('term', params.term);
+  if (params?.status) query.set('status', params.status);
+  const qs = query.toString();
+  return apiRequest<Assessment[]>(`/v1/assessments/${qs ? `?${qs}` : ''}`);
+};
 export const fetchAssessmentScores = (assessmentId: number) => apiRequest<{ assessmentId: number; students: AssessmentStudentScores[] }>(`/v1/assessments/${assessmentId}/scores/`);
 export const saveAssessmentScores = (assessmentId: number, studentsPayload: Array<{ studentId: number; scores: AssessmentScoreInput[] }>) =>
   apiRequest<{ assessmentId: number; students: AssessmentStudentScores[]; savedStudents: number; savedScores: number; status: string }>(`/v1/assessments/${assessmentId}/scores/bulk`, {

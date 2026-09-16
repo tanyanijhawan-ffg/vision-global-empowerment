@@ -21,7 +21,6 @@ import AttendanceDashboard from './pages/attendance/AttendanceDashboard';
 import AttendanceEntry from './pages/attendance/AttendanceEntry';
 import AcademicDashboard from './pages/academics/AcademicDashboard';
 import AssessmentEntry from './pages/academics/AssessmentEntry';
-import AcademicTracking from './pages/academics/AcademicTracking';
 import AcademicProfile from './pages/academics/AcademicProfile';
 import LeadershipDashboard from './pages/leadership/LeadershipDashboard';
 import LeadershipTrainingEntry from './pages/leadership/LeadershipTrainingEntry';
@@ -65,7 +64,6 @@ function App() {
             
             <Route path="/academics" element={<ProtectedRoute><AcademicDashboard /></ProtectedRoute>} />
             <Route path="/academics/entry" element={<ProtectedRoute><AssessmentEntry /></ProtectedRoute>} />
-            <Route path="/academics/tracking" element={<ProtectedRoute><AcademicTracking /></ProtectedRoute>} />
             <Route path="/academics/:studentId" element={<ProtectedRoute><AcademicProfile /></ProtectedRoute>} />
 
             <Route path="/leadership" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><LeadershipDashboard /></ProtectedRoute>} />

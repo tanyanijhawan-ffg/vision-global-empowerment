@@ -48,18 +48,19 @@ def _get_assessment_or_404(assessment_id):
     return Assessment.objects.select_related('assessment_type').get(assessment_id=assessment_id)
 
 
-class AssessmentTypeListView(APIView):
+class AssessmentAPIView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []
 
+
+class AssessmentTypeListView(AssessmentAPIView):
     def get(self, request):
         queryset = AssessmentType.objects.filter(is_active=True).order_by('assessment_type_id')
         serializer = AssessmentTypeSerializer(queryset, many=True)
         return Response(serializer.data)
 
 
-class SubjectListView(APIView):
-    permission_classes = [AllowAny]
-
+class SubjectListView(AssessmentAPIView):
     def get(self, request):
         class_id = request.query_params.get('classId')
         queryset = Subject.objects.filter(is_active=True)
@@ -69,8 +70,38 @@ class SubjectListView(APIView):
         return Response(serializer.data)
 
 
-class AssessmentCreateView(APIView):
-    permission_classes = [AllowAny]
+class AssessmentCreateView(AssessmentAPIView):
+
+    def get(self, request):
+        queryset = Assessment.objects.select_related('assessment_type').all().order_by('-assessment_id')
+        status_param = request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status__iexact=status_param)
+        class_id = request.query_params.get('classId')
+        if class_id:
+            queryset = queryset.filter(class_id=class_id)
+        assessment_type_id = request.query_params.get('assessmentTypeId')
+        if assessment_type_id:
+            queryset = queryset.filter(assessment_type_id=assessment_type_id)
+        term = request.query_params.get('term')
+        if term:
+            queryset = queryset.filter(term__iexact=term.strip())
+        academic_year_id = request.query_params.get('academicYearId')
+        if academic_year_id:
+            queryset = queryset.filter(academic_year_id=academic_year_id)
+        results = []
+        for a in queryset:
+            results.append({
+                'id': a.assessment_id,
+                'status': a.status,
+                'academicYear': _format_year(a.academic_year_id),
+                'class': f'Grade {a.class_id}',
+                'section': _section_label(a.section_id),
+                'assessmentType': a.assessment_type.name if a.assessment_type else '',
+                'term': a.term,
+                'assessmentDate': str(a.assessment_date) if a.assessment_date else '',
+            })
+        return Response(results)
 
     def post(self, request):
         assessment_type_id = request.data.get('assessmentTypeId')
@@ -109,9 +140,7 @@ class AssessmentCreateView(APIView):
         })
 
 
-class AssessmentDetailView(APIView):
-    permission_classes = [AllowAny]
-
+class AssessmentDetailView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         student_count = Student.objects.filter(assessment_scores__assessment=assessment).distinct().count()
@@ -129,9 +158,7 @@ class AssessmentDetailView(APIView):
         })
 
 
-class AssessmentScoreBulkView(APIView):
-    permission_classes = [AllowAny]
-
+class AssessmentScoreBulkView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         by_student = {}
@@ -216,9 +243,7 @@ class AssessmentScoreBulkView(APIView):
         })
 
 
-class AssessmentDiagnosticListView(APIView):
-    permission_classes = [AllowAny]
-
+class AssessmentDiagnosticListView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         diagnostics = AssessmentDiagnostic.objects.filter(assessment=assessment).select_related('student', 'subject')
@@ -236,9 +261,7 @@ class AssessmentDiagnosticListView(APIView):
         return Response({'assessmentId': assessment.assessment_id, 'diagnostics': data})
 
 
-class AssessmentDiagnosticBulkView(APIView):
-    permission_classes = [AllowAny]
-
+class AssessmentDiagnosticBulkView(AssessmentAPIView):
     def put(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         saved = 0
@@ -261,9 +284,7 @@ class AssessmentDiagnosticBulkView(APIView):
         return Response({'assessmentId': assessment.assessment_id, 'saved': saved, 'status': 'SUCCESS'})
 
 
-class DiagnosticOptionsView(APIView):
-    permission_classes = [AllowAny]
-
+class DiagnosticOptionsView(AssessmentAPIView):
     def get(self, request):
         understanding = DiagnosticOption.objects.filter(category=DiagnosticOption.CATEGORY_UNDERSTANDING).order_by('sort_order')
         application = DiagnosticOption.objects.filter(category=DiagnosticOption.CATEGORY_APPLICATION).order_by('sort_order')
@@ -275,17 +296,13 @@ class DiagnosticOptionsView(APIView):
         })
 
 
-class LearningBehaviourOptionListView(APIView):
-    permission_classes = [AllowAny]
-
+class LearningBehaviourOptionListView(AssessmentAPIView):
     def get(self, request):
         options = LearningBehaviourOption.objects.filter(is_active=True).order_by('behaviour_option_id')
         return Response([{'code': item.code, 'name': item.name} for item in options])
 
 
-class AssessmentBehaviourView(APIView):
-    permission_classes = [AllowAny]
-
+class AssessmentBehaviourView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         items = StudentLearningBehaviour.objects.filter(assessment=assessment).select_related('student', 'behaviour_option')
@@ -312,9 +329,7 @@ class AssessmentBehaviourView(APIView):
         return Response({'assessmentId': assessment.assessment_id, 'saved': saved, 'status': 'SUCCESS'})
 
 
-class AssessmentObservationListView(APIView):
-    permission_classes = [AllowAny]
-
+class AssessmentObservationListView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         rows = StudentObservation.objects.filter(assessment=assessment).select_related('student')
@@ -327,9 +342,7 @@ class AssessmentObservationListView(APIView):
         } for row in rows]})
 
 
-class StudentObservationView(APIView):
-    permission_classes = [AllowAny]
-
+class StudentObservationView(AssessmentAPIView):
     def get(self, request, assessment_id, student_id):
         assessment = _get_assessment_or_404(assessment_id)
         student = Student.objects.filter(student_id=student_id).first()
@@ -373,30 +386,60 @@ class StudentObservationView(APIView):
         })
 
 
-class AssessmentSubmitView(APIView):
-    permission_classes = [AllowAny]
-
+class AssessmentSubmitView(AssessmentAPIView):
     def post(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         student_ids = set(Student.objects.filter(assessment_scores__assessment=assessment).values_list('student_id', flat=True).distinct())
-        subject_ids = set(Subject.objects.filter(is_active=True).values_list('subject_id', flat=True))
+        
+        class_subjects = Subject.objects.filter(is_active=True)
+        if assessment.class_id:
+            class_subjects = class_subjects.filter(class_id=assessment.class_id)
+        if not class_subjects.exists():
+            class_subjects = Subject.objects.filter(is_active=True)
+        
         scores = AssessmentScore.objects.filter(assessment=assessment)
         diagnostics = AssessmentDiagnostic.objects.filter(assessment=assessment)
         behaviours = StudentLearningBehaviour.objects.filter(assessment=assessment)
         observations = StudentObservation.objects.filter(assessment=assessment)
 
-        has_scores = bool(scores.exists()) and bool(student_ids)
-        has_all_subjects = bool(scores.values_list('subject_id', flat=True).distinct().count() == len(subject_ids)) if subject_ids else False
-        has_diagnostics = bool(diagnostics.exists())
-        has_behaviour = bool(behaviours.exists())
-        has_observations = bool(observations.exists())
+        # Check if all required subjects for this class have scores in this assessment
+        assessed_subject_ids = set(scores.values_list('subject_id', flat=True).distinct())
+        missing_subjects = [sub.name for sub in class_subjects if sub.subject_id not in assessed_subject_ids]
 
-        if not (has_scores and has_all_subjects and has_diagnostics and has_behaviour and has_observations):
-            return Response({'error': 'Assessment is incomplete and cannot be submitted'}, status=status.HTTP_400_BAD_REQUEST)
+        if missing_subjects:
+            type_name = assessment.assessment_type.name if assessment.assessment_type else 'Quarterly'
+            missing_str = ', '.join(missing_subjects)
+            return Response({
+                'error': f"Not all subjects for Class {assessment.class_id} (Type: {type_name}, Term: {assessment.term}) have been completed (Missing: {missing_str}). Please save progress as draft instead."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        missing = []
+        if not scores.exists() or not student_ids:
+            missing.append('student scores')
+        if not diagnostics.exists():
+            missing.append('diagnostics')
+        if not behaviours.exists():
+            missing.append('learning behaviour')
+        if not observations.exists():
+            missing.append('narrative observations')
+
+        if missing:
+            return Response({
+                'error': f"The assessment cannot be submitted because required components are missing: {', '.join(missing)}. Please save progress as draft instead."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         assessment.status = Assessment.STATUS_SUBMITTED
         assessment.save(update_fields=['status', 'updated_at'])
         AssessmentSubmission.objects.update_or_create(assessment=assessment, defaults={'submitted_by': request.user.username if hasattr(request, 'user') else 'system'})
+
+        # Delete any other leftover draft assessments for the same class, assessment type, and term
+        other_drafts = Assessment.objects.filter(
+            class_id=assessment.class_id,
+            assessment_type_id=assessment.assessment_type_id,
+            term__iexact=assessment.term,
+            status=Assessment.STATUS_DRAFT,
+        ).exclude(assessment_id=assessment.assessment_id)
+        other_drafts.delete()
 
         return Response({
             'assessmentId': assessment.assessment_id,
@@ -405,9 +448,7 @@ class AssessmentSubmitView(APIView):
         })
 
 
-class ComparisonView(APIView):
-    permission_classes = [AllowAny]
-
+class ComparisonView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         previous_assessment = Assessment.objects.filter(
@@ -439,23 +480,25 @@ class ComparisonView(APIView):
         return _percentage(total_marks, max_marks) if max_marks else Decimal('0')
 
 
-class SubjectComparisonView(APIView):
-    permission_classes = [AllowAny]
-
+class SubjectComparisonView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         previous_assessment = Assessment.objects.filter(class_id=assessment.class_id, assessment_date__lt=assessment.assessment_date).order_by('-assessment_date').first()
         subject_list = []
-        all_subjects = Subject.objects.filter(is_active=True)
-        for subject in all_subjects:
+        subjects = Subject.objects.filter(is_active=True)
+        if assessment.class_id:
+            subjects = subjects.filter(class_id=assessment.class_id)
+        for subject in subjects:
             current = AssessmentScore.objects.filter(assessment=assessment, subject=subject)
+            if not current.exists():
+                continue
             previous = AssessmentScore.objects.filter(assessment=previous_assessment, subject=subject) if previous_assessment else None
             current_total = sum(float(item.obtained_marks) for item in current)
-            current_max = sum(float(item.max_marks) for item in current) or Decimal('100')
-            current_percentage = _percentage(current_total, current_max)
-            previous_total = sum(float(item.obtained_marks) for item in previous) if previous else 0
-            previous_max = sum(float(item.max_marks) for item in previous) if previous else Decimal('100')
-            previous_percentage = _percentage(previous_total, previous_max) if previous else Decimal('0')
+            current_max = sum(float(item.max_marks) for item in current)
+            current_percentage = _percentage(current_total, current_max) if current_max else Decimal('0')
+            previous_total = sum(float(item.obtained_marks) for item in previous) if previous and previous.exists() else 0
+            previous_max = sum(float(item.max_marks) for item in previous) if previous and previous.exists() else 0
+            previous_percentage = _percentage(previous_total, previous_max) if previous_max else Decimal('0')
             change = current_percentage - previous_percentage
             trend = 'UP' if change > 0 else 'DOWN' if change < 0 else 'STABLE'
             subject_list.append({
@@ -468,9 +511,7 @@ class SubjectComparisonView(APIView):
         return Response(subject_list)
 
 
-class StudentComparisonView(APIView):
-    permission_classes = [AllowAny]
-
+class StudentComparisonView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         previous_assessment = Assessment.objects.filter(class_id=assessment.class_id, assessment_date__lt=assessment.assessment_date).order_by('-assessment_date').first()
@@ -496,9 +537,7 @@ class StudentComparisonView(APIView):
         return Response(rows)
 
 
-class StudentPerformanceTrendView(APIView):
-    permission_classes = [AllowAny]
-
+class StudentPerformanceTrendView(AssessmentAPIView):
     def get(self, request, student_id):
         subject_id = request.query_params.get('subjectId')
         subject = Subject.objects.filter(subject_id=subject_id).first() if subject_id else None
@@ -516,9 +555,7 @@ class StudentPerformanceTrendView(APIView):
         return Response(rows)
 
 
-class AssessmentStatisticsView(APIView):
-    permission_classes = [AllowAny]
-
+class AssessmentStatisticsView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         scorerows = AssessmentScore.objects.filter(assessment=assessment)
@@ -556,9 +593,7 @@ class AssessmentStatisticsView(APIView):
         return _percentage(total_marks, max_marks)
 
 
-class StudentDashboardView(APIView):
-    permission_classes = [AllowAny]
-
+class StudentDashboardView(AssessmentAPIView):
     def get(self, request, student_id):
         student = Student.objects.filter(student_id=student_id).first()
         if not student:
@@ -590,9 +625,7 @@ class StudentDashboardView(APIView):
         })
 
 
-class AssessmentDetailsView(APIView):
-    permission_classes = [AllowAny]
-
+class AssessmentDetailsView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         return Response({
