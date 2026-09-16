@@ -1,14 +1,17 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from rest_framework.test import APIClient
 
 from school.models.center import Program, Region
+from school.models.center import Center, District
 from school.models.role import Role
 from school.models.user_profile import UserProfile
+from school.services.xlsx import build_workbook
 
 User = get_user_model()
 
@@ -153,3 +156,23 @@ class UserRBACAPITests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.regional_user.refresh_from_db()
         self.assertTrue(self.regional_user.check_password('NewSecurePass123!'))
+
+    def test_super_admin_bulk_uploads_master_data_idempotently(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+        workbook = build_workbook('Centres', [
+            'region_name', 'district_name', 'centre_name', 'centre_type', 'block', 'village',
+            'gps_location', 'facilitator_name', 'start_date', 'status',
+        ], [['Central Region', 'Central District', 'Central Centre', 'Learning', 'Block A', 'Village A', '12.1,77.1', 'Asha', '2026-01-15', 'active']])
+
+        response = client.post('/api/masters/centres/bulk-upload/', {'file': SimpleUploadedFile('centres.xlsx', workbook)}, format='multipart')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data, {'created': 1, 'updated': 0, 'skipped': 0})
+        self.assertTrue(Region.objects.filter(region_name='Central Region').exists())
+        self.assertTrue(District.objects.filter(district_name='Central District').exists())
+        self.assertTrue(Center.objects.filter(centre_name='Central Centre').exists())
+
+        response = client.post('/api/masters/centres/bulk-upload/', {'file': SimpleUploadedFile('centres.xlsx', workbook)}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data, {'created': 0, 'updated': 0, 'skipped': 1})
