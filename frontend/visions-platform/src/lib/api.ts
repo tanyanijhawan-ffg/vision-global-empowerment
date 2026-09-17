@@ -94,6 +94,8 @@ export interface StudentRecord extends Omit<StudentCreateInput, 'photo' | 'centr
   vulnerabilities?: Array<{ name: string; remarks?: string | null }>;
   motivations?: Array<{ category: string; reason: string; narrative?: string | null }>;
   aspirations?: Array<{ career_goal?: string | null; interests?: string | null; strengths?: string | null }>;
+  attendancePercent?: number;
+  academicScore?: number;
 }
 
 export interface AttendanceIntelligenceSetting {
@@ -375,9 +377,14 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   return response.json() as Promise<T>;
 }
 
-export async function fetchStudents(classId?: number): Promise<StudentListItem[]> {
-  const query = classId === undefined ? "" : `?class_grade=${encodeURIComponent(classId)}`;
-  const payload = await apiRequest<StudentApiRecord[] | { results?: StudentApiRecord[] }>(`/students/${query}`);
+export async function fetchStudents(classId?: number | string, centreId?: number | string): Promise<StudentListItem[]> {
+  const params = new URLSearchParams();
+  if (classId !== undefined && classId !== '') params.append('classGrade', String(classId));
+  if (centreId !== undefined && centreId !== '') {
+    params.append('centreId', String(centreId));
+  }
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const payload = await apiRequest<StudentApiRecord[] | { results?: StudentApiRecord[] }>(`/students/${queryString}`);
   const records = Array.isArray(payload) ? payload : payload.results ?? [];
 
   return records.map(mapStudentRecord);
@@ -392,15 +399,18 @@ export const createAssessment = (payload: {
   assessmentTypeId: number;
   term: string;
   assessmentDate: string;
+  centreId?: number | string;
 }) => apiRequest<Assessment>("/v1/assessments/", { method: "POST", body: JSON.stringify(payload) });
 export const fetchAssessments = (params?: {
   classId?: number;
+  centreId?: number | string;
   assessmentTypeId?: number | '';
   term?: string;
   status?: string;
 }) => {
   const query = new URLSearchParams();
   if (params?.classId) query.set('classId', String(params.classId));
+  if (params?.centreId) query.set('centreId', String(params.centreId));
   if (params?.assessmentTypeId) query.set('assessmentTypeId', String(params.assessmentTypeId));
   if (params?.term) query.set('term', params.term);
   if (params?.status) query.set('status', params.status);
@@ -435,6 +445,7 @@ export const saveAssessmentObservation = (assessmentId: number, studentId: numbe
     body: JSON.stringify(observation),
   });
 export const submitAssessment = (assessmentId: number) => apiRequest<{ assessmentId: number; status: string; submittedAt: string }>(`/v1/assessments/${assessmentId}/submit`, { method: "POST" });
+export const reopenAssessment = (assessmentId: number) => apiRequest<{ assessmentId: number; status: string; message: string }>(`/v1/assessments/${assessmentId}/reopen`, { method: "POST" });
 export const fetchAssessmentStatistics = (assessmentId: number) => apiRequest<AssessmentStatistics>(`/v1/assessments/${assessmentId}/statistics`);
 export const fetchAssessmentComparison = (assessmentId: number) => apiRequest<Record<string, unknown>>(`/v1/assessments/${assessmentId}/comparison`);
 export const fetchSubjectComparison = (assessmentId: number) => apiRequest<unknown[]>(`/v1/assessments/${assessmentId}/comparison/subjects`);

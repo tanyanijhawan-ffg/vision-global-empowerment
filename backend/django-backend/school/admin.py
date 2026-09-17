@@ -1,28 +1,40 @@
 from django.contrib import admin
 from .models import (
-    Attendance,
     AcademicAssessment,
     Aspiration,
+    Assessment,
+    AssessmentDiagnostic,
+    AssessmentScore,
+    AssessmentSubmission,
+    AssessmentType,
+    Attendance,
     Center,
+    DiagnosticOption,
     District,
     Family,
     LearningBehaviour,
+    LearningBehaviourOption,
     Motivation,
     Program,
     Region,
     Role,
     SocioEconomic,
     Student,
+    StudentLearningBehaviour,
+    StudentObservation,
     StudentVulnerability,
+    Subject,
     SubjectScore,
+    UserProfile,
     VulnerabilityMaster,
 )
 
 
 @admin.register(Center)
 class CenterAdmin(admin.ModelAdmin):
-    list_display = ('centre_id', 'centre_name', 'block', 'status')
+    list_display = ('centre_id', 'centre_name', 'centre_type', 'block', 'village', 'status')
     search_fields = ('centre_name', 'block', 'village')
+    list_filter = ('centre_type', 'status', 'region', 'district')
 
 
 @admin.register(Role)
@@ -31,10 +43,17 @@ class RoleAdmin(admin.ModelAdmin):
     search_fields = ('name',)
 
 
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'full_name', 'role', 'region', 'is_active')
+    list_filter = ('role', 'is_active', 'region')
+    search_fields = ('user__username', 'full_name')
+
+
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ('student_id', 'full_name', 'gender', 'age', 'centre')
-    list_filter = ('gender', 'centre')
+    list_display = ('student_id', 'full_name', 'gender', 'age', 'class_grade', 'centre')
+    list_filter = ('gender', 'class_grade', 'centre')
     search_fields = ('full_name', 'nick_name', 'school_name')
 
 
@@ -43,6 +62,70 @@ class AttendanceAdmin(admin.ModelAdmin):
     list_display = ('attendance_id', 'student', 'attendance_date', 'status')
     list_filter = ('status', 'attendance_date', 'student__centre')
     search_fields = ('student__full_name',)
+
+
+@admin.register(AssessmentType)
+class AssessmentTypeAdmin(admin.ModelAdmin):
+    list_display = ('assessment_type_id', 'code', 'name', 'duration_months', 'is_active')
+    search_fields = ('code', 'name')
+
+
+@admin.register(Subject)
+class SubjectAdmin(admin.ModelAdmin):
+    list_display = ('subject_id', 'code', 'name', 'class_id', 'is_active')
+    search_fields = ('code', 'name')
+
+
+@admin.register(Assessment)
+class AssessmentAdmin(admin.ModelAdmin):
+    list_display = ('assessment_id', 'assessment_type', 'term', 'academic_year_id', 'class_id', 'section_id', 'assessment_date', 'status')
+    list_filter = ('status', 'assessment_type', 'term', 'class_id')
+    search_fields = ('assessment_type__name', 'term')
+
+
+@admin.register(AssessmentScore)
+class AssessmentScoreAdmin(admin.ModelAdmin):
+    list_display = ('score_id', 'assessment', 'student', 'subject', 'obtained_marks', 'max_marks')
+    list_filter = ('subject', 'assessment')
+    search_fields = ('student__full_name',)
+
+
+@admin.register(DiagnosticOption)
+class DiagnosticOptionAdmin(admin.ModelAdmin):
+    list_display = ('diagnostic_option_id', 'category', 'code', 'name', 'sort_order')
+    list_filter = ('category',)
+    search_fields = ('name', 'code')
+
+
+@admin.register(AssessmentDiagnostic)
+class AssessmentDiagnosticAdmin(admin.ModelAdmin):
+    list_display = ('diagnostic_id', 'assessment', 'student', 'subject', 'understanding_level', 'application_ability', 'interest_level')
+    search_fields = ('student__full_name',)
+
+
+@admin.register(LearningBehaviourOption)
+class LearningBehaviourOptionAdmin(admin.ModelAdmin):
+    list_display = ('behaviour_option_id', 'code', 'name', 'is_active')
+    search_fields = ('name', 'code')
+
+
+@admin.register(StudentLearningBehaviour)
+class StudentLearningBehaviourAdmin(admin.ModelAdmin):
+    list_display = ('behaviour_id', 'assessment', 'student', 'behaviour_option')
+    search_fields = ('student__full_name',)
+
+
+@admin.register(StudentObservation)
+class StudentObservationAdmin(admin.ModelAdmin):
+    list_display = ('observation_id', 'assessment', 'student')
+    search_fields = ('student__full_name',)
+
+
+@admin.register(AssessmentSubmission)
+class AssessmentSubmissionAdmin(admin.ModelAdmin):
+    list_display = ('submission_id', 'assessment', 'submitted_at', 'submitted_by')
+    search_fields = ('submitted_by',)
+
 
 admin.site.register(Program)
 admin.site.register(Region)
@@ -56,3 +139,4 @@ admin.site.register(Aspiration)
 admin.site.register(LearningBehaviour)
 admin.site.register(AcademicAssessment)
 admin.site.register(SubjectScore)
+

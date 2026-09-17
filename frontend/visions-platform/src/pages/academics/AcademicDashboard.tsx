@@ -1,17 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { 
-  Trophy, BookOpen, TrendingUp, AlertTriangle, ChevronDown, 
-  MapPin, Globe, Award, ArrowUpRight, ArrowDownRight, 
-  UserCheck, Layers, RefreshCw
+import {
+  Trophy, BookOpen, TrendingUp, AlertTriangle,
+  MapPin, Globe, Award, UserCheck, Layers, RefreshCw
 } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import StatCard from '../../components/StatCard';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  LineChart, Line, Legend
-} from 'recharts';
-import { 
-  fetchAssessments, fetchAssessmentStatistics, fetchAssessmentComparison, 
+import {
+  fetchAssessments, fetchAssessmentStatistics, fetchAssessmentComparison,
   fetchSubjectComparison, fetchAssessmentScores, fetchAssessmentDiagnostics,
   fetchAssessmentBehaviours, fetchAssessmentObservations, fetchAttendanceCentres,
   fetchStudents, fetchSubjects,
@@ -20,69 +15,76 @@ import {
 } from '../../lib/api';
 import { getCurrentUser } from '../../lib/auth';
 
-const sel = 'w-full appearance-none px-3 py-2 pr-8 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none shadow-xs';
+// Subcomponents for Academic Dashboard
+import AcademicFilterBar from './components/academic-dashboard/AcademicFilterBar';
+import ComparativeAnalyticsTab from './components/academic-dashboard/ComparativeAnalyticsTab';
+import CentrePerformanceTab from './components/academic-dashboard/CentrePerformanceTab';
+import RegionComparisonTab from './components/academic-dashboard/RegionComparisonTab';
+import LowPerformersTab from './components/academic-dashboard/LowPerformersTab';
+import StudentGradebookTab from './components/academic-dashboard/StudentGradebookTab';
 
 type ActiveReportTab = 'comparative' | 'centre-report' | 'region-report' | 'low-performers' | 'class-tracking';
 
+const normalizeClass = (val?: string | number) => {
+  if (!val) return '';
+  return String(val).replace(/^(Class|Grade)\s*/i, '').trim();
+};
+
+/**
+ * AcademicDashboard Component
+ *
+ * Main orchestrator page for Academic Reports and Performance Analytics:
+ * - 3-step Filter Header (Class -> Centre -> Assessment)
+ * - Real-time statistics cards (Avg Score, Assessed Students, Top Performers, Needs Support)
+ * - Tab 1: Comparative Analysis & Trends
+ * - Tab 2: Centre-Wise Performance Report
+ * - Tab 3: Region Comparison Report
+ * - Tab 4: Low-Performing Students & Action Plans
+ * - Tab 5: Subject-Wise Student Gradebook
+ */
 export default function AcademicDashboard() {
   const currentUser = getCurrentUser();
   const [activeTab, setActiveTab] = useState<ActiveReportTab>('comparative');
-  
-  // Data from backend
+
+  // Backend Metadata & Records
+  const [centres, setCentres] = useState<AttendanceCentre[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+
+  // Selection Workflow State
+  const [filterClass, setFilterClass] = useState('');
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<number | null>(null);
-  const [centres, setCentres] = useState<AttendanceCentre[]>([]);
+
+  // Region / District / Centre Scope
+  const [filterRegion] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.region : '');
+  const [filterDistrict] = useState('');
+  const [filterCentre, setFilterCentre] = useState('');
+
+  // Students fetched for the selected scope
   const [students, setStudents] = useState<StudentListItem[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  
-  // Assessment specific backend data
+
+  // Assessment details & scores
   const [statistics, setStatistics] = useState<AssessmentStatistics | null>(null);
   const [comparison, setComparison] = useState<{ current: { percentage: number }; previous: { percentage: number }; change: { percentagePoints: number; trend: string } } | null>(null);
   const [subjectComparison, setSubjectComparison] = useState<Array<{ subject: string; previousPercentage: number; currentPercentage: number; change: number; trend: string }>>([]);
   const [scoresData, setScoresData] = useState<Array<{ studentId: number; studentName?: string; scores: Array<{ subjectId: number; subject?: string; obtainedMarks: number; maxMarks: number }>; percentage: number }>>([]);
   const [diagnosticsData, setDiagnosticsData] = useState<Array<{ studentId: number; subjectId: number; understandingLevel: string; applicationAbility: string; interestLevel: string }>>([]);
-  const [behavioursData, setBehavioursData] = useState<Array<{ studentId: number; behaviour: string }>>([]);
-  const [observationsData, setObservationsData] = useState<Array<{ studentId: number; keyImprovements: string; subjectsNeedingSupport: string; interventionPlan: string; comments?: string }>>([]);
+  const [observationsData, setObservationsData] = useState<Array<{ studentId: number; keyImprovements?: string; subjectsNeedingSupport?: string; interventionPlan?: string }>>([]);
 
-  // Filters
-  const [filterRegion, setFilterRegion] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.region : '');
-  const [filterDistrict, setFilterDistrict] = useState('');
-  const [filterCentre, setFilterCentre] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.centre : '');
-  const [filterClass, setFilterClass] = useState('');
-  const [lowPerformerThreshold, setLowPerformerThreshold] = useState<number>(65);
-
+  const [lowPerformerThreshold, setLowPerformerThreshold] = useState<number>(30);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  const [, setError] = useState('');
 
-  // 1. Initial Load: Fetch all metadata, assessments, centres, students, subjects
+  // 1. Initial Load: Metadata ONLY (centres)
   const loadInitialData = async () => {
     setLoading(true);
     setError('');
     try {
-      const [assessmentsRes, centresRes, studentsRes, subjectsRes] = await Promise.all([
-        fetchAssessments().catch(() => []),
-        fetchAttendanceCentres().catch(() => []),
-        fetchStudents().catch(() => []),
-        fetchSubjects().catch(() => []),
-      ]);
-
-      const submittedAssessments = assessmentsRes.filter(
-        (a) => a.status === 'SUBMITTED' || a.status === 'submitted'
-      );
-
-      setAssessments(submittedAssessments);
+      const centresRes = await fetchAttendanceCentres().catch(() => []);
       setCentres(centresRes);
-      setStudents(studentsRes);
-      setSubjects(subjectsRes);
-
-      if (submittedAssessments.length > 0) {
-        setSelectedAssessmentId(submittedAssessments[0].id);
-      } else {
-        setSelectedAssessmentId(null);
-      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard metadata');
     } finally {
       setLoading(false);
     }
@@ -92,9 +94,61 @@ export default function AcademicDashboard() {
     loadInitialData();
   }, []);
 
-  // 2. When selected assessment changes, fetch its statistics, comparisons, scores, diagnostics
+  // Fetch subjects lazily ONLY when class is selected
   useEffect(() => {
-    if (!selectedAssessmentId) return;
+    if (!filterClass) {
+      setSubjects([]);
+      return;
+    }
+    const classNum = Number(normalizeClass(filterClass));
+    fetchSubjects(classNum)
+      .then(setSubjects)
+      .catch(() => setSubjects([]));
+  }, [filterClass]);
+
+  // 2. Fetch assessment list ONLY when both class and centre have been selected
+  useEffect(() => {
+    if (!filterClass || !filterCentre) {
+      setAssessments([]);
+      setSelectedAssessmentId(null);
+      return;
+    }
+
+    const classNum = Number(normalizeClass(filterClass));
+    let targetCentreId: number | undefined = undefined;
+    const found = centres.find(c => c.name === filterCentre || String(c.id) === filterCentre);
+    if (found) targetCentreId = found.id;
+
+    setRefreshing(true);
+    fetchAssessments({ classId: classNum, centreId: targetCentreId, status: 'SUBMITTED' })
+      .then((res) => {
+        const submitted = res.filter(a => a.status === 'SUBMITTED' || a.status === 'submitted');
+        setAssessments(submitted);
+        if (submitted.length > 0) {
+          setSelectedAssessmentId(submitted[0].id);
+        } else {
+          setSelectedAssessmentId(null);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch assessments:', err);
+        setAssessments([]);
+        setSelectedAssessmentId(null);
+      })
+      .finally(() => setRefreshing(false));
+  }, [filterClass, filterCentre, centres]);
+
+  // 3. Fetch scores, statistics, etc. ONLY when selectedAssessmentId changes
+  useEffect(() => {
+    if (!selectedAssessmentId) {
+      setScoresData([]);
+      setDiagnosticsData([]);
+      setObservationsData([]);
+      setStatistics(null);
+      setComparison(null);
+      setSubjectComparison([]);
+      return;
+    }
 
     setRefreshing(true);
     Promise.all([
@@ -106,21 +160,51 @@ export default function AcademicDashboard() {
       fetchAssessmentBehaviours(selectedAssessmentId).catch(() => null),
       fetchAssessmentObservations(selectedAssessmentId).catch(() => null),
     ])
-      .then(([statsRes, compRes, subjCompRes, scoresRes, diagRes, behavRes, obsRes]) => {
-        if (statsRes) setStatistics(statsRes);
-        if (compRes) setComparison(compRes as any);
-        if (Array.isArray(subjCompRes) && subjCompRes.length > 0) {
-          setSubjectComparison(subjCompRes as any);
-        }
+      .then(([statsRes, compRes, subjCompRes, scoresRes, diagRes, _behavRes, obsRes]) => {
+        setStatistics(statsRes);
+        setComparison(compRes as any);
+        if (Array.isArray(subjCompRes)) setSubjectComparison(subjCompRes as any);
         if (scoresRes?.students) setScoresData(scoresRes.students);
+        else setScoresData([]);
         if (diagRes?.diagnostics) setDiagnosticsData(diagRes.diagnostics);
-        if (behavRes?.students) setBehavioursData(behavRes.students);
+        else setDiagnosticsData([]);
         if (obsRes?.students) setObservationsData(obsRes.students);
+        else setObservationsData([]);
       })
       .finally(() => setRefreshing(false));
   }, [selectedAssessmentId]);
 
-  // Derived filter lists
+  // 4. Fetch student data ONLY after Class and Centre are selected
+  useEffect(() => {
+    if (!filterClass || !filterCentre) {
+      setStudents([]);
+      return;
+    }
+
+    let isMounted = true;
+    const loadScopedStudents = async () => {
+      let targetCentreId: number | undefined = undefined;
+      const found = centres.find(c => c.name === filterCentre || String(c.id) === filterCentre);
+      if (found) targetCentreId = found.id;
+
+      const classNum = filterClass ? normalizeClass(filterClass) : undefined;
+      try {
+        const studentRes = await fetchStudents(classNum, targetCentreId);
+        if (isMounted) setStudents(studentRes);
+      } catch (e) {
+        console.error('Failed to fetch scoped students:', e);
+        if (isMounted) setStudents([]);
+      }
+    };
+
+    loadScopedStudents();
+    return () => { isMounted = false; };
+  }, [filterClass, filterCentre, centres]);
+
+  const availableCentres = useMemo(() => {
+    return centres;
+  }, [centres]);
+
   const availableRegions = useMemo(() => {
     const set = new Set<string>();
     centres.forEach(c => { if (c.region) set.add(c.region); });
@@ -128,68 +212,134 @@ export default function AcademicDashboard() {
     return Array.from(set);
   }, [centres, students]);
 
-  const availableDistricts = useMemo(() => {
-    const set = new Set<string>();
-    centres.forEach(c => {
-      if ((!filterRegion || c.region === filterRegion) && c.district) {
-        set.add(c.district);
+  // Map student scores from scoresData
+  const studentScoresMap = useMemo(() => {
+    const map = new Map<number, { percentage: number; scores: Record<number, number> }>();
+    scoresData.forEach(s => {
+      const subjectScores: Record<number, number> = {};
+      s.scores?.forEach(sc => {
+        if (sc.subjectId !== undefined) {
+          subjectScores[sc.subjectId] = sc.obtainedMarks;
+        }
+      });
+      map.set(Number(s.studentId), {
+        percentage: Math.round(s.percentage),
+        scores: subjectScores,
+      });
+    });
+    return map;
+  }, [scoresData]);
+
+  // Filtered Students with real computed scores
+  const filteredStudentsWithScores = useMemo(() => {
+    const studentMap = new Map<number, StudentListItem>();
+
+    students.forEach(s => {
+      const sId = Number(s.id);
+      studentMap.set(sId, s);
+    });
+
+    scoresData.forEach(sd => {
+      const sId = Number(sd.studentId);
+      if (!studentMap.has(sId)) {
+        studentMap.set(sId, {
+          id: String(sd.studentId),
+          name: sd.studentName || `Student ${sd.studentId}`,
+          region: filterRegion || '',
+          centre: filterCentre || '',
+          class: filterClass || '',
+          gender: 'Not provided',
+          age: 0,
+          attendancePercent: 0,
+          academicScore: Math.round(sd.percentage),
+          status: 'Active',
+          vulnerabilities: [],
+          district: filterDistrict || '',
+          date: '',
+        });
       }
     });
-    return Array.from(set);
-  }, [centres, filterRegion]);
 
-  const availableCentres = useMemo(() => {
-    return centres.filter(c => 
-      (!filterRegion || c.region === filterRegion) &&
-      (!filterDistrict || c.district === filterDistrict)
-    );
-  }, [centres, filterRegion, filterDistrict]);
-
-  // Filtered Students
-  const filteredStudents = useMemo(() => {
-    return students.filter(s => {
-      if (filterRegion && s.region !== filterRegion) return false;
-      if (filterDistrict && s.district !== filterDistrict) return false;
-      if (filterCentre && s.centre !== filterCentre && String(s.centreId) !== filterCentre) return false;
-      if (filterClass && s.class !== filterClass && s.class !== `Class ${filterClass}` && s.class !== `Grade ${filterClass}`) return false;
-      return true;
+    return Array.from(studentMap.values()).map(s => {
+      const scoreObj = studentScoresMap.get(Number(s.id));
+      const realScore = scoreObj ? scoreObj.percentage : s.academicScore;
+      return {
+        ...s,
+        academicScore: realScore,
+      };
     });
-  }, [students, filterRegion, filterDistrict, filterCentre, filterClass]);
+  }, [students, scoresData, filterCentre, filterClass, filterRegion, filterDistrict, studentScoresMap]);
 
-  // Calculate live statistics
+  // Live statistics
   const currentAvgScore = useMemo(() => {
     if (statistics?.averagePercentage) return Math.round(statistics.averagePercentage);
     if (comparison?.current?.percentage) return Math.round(comparison.current.percentage);
-    if (filteredStudents.length > 0) {
-      const sum = filteredStudents.reduce((acc, s) => acc + (s.academicScore || 0), 0);
-      return Math.round(sum / filteredStudents.length);
+    const validScores = filteredStudentsWithScores
+      .map(s => s.academicScore)
+      .filter((sc): sc is number => sc !== undefined && sc !== null);
+    if (validScores.length > 0) {
+      return Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
     }
-    return 78;
-  }, [statistics, comparison, filteredStudents]);
+    return 0;
+  }, [statistics, comparison, filteredStudentsWithScores]);
 
   const previousAvgScore = useMemo(() => {
-    if (statistics?.previousAverage) return Number(statistics.previousAverage.toFixed(1));
+    if (statistics?.previousAverage !== undefined && statistics?.previousAverage !== null) return Number(statistics.previousAverage.toFixed(1));
     if (comparison?.previous?.percentage) return Number(comparison.previous.percentage.toFixed(1));
-    return 74.8;
+    return 0;
   }, [statistics, comparison]);
 
   const ppChange = useMemo(() => {
-    if (statistics?.improvement !== undefined) return Number(statistics.improvement.toFixed(2));
-    if (comparison?.change?.percentagePoints !== undefined) return Number(comparison.change.percentagePoints.toFixed(2));
-    return Number((currentAvgScore - previousAvgScore).toFixed(2));
+    if (statistics?.improvement !== undefined) return Number(statistics.improvement.toFixed(1));
+    if (comparison?.change?.percentagePoints !== undefined) return Number(comparison.change.percentagePoints.toFixed(1));
+    return Number((currentAvgScore - previousAvgScore).toFixed(1));
   }, [statistics, comparison, currentAvgScore, previousAvgScore]);
 
   const topPerformersCount = useMemo(() => {
-    return filteredStudents.filter(s => (s.academicScore || 0) >= 80).length;
-  }, [filteredStudents]);
+    return filteredStudentsWithScores.filter(s => (s.academicScore || 0) >= 80).length;
+  }, [filteredStudentsWithScores]);
 
   const lowPerformersList = useMemo(() => {
-    return filteredStudents
-      .filter(s => (s.academicScore || 0) < lowPerformerThreshold)
+    return filteredStudentsWithScores
+      .filter(s => s.academicScore !== undefined && s.academicScore < lowPerformerThreshold)
       .sort((a, b) => (a.academicScore || 0) - (b.academicScore || 0));
-  }, [filteredStudents, lowPerformerThreshold]);
+  }, [filteredStudentsWithScores, lowPerformerThreshold]);
 
-  // Subject Performance Trends (from backend with fallback)
+  // Dynamic subjects for gradebook
+  const displaySubjects = useMemo(() => {
+    if (filterClass) {
+      const fClassNum = Number(normalizeClass(filterClass));
+      const classSubs = subjects.filter(sub => (sub as any).class_id === fClassNum || (sub as any).classId === fClassNum);
+      if (classSubs.length > 0) return classSubs;
+    }
+    if (scoresData.length > 0) {
+      const subjectMap = new Map<number, string>();
+      scoresData.forEach(st => {
+        st.scores?.forEach(sc => {
+          if (sc.subjectId && sc.subject) {
+            subjectMap.set(sc.subjectId, sc.subject);
+          }
+        });
+      });
+      if (subjectMap.size > 0) {
+        return Array.from(subjectMap.entries()).map(([id, name]) => ({
+          id,
+          name,
+          code: name.toUpperCase(),
+        }));
+      }
+    }
+    if (subjects.length > 0) return subjects;
+    return [
+      { id: 1, name: 'Tamil', code: 'TAMIL' },
+      { id: 2, name: 'English', code: 'ENGLISH' },
+      { id: 3, name: 'Mathematics', code: 'MATHEMATICS' },
+      { id: 4, name: 'Science', code: 'SCIENCE' },
+      { id: 5, name: 'Social Science', code: 'SOCIAL_SCIENCE' },
+    ];
+  }, [filterClass, subjects, scoresData]);
+
+  // Subject Performance Trends
   const displaySubjectTrends = useMemo(() => {
     if (subjectComparison.length > 0) {
       return subjectComparison.map(s => ({
@@ -201,15 +351,15 @@ export default function AcademicDashboard() {
       }));
     }
     return [
-      { subject: 'Tamil', currentScore: 87.9, prevScore: 80.0, ppChange: 7.9, trend: 'UP' },
-      { subject: 'English', currentScore: 81.2, prevScore: 82.1, ppChange: -0.9, trend: 'DOWN' },
-      { subject: 'Mathematics', currentScore: 91.4, prevScore: 84.0, ppChange: 7.4, trend: 'UP' },
-      { subject: 'Science', currentScore: 74.5, prevScore: 76.2, ppChange: -1.7, trend: 'DOWN' },
-      { subject: 'Social Science', currentScore: 78.3, prevScore: 74.8, ppChange: 3.5, trend: 'UP' },
+      { subject: 'Tamil', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
+      { subject: 'English', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
+      { subject: 'Mathematics', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
+      { subject: 'Science', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
+      { subject: 'Social Science', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
     ];
-  }, [subjectComparison]);
+  }, [subjectComparison, currentAvgScore, previousAvgScore, ppChange]);
 
-  // Diagnostic distribution calculated from real records
+  // Diagnostic distribution summary
   const diagnosticSummary = useMemo(() => {
     if (diagnosticsData.length > 0) {
       const total = diagnosticsData.length;
@@ -263,58 +413,87 @@ export default function AcademicDashboard() {
     };
   }, [diagnosticsData]);
 
-  // Centre performance report calculated from real data
+  // Centre performance report
   const centrePerformanceReport = useMemo(() => {
-    return availableCentres.map((c, idx) => {
-      const centreStudents = filteredStudents.filter(s => s.centre === c.name || String(s.centreId) === String(c.id));
-      const score = centreStudents.length
-        ? Math.round(centreStudents.reduce((acc, s) => acc + (s.academicScore || 0), 0) / centreStudents.length)
-        : 74;
-      const passCount = centreStudents.filter(s => (s.academicScore || 0) >= 50).length;
-      const passRate = centreStudents.length ? Math.round((passCount / centreStudents.length) * 100) : 88;
+    const reports = availableCentres.map((c) => {
+      const centreStudents = filteredStudentsWithScores.filter(s => s.centre === c.name || String(s.centreId) === String(c.id));
+      const scoredStudents = centreStudents.filter(s => s.academicScore !== undefined && s.academicScore !== null);
+      const hasData = scoredStudents.length > 0;
+      const score = hasData
+        ? Math.round(scoredStudents.reduce((acc, s) => acc + (s.academicScore || 0), 0) / scoredStudents.length)
+        : null;
+      const passCount = scoredStudents.filter(s => (s.academicScore || 0) >= 50).length;
+      const passRate = hasData ? Math.round((passCount / scoredStudents.length) * 100) : null;
 
       return {
-        rank: idx + 1,
         id: c.id,
         name: c.name,
-        region: c.region || 'Tamil Nadu South',
-        district: c.district || 'Madurai',
-        studentsCount: centreStudents.length || 24,
+        region: c.region || 'Region',
+        district: c.district || 'District',
+        studentsCount: centreStudents.length,
         avgScore: score,
         passRate,
-        topSubject: score >= 75 ? 'Mathematics' : 'Tamil',
-        status: score >= 75 ? 'High Performing' : score >= 65 ? 'Average' : 'Needs Support',
+        topSubject: hasData ? (score! >= 75 ? 'Mathematics' : 'Tamil') : 'N/A',
+        status: hasData ? (score! >= 75 ? 'High Performing' : score! >= 60 ? 'Average' : 'Needs Support') : 'No Data',
+        hasData,
       };
-    }).sort((a, b) => b.avgScore - a.avgScore);
-  }, [availableCentres, filteredStudents]);
+    });
 
-  // Region comparison report from real data
+    // Sort: centres with data first (by avgScore desc), then centres without data (by name)
+    reports.sort((a, b) => {
+      if (a.hasData && !b.hasData) return -1;
+      if (!a.hasData && b.hasData) return 1;
+      if (a.hasData && b.hasData) return (b.avgScore || 0) - (a.avgScore || 0);
+      return a.name.localeCompare(b.name);
+    });
+
+    return reports.map((r, idx) => ({ ...r, rank: idx + 1 }));
+  }, [availableCentres, filteredStudentsWithScores]);
+
+  // Region comparison report
   const regionComparisonReport = useMemo(() => {
-    const regList = availableRegions.length > 0 ? availableRegions : ['Tamil Nadu South', 'Tamil Nadu North', 'Karnataka', 'Andhra Pradesh', 'Kerala'];
-    return regList.map(rName => {
+    const regList = availableRegions.length > 0 ? availableRegions : [];
+    const reports = regList.map(rName => {
       const regStudents = students.filter(s => s.region === rName);
       const regCentres = centres.filter(c => c.region === rName);
-      const avg = regStudents.length
-        ? Math.round(regStudents.reduce((acc, s) => acc + (s.academicScore || 0), 0) / regStudents.length)
-        : 76;
-      const lowCount = regStudents.filter(s => (s.academicScore || 0) < 60).length;
+      const regStudentsWithScores = filteredStudentsWithScores.filter(s => s.region === rName);
+      const validScores = regStudentsWithScores.map(s => s.academicScore).filter((sc): sc is number => sc !== undefined && sc !== null);
+      const hasData = validScores.length > 0;
+      const avg = hasData
+        ? Math.round(validScores.reduce((acc, s) => acc + s, 0) / validScores.length)
+        : null;
+      const passCount = validScores.filter(sc => sc >= 50).length;
+      const passRate = hasData ? Math.round((passCount / validScores.length) * 100) : null;
+      const lowCount = validScores.filter(sc => sc < 60).length;
 
       return {
         name: rName,
-        centresCount: regCentres.length || 5,
-        studentsCount: regStudents.length || 30,
+        centresCount: regCentres.length,
+        studentsCount: regStudents.length,
         avgScore: avg,
-        passRate: Math.min(100, Math.round(avg * 1.15)),
+        passRate,
         lowCount,
+        hasData,
+        level: hasData ? (avg! >= 75 ? 'Exceptional' : avg! >= 60 ? 'On Track' : 'Needs Intervention') : 'No Data',
       };
-    }).sort((a, b) => b.avgScore - a.avgScore);
-  }, [availableRegions, students, centres]);
+    });
+
+    // Sort: regions with data first (by avgScore desc), then regions without data
+    reports.sort((a, b) => {
+      if (a.hasData && !b.hasData) return -1;
+      if (!a.hasData && b.hasData) return 1;
+      if (a.hasData && b.hasData) return (b.avgScore || 0) - (a.avgScore || 0);
+      return a.name.localeCompare(b.name);
+    });
+
+    return reports;
+  }, [availableRegions, students, centres, filteredStudentsWithScores]);
 
   if (loading) {
     return (
       <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
-        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-medium">Loading live academic dashboard...</p>
+        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-sm font-medium">Loading academic dashboard...</p>
       </div>
     );
   }
@@ -322,8 +501,8 @@ export default function AcademicDashboard() {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12 font-sans text-slate-900">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <PageHeader 
-          title="Academic Performance & Reports" 
+        <PageHeader
+          title="Academic Performance & Reports"
           subtitle="Live performance metrics, comparative trends, centre analytics, and diagnostic distribution."
         />
         <button
@@ -331,572 +510,195 @@ export default function AcademicDashboard() {
           disabled={refreshing}
           className="self-start sm:self-auto px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl transition shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
         >
-          <RefreshCw size={13} className={refreshing ? 'animate-spin text-emerald-600' : 'text-slate-500'} />
+          <RefreshCw size={13} className={refreshing ? 'animate-spin text-indigo-600' : 'text-slate-500'} />
           Refresh Data
         </button>
       </div>
 
       {/* Global Filter Bar */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {/* Assessment Selector */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Assessment</label>
-            <div className="relative">
-              <select 
-                className={sel} 
-                value={selectedAssessmentId ?? ''} 
-                onChange={e => setSelectedAssessmentId(e.target.value ? Number(e.target.value) : null)}
-              >
-                {assessments.length === 0 && <option value="">No submitted assessments</option>}
-                {assessments.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.assessmentType} ({a.term || 'Term'}) - {a.class}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-          </div>
+      <AcademicFilterBar
+        filterCentre={filterCentre}
+        onCentreChange={(val) => {
+          setFilterCentre(val);
+          setFilterClass('');
+          setSelectedAssessmentId(null);
+        }}
+        filterClass={filterClass}
+        onClassChange={(val) => {
+          if (!filterCentre) return;
+          setFilterClass(val);
+          setSelectedAssessmentId(null);
+        }}
+        selectedAssessmentId={selectedAssessmentId}
+        onAssessmentChange={setSelectedAssessmentId}
+        availableCentres={availableCentres}
+        assessments={assessments}
+        studentsInScopeCount={filteredStudentsWithScores.length}
+        onResetAll={() => {
+          setFilterCentre('');
+          setFilterClass('');
+          setAssessments([]);
+          setSelectedAssessmentId(null);
+          setStudents([]);
+        }}
+      />
 
-          {/* Region */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Region</label>
-            <div className="relative">
-              <select className={sel} value={filterRegion} onChange={e => { setFilterRegion(e.target.value); setFilterDistrict(''); setFilterCentre(''); }}>
-                <option value="">All Regions</option>
-                {availableRegions.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
+      {/* Prompt Banner if Centre or Class is not selected yet */}
+      {(!filterCentre || !filterClass) && (
+        <div className="bg-indigo-50/80 border border-indigo-200/80 rounded-2xl p-6 text-center space-y-2">
+          <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center mx-auto font-bold">
+            <BookOpen size={24} />
           </div>
-
-          {/* District */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">District</label>
-            <div className="relative">
-              <select className={sel} value={filterDistrict} onChange={e => { setFilterDistrict(e.target.value); setFilterCentre(''); }} disabled={!filterRegion}>
-                <option value="">All Districts</option>
-                {availableDistricts.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-          </div>
-
-          {/* Centre */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Centre</label>
-            <div className="relative">
-              <select className={sel} value={filterCentre} onChange={e => setFilterCentre(e.target.value)}>
-                <option value="">All Centres</option>
-                {availableCentres.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-          </div>
-
-          {/* Class */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Class</label>
-            <div className="relative">
-              <select className={sel} value={filterClass} onChange={e => setFilterClass(e.target.value)}>
-                <option value="">All Classes</option>
-                {['3','4','5','6','7','8','9','10','11','12'].map(c => <option key={c} value={c}>Class {c}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-          </div>
+          <h3 className="text-base font-bold text-slate-900">Select Centre and Class to View Academic Reports</h3>
+          <p className="text-xs text-slate-600 max-w-md mx-auto">
+            Choose a Centre in step 1 and a Class in step 2 above to load submitted assessments, performance metrics, and student gradebooks.
+          </p>
         </div>
+      )}
 
-        {(filterRegion || filterDistrict || filterCentre || filterClass) && (
-          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <p className="text-xs text-slate-500 font-medium">Filtered scope: <span className="font-bold text-slate-800">{filteredStudents.length}</span> students</p>
-            <button 
-              onClick={() => { setFilterRegion(''); setFilterDistrict(''); setFilterCentre(''); setFilterClass(''); }}
-              className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold cursor-pointer"
+      {/* Main Reports Content (rendered once Class and Centre are selected) */}
+      {filterClass && filterCentre && (
+        <>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              title="Avg Academic Score"
+              value={`${currentAvgScore}%`}
+              icon={Trophy}
+              trend={`${ppChange >= 0 ? '+' : ''}${ppChange} pp vs prev term`}
+              trendUp={ppChange >= 0}
+            />
+            <StatCard
+              title="Students Assessed"
+              value={filteredStudentsWithScores.length}
+              icon={UserCheck}
+              trend={`${filteredStudentsWithScores.length} out of ${students.length} students`}
+              trendUp={true}
+            />
+            <StatCard
+              title="Top Performers (≥80%)"
+              value={topPerformersCount}
+              icon={Award}
+              trend={`${filteredStudentsWithScores.length ? Math.round((topPerformersCount / filteredStudentsWithScores.length) * 100) : 0}% of total`}
+              trendUp={true}
+            />
+            <StatCard
+              title={`Needs Support (<${lowPerformerThreshold}%)`}
+              value={lowPerformersList.length}
+              icon={AlertTriangle}
+              trend="Intervention target"
+              trendUp={false}
+            />
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex border-b border-slate-200 gap-2 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('comparative')}
+              className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${activeTab === 'comparative'
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
             >
-              Clear All Filters
+              <TrendingUp size={15} />
+              Comparative Analysis & Trends
+            </button>
+
+            <button
+              onClick={() => setActiveTab('centre-report')}
+              className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${activeTab === 'centre-report'
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+            >
+              <MapPin size={15} />
+              Centre-Wise Performance Report
+            </button>
+
+            <button
+              onClick={() => setActiveTab('region-report')}
+              className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${activeTab === 'region-report'
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+            >
+              <Globe size={15} />
+              Region Comparison Report
+            </button>
+
+            <button
+              onClick={() => setActiveTab('low-performers')}
+              className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${activeTab === 'low-performers'
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+            >
+              <AlertTriangle size={15} />
+              Low-Performing Students ({lowPerformersList.length})
+            </button>
+
+            <button
+              onClick={() => setActiveTab('class-tracking')}
+              className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${activeTab === 'class-tracking'
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+            >
+              <Layers size={15} />
+              Subject-Wise Gradebook
             </button>
           </div>
-        )}
-      </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Avg Academic Score" 
-          value={`${currentAvgScore}%`} 
-          icon={Trophy} 
-          trend={`${ppChange >= 0 ? '+' : ''}${ppChange} pp vs prev term`} 
-          trendUp={ppChange >= 0} 
-        />
-        <StatCard 
-          title="Students Assessed" 
-          value={filteredStudents.length} 
-          icon={UserCheck} 
-          trend="Live backend data" 
-          trendUp={true} 
-        />
-        <StatCard 
-          title="Top Performers (≥80%)" 
-          value={topPerformersCount} 
-          icon={Award} 
-          trend={`${filteredStudents.length ? Math.round((topPerformersCount / filteredStudents.length) * 100) : 0}% of total`} 
-          trendUp={true} 
-        />
-        <StatCard 
-          title={`Needs Support (<${lowPerformerThreshold}%)`} 
-          value={lowPerformersList.length} 
-          icon={AlertTriangle} 
-          trend="Intervention target" 
-          trendUp={false} 
-        />
-      </div>
+          {/* Tab 1: Comparative Analysis */}
+          {activeTab === 'comparative' && (
+            <ComparativeAnalyticsTab
+              currentAvgScore={currentAvgScore}
+              previousAvgScore={previousAvgScore}
+              ppChange={ppChange}
+              filterClass={filterClass}
+              displaySubjectTrends={displaySubjectTrends}
+              diagnosticSummary={diagnosticSummary}
+            />
+          )}
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('comparative')}
-          className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${
-            activeTab === 'comparative' 
-              ? 'border-emerald-600 text-emerald-700' 
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <TrendingUp size={15} />
-          Comparative Analysis & Trends
-        </button>
+          {/* Tab 2: Centre-Wise Performance Report */}
+          {activeTab === 'centre-report' && (
+            <CentrePerformanceTab
+              centrePerformanceReport={centrePerformanceReport}
+              filterClass={filterClass}
+            />
+          )}
 
-        <button
-          onClick={() => setActiveTab('centre-report')}
-          className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${
-            activeTab === 'centre-report' 
-              ? 'border-emerald-600 text-emerald-700' 
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <MapPin size={15} />
-          Centre-Wise Performance Report
-        </button>
+          {/* Tab 3: Region Comparison Report */}
+          {activeTab === 'region-report' && (
+            <RegionComparisonTab
+              regionComparisonReport={regionComparisonReport}
+              filterClass={filterClass}
+            />
+          )}
 
-        <button
-          onClick={() => setActiveTab('region-report')}
-          className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${
-            activeTab === 'region-report' 
-              ? 'border-emerald-600 text-emerald-700' 
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Globe size={15} />
-          Region Comparison Report
-        </button>
+          {/* Tab 4: Low-Performing Students Report */}
+          {activeTab === 'low-performers' && (
+            <LowPerformersTab
+              lowPerformersList={lowPerformersList}
+              lowPerformerThreshold={lowPerformerThreshold}
+              onThresholdChange={setLowPerformerThreshold}
+              filterClass={filterClass}
+              observationsData={observationsData}
+              diagnosticsData={diagnosticsData as any}
+            />
+          )}
 
-        <button
-          onClick={() => setActiveTab('low-performers')}
-          className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${
-            activeTab === 'low-performers' 
-              ? 'border-emerald-600 text-emerald-700' 
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <AlertTriangle size={15} />
-          Low-Performing Students ({lowPerformersList.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('class-tracking')}
-          className={`pb-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${
-            activeTab === 'class-tracking' 
-              ? 'border-emerald-600 text-emerald-700' 
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Layers size={15} />
-          Subject-Wise Gradebook
-        </button>
-      </div>
-
-      {/* Tab 1: Comparative Analysis */}
-      {activeTab === 'comparative' && (
-        <div className="space-y-6">
-          {/* Comparison Cards Header */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-5 shadow-2xs">
-              <div className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">Current vs Previous Term</div>
-              <div className="flex items-baseline gap-3 mt-2">
-                <span className="text-3xl font-extrabold text-emerald-950">{currentAvgScore}%</span>
-                <span className="text-sm font-semibold text-slate-500">vs {previousAvgScore}%</span>
-              </div>
-              <div className="mt-3 flex items-center gap-2 text-xs font-bold text-emerald-700 bg-white/80 w-fit px-2.5 py-1 rounded-lg border border-emerald-200/80">
-                <ArrowUpRight size={15} />
-                {ppChange >= 0 ? `+${ppChange}` : ppChange} percentage points ({previousAvgScore ? `+${((ppChange / previousAvgScore) * 100).toFixed(1)}%` : ''})
-              </div>
-            </div>
-
-            <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-5 shadow-2xs">
-              <div className="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-1">Highest Average Subject</div>
-              <div className="text-3xl font-extrabold text-indigo-950 mt-2">
-                {displaySubjectTrends[0]?.subject || 'Mathematics'}
-              </div>
-              <div className="mt-3 flex items-center gap-2 text-xs font-bold text-indigo-700 bg-white/80 w-fit px-2.5 py-1 rounded-lg border border-indigo-200/80">
-                <span>{displaySubjectTrends[0]?.currentScore || 91.4}% Avg Score</span> &nbsp;•&nbsp; <span>↑ {displaySubjectTrends[0]?.ppChange || 7.4} pp</span>
-              </div>
-            </div>
-
-            <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-5 shadow-2xs">
-              <div className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">Priority Subject Needing Support</div>
-              <div className="text-3xl font-extrabold text-amber-950 mt-2">
-                {displaySubjectTrends[displaySubjectTrends.length - 1]?.subject || 'Science'}
-              </div>
-              <div className="mt-3 flex items-center gap-2 text-xs font-bold text-amber-700 bg-white/80 w-fit px-2.5 py-1 rounded-lg border border-amber-200/80">
-                <span>{displaySubjectTrends[displaySubjectTrends.length - 1]?.currentScore || 74.5}% Avg</span> &nbsp;•&nbsp; <span>↓ {Math.abs(displaySubjectTrends[displaySubjectTrends.length - 1]?.ppChange || 1.7)} pp</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Subject-Wise Trends Matrix */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
-            <h3 className="text-base font-bold text-slate-900 mb-1">Subject-Wise Performance & Trends</h3>
-            <p className="text-xs text-slate-500 mb-4">Auto-generated comparative analysis across all mandatory subjects</p>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                    <th className="py-3 px-4">Subject</th>
-                    <th className="py-3 px-4 text-center">Previous Term</th>
-                    <th className="py-3 px-4 text-center">Current Term</th>
-                    <th className="py-3 px-4 text-center">Change (pp)</th>
-                    <th className="py-3 px-4 text-right">Progress Bar</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {displaySubjectTrends.map((row) => (
-                    <tr key={row.subject} className="hover:bg-slate-50/70 transition">
-                      <td className="py-3.5 px-4 font-bold text-slate-800">{row.subject}</td>
-                      <td className="py-3.5 px-4 text-center font-medium text-slate-500">{row.prevScore}%</td>
-                      <td className="py-3.5 px-4 text-center font-bold text-slate-900">{row.currentScore}%</td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1 font-bold text-xs px-2.5 py-1 rounded-lg ${
-                          row.ppChange >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                        }`}>
-                          {row.ppChange >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-                          {row.ppChange >= 0 ? `+${row.ppChange}` : row.ppChange} pp
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="w-32 bg-slate-100 rounded-full h-2 ml-auto overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full ${row.currentScore >= 85 ? 'bg-emerald-500' : row.currentScore >= 75 ? 'bg-indigo-500' : 'bg-amber-400'}`}
-                            style={{ width: `${Math.min(100, row.currentScore)}%` }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Diagnostic & Behaviour Insights Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Understanding */}
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">Understanding Levels</h4>
-              <div className="space-y-2.5">
-                {diagnosticSummary.understanding.map(item => (
-                  <div key={item.name}>
-                    <div className="flex justify-between text-xs font-semibold mb-1 text-slate-700">
-                      <span>{item.name}</span>
-                      <span className="font-bold">{item.value}%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${item.value}%`, backgroundColor: item.color }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Application */}
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">Application Ability</h4>
-              <div className="space-y-2.5">
-                {diagnosticSummary.application.map(item => (
-                  <div key={item.name}>
-                    <div className="flex justify-between text-xs font-semibold mb-1 text-slate-700">
-                      <span>{item.name}</span>
-                      <span className="font-bold">{item.value}%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${item.value}%`, backgroundColor: item.color }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Interest */}
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">Interest Level</h4>
-              <div className="space-y-2.5">
-                {diagnosticSummary.interest.map(item => (
-                  <div key={item.name}>
-                    <div className="flex justify-between text-xs font-semibold mb-1 text-slate-700">
-                      <span>{item.name}</span>
-                      <span className="font-bold">{item.value}%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${item.value}%`, backgroundColor: item.color }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 2: Centre-Wise Performance Report */}
-      {activeTab === 'centre-report' && (
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Centre-Wise Performance Ranking</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Aggregated academic performance across {centrePerformanceReport.length} learning centres</p>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                    <th className="py-3 px-3 w-12 text-center">Rank</th>
-                    <th className="py-3 px-4">Centre Name</th>
-                    <th className="py-3 px-4">Region</th>
-                    <th className="py-3 px-4">District</th>
-                    <th className="py-3 px-3 text-center">Students</th>
-                    <th className="py-3 px-3 text-center">Avg Score</th>
-                    <th className="py-3 px-3 text-center">Pass Rate</th>
-                    <th className="py-3 px-4 text-center">Top Subject</th>
-                    <th className="py-3 px-4 text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {centrePerformanceReport.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50/70 transition">
-                      <td className="py-3.5 px-3 text-center font-bold text-slate-400">#{c.rank}</td>
-                      <td className="py-3.5 px-4 font-bold text-slate-900">{c.name}</td>
-                      <td className="py-3.5 px-4 text-slate-600">{c.region}</td>
-                      <td className="py-3.5 px-4 text-slate-600">{c.district}</td>
-                      <td className="py-3.5 px-3 text-center font-semibold text-slate-700">{c.studentsCount}</td>
-                      <td className="py-3.5 px-3 text-center font-bold text-emerald-700">{c.avgScore}%</td>
-                      <td className="py-3.5 px-3 text-center font-medium text-slate-700">{c.passRate}%</td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
-                          {c.topSubject}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          c.avgScore >= 75 ? 'bg-emerald-50 text-emerald-700' :
-                          c.avgScore >= 65 ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
-                        }`}>
-                          {c.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 3: Region Comparison Report */}
-      {activeTab === 'region-report' && (
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
-            <h3 className="text-base font-bold text-slate-900 mb-1">Region Comparison Report</h3>
-            <p className="text-xs text-slate-500 mb-5">Comparative evaluation of all operating states and regions</p>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                    <th className="py-3 px-4">Region</th>
-                    <th className="py-3 px-3 text-center">Centres</th>
-                    <th className="py-3 px-3 text-center">Students</th>
-                    <th className="py-3 px-3 text-center">Avg Score</th>
-                    <th className="py-3 px-4 text-center">Pass Rate</th>
-                    <th className="py-3 px-4 text-right">Performance Level</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {regionComparisonReport.map(r => (
-                    <tr key={r.name} className="hover:bg-slate-50/70 transition">
-                      <td className="py-3.5 px-4 font-bold text-slate-900">{r.name}</td>
-                      <td className="py-3.5 px-3 text-center font-medium text-slate-600">{r.centresCount}</td>
-                      <td className="py-3.5 px-3 text-center font-semibold text-slate-700">{r.studentsCount}</td>
-                      <td className="py-3.5 px-3 text-center font-bold text-emerald-700">{r.avgScore}%</td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="inline-flex items-center gap-1.5 font-semibold text-slate-700">
-                          <span>{r.passRate}%</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          r.avgScore >= 80 ? 'bg-emerald-50 text-emerald-700' :
-                          r.avgScore >= 70 ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
-                        }`}>
-                          {r.avgScore >= 80 ? 'Exceptional' : r.avgScore >= 70 ? 'On Track' : 'Needs Intervention'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 4: Low-Performing Students Report */}
-      {activeTab === 'low-performers' && (
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Low-Performing Students Requiring Intervention</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Students scoring below the configured threshold</p>
-              </div>
-
-              {/* Threshold selector */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-600">Threshold:</span>
-                <div className="flex bg-slate-100 p-1 rounded-lg">
-                  {[50, 60, 65, 70].map(th => (
-                    <button
-                      key={th}
-                      onClick={() => setLowPerformerThreshold(th)}
-                      className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
-                        lowPerformerThreshold === th ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-500'
-                      }`}
-                    >
-                      &lt; {th}%
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {lowPerformersList.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 text-xs font-medium">
-                No students found with score below {lowPerformerThreshold}%.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Student</th>
-                      <th className="py-3 px-4">Centre</th>
-                      <th className="py-3 px-4">Region</th>
-                      <th className="py-3 px-3 text-center">Class</th>
-                      <th className="py-3 px-3 text-center">Academic Score</th>
-                      <th className="py-3 px-4">Diagnostic Observation</th>
-                      <th className="py-3 px-4 text-right">Recommended Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm">
-                    {lowPerformersList.map(s => (
-                      <tr key={s.id} className="hover:bg-slate-50/70 transition">
-                        <td className="py-3.5 px-4 font-bold text-slate-900">{s.name}</td>
-                        <td className="py-3.5 px-4 text-slate-600">{s.centre}</td>
-                        <td className="py-3.5 px-4 text-slate-600">{s.region}</td>
-                        <td className="py-3.5 px-3 text-center font-semibold text-slate-700">Class {s.class}</td>
-                        <td className="py-3.5 px-3 text-center font-extrabold text-rose-600">{s.academicScore || 54}%</td>
-                        <td className="py-3.5 px-4">
-                          <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 text-xs font-medium">
-                            Needs repetition in Science & Math
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200/60">
-                            Provide Practice Worksheets
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Tab 5: Subject-Wise Gradebook / Tracking */}
-      {activeTab === 'class-tracking' && (
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
-            <h3 className="text-base font-bold text-slate-900 mb-1">Subject-Wise Student Gradebook</h3>
-            <p className="text-xs text-slate-500 mb-5">Complete student performance across all subjects with diagnostic tracking</p>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                    <th className="py-3 px-4">Student</th>
-                    <th className="py-3 px-4">Centre</th>
-                    <th className="py-3 px-3 text-center">Tamil</th>
-                    <th className="py-3 px-3 text-center">English</th>
-                    <th className="py-3 px-3 text-center">Maths</th>
-                    <th className="py-3 px-3 text-center">Science</th>
-                    <th className="py-3 px-3 text-center">Social</th>
-                    <th className="py-3 px-3 text-center">Total %</th>
-                    <th className="py-3 px-4 text-right">Understanding</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {filteredStudents.map(s => {
-                    // Check if student has real scores from backend assessment
-                    const studentBackendScores = scoresData.find(sc => String(sc.studentId) === String(s.id));
-                    const tamil = studentBackendScores?.scores.find(sc => sc.subjectId === 1 || sc.subject === 'Tamil')?.obtainedMarks ?? Math.min(100, Math.round((s.academicScore || 75) * 1.05));
-                    const eng = studentBackendScores?.scores.find(sc => sc.subjectId === 2 || sc.subject === 'English')?.obtainedMarks ?? Math.min(100, Math.round((s.academicScore || 75) * 0.88));
-                    const math = studentBackendScores?.scores.find(sc => sc.subjectId === 3 || sc.subject === 'Mathematics')?.obtainedMarks ?? Math.min(100, Math.round((s.academicScore || 75) * 0.95));
-                    const sci = studentBackendScores?.scores.find(sc => sc.subjectId === 4 || sc.subject === 'Science')?.obtainedMarks ?? Math.min(100, Math.round((s.academicScore || 75) * 0.98));
-                    const soc = studentBackendScores?.scores.find(sc => sc.subjectId === 5 || sc.subject === 'Social Science')?.obtainedMarks ?? Math.min(100, Math.round((s.academicScore || 75) * 1.04));
-                    const percentage = studentBackendScores?.percentage ?? s.academicScore ?? 78;
-
-                    return (
-                      <tr key={s.id} className="hover:bg-slate-50/70 transition">
-                        <td className="py-3.5 px-4 font-bold text-slate-900">{s.name}</td>
-                        <td className="py-3.5 px-4 text-slate-500 text-xs">{s.centre}</td>
-                        <td className="py-3.5 px-3 text-center font-medium text-slate-700">{tamil}</td>
-                        <td className="py-3.5 px-3 text-center font-medium text-slate-700">{eng}</td>
-                        <td className="py-3.5 px-3 text-center font-medium text-slate-700">{math}</td>
-                        <td className="py-3.5 px-3 text-center font-medium text-slate-700">{sci}</td>
-                        <td className="py-3.5 px-3 text-center font-medium text-slate-700">{soc}</td>
-                        <td className="py-3.5 px-3 text-center font-extrabold text-emerald-700">{percentage}%</td>
-                        <td className="py-3.5 px-4 text-right">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            percentage >= 75 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                          }`}>
-                            {percentage >= 75 ? 'Understands' : 'Needs Support'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+          {/* Tab 5: Subject-Wise Student Gradebook */}
+          {activeTab === 'class-tracking' && (
+            <StudentGradebookTab
+              filterClass={filterClass}
+              displaySubjects={displaySubjects}
+              filteredStudentsWithScores={filteredStudentsWithScores}
+              studentScoresMap={studentScoresMap}
+            />
+          )}
+        </>
       )}
     </div>
   );

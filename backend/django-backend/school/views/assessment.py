@@ -73,13 +73,16 @@ class SubjectListView(AssessmentAPIView):
 class AssessmentCreateView(AssessmentAPIView):
 
     def get(self, request):
-        queryset = Assessment.objects.select_related('assessment_type').all().order_by('-assessment_id')
+        queryset = Assessment.objects.select_related('assessment_type', 'centre').all().order_by('-assessment_id')
         status_param = request.query_params.get('status')
         if status_param:
             queryset = queryset.filter(status__iexact=status_param)
         class_id = request.query_params.get('classId')
         if class_id:
             queryset = queryset.filter(class_id=class_id)
+        centre_id = request.query_params.get('centreId') or request.query_params.get('centre_id')
+        if centre_id:
+            queryset = queryset.filter(centre_id=centre_id)
         assessment_type_id = request.query_params.get('assessmentTypeId')
         if assessment_type_id:
             queryset = queryset.filter(assessment_type_id=assessment_type_id)
@@ -100,6 +103,8 @@ class AssessmentCreateView(AssessmentAPIView):
                 'assessmentType': a.assessment_type.name if a.assessment_type else '',
                 'term': a.term,
                 'assessmentDate': str(a.assessment_date) if a.assessment_date else '',
+                'centreId': a.centre_id,
+                'centreName': a.centre.centre_name if a.centre else '',
             })
         return Response(results)
 
@@ -110,6 +115,7 @@ class AssessmentCreateView(AssessmentAPIView):
         section_id = request.data.get('sectionId', 1)
         term = request.data.get('term')
         assessment_date = request.data.get('assessmentDate')
+        centre_id = request.data.get('centreId') or request.data.get('centre_id')
 
         if not all([assessment_type_id, academic_year_id, class_id, term, assessment_date]):
             return Response({'error': 'required fields are missing'}, status=status.HTTP_400_BAD_REQUEST)
@@ -122,6 +128,7 @@ class AssessmentCreateView(AssessmentAPIView):
             academic_year_id=int(academic_year_id),
             class_id=int(class_id),
             section_id=int(section_id),
+            centre_id=int(centre_id) if centre_id else None,
             assessment_type=assessment_type,
             term=term,
             assessment_date=assessment_date,
@@ -137,6 +144,7 @@ class AssessmentCreateView(AssessmentAPIView):
             'section': response['section'],
             'assessmentType': response['assessmentType'],
             'term': assessment.term,
+            'centreId': assessment.centre_id,
         })
 
 
@@ -448,6 +456,30 @@ class AssessmentSubmitView(AssessmentAPIView):
         })
 
 
+class AssessmentReopenView(AssessmentAPIView):
+    """Reopen a submitted assessment so marks can be edited."""
+
+    def post(self, request, assessment_id):
+        assessment = _get_assessment_or_404(assessment_id)
+        if assessment.status != Assessment.STATUS_SUBMITTED:
+            return Response(
+                {'error': 'Only submitted assessments can be reopened for editing.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assessment.status = Assessment.STATUS_DRAFT
+        assessment.save(update_fields=['status', 'updated_at'])
+
+        # Remove the submission record so it can be re-submitted later
+        AssessmentSubmission.objects.filter(assessment=assessment).delete()
+
+        return Response({
+            'assessmentId': assessment.assessment_id,
+            'status': 'DRAFT',
+            'message': 'Assessment reopened for editing. You can now update marks and re-submit.',
+        })
+
+
 class ComparisonView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
@@ -514,7 +546,16 @@ class SubjectComparisonView(AssessmentAPIView):
 class StudentComparisonView(AssessmentAPIView):
     def get(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
-        previous_assessment = Assessment.objects.filter(class_id=assessment.class_id, assessment_date__lt=assessment.assessment_date).order_by('-assessment_date').first()
+        prev_qs = Assessment.objects.filter(
+            class_id=assessment.class_id,
+            status=Assessment.STATUS_SUBMITTED,
+        )
+        if assessment.centre_id:
+            prev_qs = prev_qs.filter(centre_id=assessment.centre_id)
+        previous_assessment = prev_qs.filter(
+            Q(assessment_date__lt=assessment.assessment_date) |
+            Q(assessment_date=assessment.assessment_date, assessment_id__lt=assessment.assessment_id)
+        ).exclude(assessment_id=assessment.assessment_id).order_by('-assessment_date', '-assessment_id').first()
         rows = []
         for student in Student.objects.filter(assessment_scores__assessment=assessment).distinct():
             current = AssessmentScore.objects.filter(assessment=assessment, student=student)
@@ -568,7 +609,17 @@ class AssessmentStatisticsView(AssessmentAPIView):
             total_marks = sum(float(item.obtained_marks) for item in rows)
             max_marks = sum(float(item.max_marks) for item in rows) or Decimal('100')
             totals.append(float(_percentage(total_marks, max_marks)))
-        previous_assessment = Assessment.objects.filter(class_id=assessment.class_id, assessment_date__lt=assessment.assessment_date).order_by('-assessment_date').first()
+        prev_qs = Assessment.objects.filter(
+            class_id=assessment.class_id,
+            status=Assessment.STATUS_SUBMITTED,
+        )
+        if assessment.centre_id:
+            prev_qs = prev_qs.filter(centre_id=assessment.centre_id)
+        previous_assessment = prev_qs.filter(
+            Q(assessment_date__lt=assessment.assessment_date) |
+            Q(assessment_date=assessment.assessment_date, assessment_id__lt=assessment.assessment_id)
+        ).exclude(assessment_id=assessment.assessment_id).order_by('-assessment_date', '-assessment_id').first()
+
         previous_average = self._average_percentage(previous_assessment) if previous_assessment else Decimal('0')
         average = sum(totals) / len(totals) if totals else 0
         improvement = average - float(previous_average)
@@ -585,12 +636,19 @@ class AssessmentStatisticsView(AssessmentAPIView):
     def _average_percentage(self, assessment):
         if assessment is None:
             return Decimal('0')
-        rows = AssessmentScore.objects.filter(assessment=assessment)
-        if not rows.exists():
+        scorerows = AssessmentScore.objects.filter(assessment=assessment)
+        if not scorerows.exists():
             return Decimal('0')
-        total_marks = sum(float(item.obtained_marks) for item in rows)
-        max_marks = sum(float(item.max_marks) for item in rows) or Decimal('100')
-        return _percentage(total_marks, max_marks)
+        student_ids = scorerows.values_list('student_id', flat=True).distinct()
+        if not student_ids:
+            return Decimal('0')
+        totals = []
+        for student_id in student_ids:
+            rows = scorerows.filter(student_id=student_id)
+            total_marks = sum(float(item.obtained_marks) for item in rows)
+            max_marks = sum(float(item.max_marks) for item in rows) or Decimal('100')
+            totals.append(float(_percentage(total_marks, max_marks)))
+        return Decimal(str(round(sum(totals) / len(totals), 2))) if totals else Decimal('0')
 
 
 class StudentDashboardView(AssessmentAPIView):

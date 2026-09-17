@@ -1,5 +1,6 @@
 from django.db import models
 
+from .center import Center
 from .student import Student
 
 
@@ -40,6 +41,7 @@ class Assessment(models.Model):
     ]
 
     assessment_id = models.AutoField(primary_key=True)
+    centre = models.ForeignKey(Center, on_delete=models.CASCADE, related_name='assessments', db_column='centre_id', null=True, blank=True)
     academic_year_id = models.IntegerField()
     class_id = models.IntegerField()
     section_id = models.IntegerField(default=1)

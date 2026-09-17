@@ -15,9 +15,9 @@ class StudentListView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        centre_id = self.request.query_params.get('centre_id') or self.request.query_params.get('center_id')
+        centre_id = self.request.query_params.get('centreId') or self.request.query_params.get('center_id')
         gender = self.request.query_params.get('gender')
-        class_grade = self.request.query_params.get('class_grade')
+        class_grade = self.request.query_params.get('classGrade') or self.request.query_params.get('class_grade')
 
         if centre_id is not None:
             queryset = queryset.filter(centre__centre_id=centre_id)
