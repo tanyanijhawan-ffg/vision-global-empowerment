@@ -85,7 +85,7 @@ class AssessmentAdmin(admin.ModelAdmin):
 
 @admin.register(AssessmentScore)
 class AssessmentScoreAdmin(admin.ModelAdmin):
-    list_display = ('score_id', 'assessment', 'student', 'subject', 'obtained_marks', 'max_marks')
+    list_display = ('score_id', 'assessment', 'student', 'subject', 'obtained_marks')
     list_filter = ('subject', 'assessment')
     search_fields = ('student__full_name',)
 

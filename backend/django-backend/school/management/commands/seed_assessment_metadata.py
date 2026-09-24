@@ -40,7 +40,7 @@ class Command(BaseCommand):
             DiagnosticOption.objects.update_or_create(
                 category=category,
                 code=code,
-                defaults={'name': name, 'sort_order': order},
+                defaults={'name': name, 'sort_order': order, 'is_active': True},
             )
 
         behaviour_options = [

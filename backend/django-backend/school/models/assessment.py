@@ -18,6 +18,74 @@ class AssessmentType(models.Model):
         return self.name
 
 
+class AssessmentSubject(models.Model):
+    assessment_subject_id = models.AutoField(primary_key=True)
+    academic_year_id = models.IntegerField()
+    class_id = models.IntegerField()
+    assessment_type_id = models.IntegerField()
+    subject_id = models.IntegerField()
+    is_active = models.BooleanField(default=True)
+    max_marks = models.DecimalField(max_digits=6, decimal_places=2, default=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'assessment_subject'
+        unique_together = ('academic_year_id', 'class_id', 'assessment_type_id', 'subject_id')
+
+    def __str__(self):
+        return f'{self.academic_year_id}:{self.class_id}:{self.assessment_type_id}:{self.subject_id}'
+
+
+class AcademicYear(models.Model):
+    academic_year_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=20, unique=True)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    is_current = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'academic_year'
+
+    def __str__(self):
+        return self.name
+
+
+class SchoolClass(models.Model):
+    class_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=50, blank=True, null=True, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'class'
+
+    def __str__(self):
+        return self.name
+
+
+class Section(models.Model):
+    section_id = models.AutoField(primary_key=True)
+    class_id = models.IntegerField()
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=50, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'section'
+        unique_together = ('class_id', 'name')
+
+    def __str__(self):
+        return f'{self.class_id}:{self.name}'
+
+
 class Subject(models.Model):
     subject_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
@@ -65,7 +133,6 @@ class AssessmentScore(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='assessment_scores')
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='assessment_scores')
     obtained_marks = models.DecimalField(max_digits=6, decimal_places=2, default=0)
-    max_marks = models.DecimalField(max_digits=6, decimal_places=2, default=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -88,6 +155,7 @@ class DiagnosticOption(models.Model):
     code = models.CharField(max_length=50)
     name = models.CharField(max_length=100)
     sort_order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         db_table = 'diagnostic_option'

@@ -7,23 +7,30 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from school.models.assessment import (
+    AcademicYear,
     Assessment,
     AssessmentDiagnostic,
     AssessmentScore,
     AssessmentSubmission,
+    AssessmentSubject,
     AssessmentType,
     DiagnosticOption,
     LearningBehaviourOption,
+    SchoolClass,
+    Section,
     StudentLearningBehaviour,
     StudentObservation,
     Subject,
 )
 from school.models.student import Student
 from school.serializers.assessment import (
+    AcademicYearSerializer,
     AssessmentSerializer,
     AssessmentTypeSerializer,
     DiagnosticOptionSerializer,
     LearningBehaviourOptionSerializer,
+    SchoolClassSerializer,
+    SectionSerializer,
     SubjectSerializer,
 )
 
@@ -48,6 +55,30 @@ def _get_assessment_or_404(assessment_id):
     return Assessment.objects.select_related('assessment_type').get(assessment_id=assessment_id)
 
 
+def _subject_max_marks(assessment, subject_id):
+    if assessment is None or subject_id is None:
+        return Decimal('100')
+    config = AssessmentSubject.objects.filter(
+        academic_year_id=assessment.academic_year_id,
+        class_id=assessment.class_id,
+        assessment_type_id=assessment.assessment_type_id,
+        subject_id=subject_id,
+        is_active=True,
+    ).order_by('-assessment_subject_id').first()
+    if config and config.max_marks is not None:
+        return Decimal(str(config.max_marks))
+    return Decimal('100')
+
+
+def _score_max_total(assessment, score_rows):
+    if not assessment or not score_rows:
+        return Decimal('0')
+    total = Decimal('0')
+    for row in score_rows:
+        total += _subject_max_marks(assessment, row.subject_id)
+    return total if total > 0 else Decimal('100')
+
+
 class AssessmentAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -57,6 +88,30 @@ class AssessmentTypeListView(AssessmentAPIView):
     def get(self, request):
         queryset = AssessmentType.objects.filter(is_active=True).order_by('assessment_type_id')
         serializer = AssessmentTypeSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class AcademicYearListView(AssessmentAPIView):
+    def get(self, request):
+        queryset = AcademicYear.objects.filter(is_active=True).order_by('academic_year_id')
+        serializer = AcademicYearSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class SchoolClassListView(AssessmentAPIView):
+    def get(self, request):
+        queryset = SchoolClass.objects.filter(is_active=True).order_by('class_id')
+        serializer = SchoolClassSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class SectionListView(AssessmentAPIView):
+    def get(self, request):
+        class_id = request.query_params.get('classId')
+        queryset = Section.objects.filter(is_active=True)
+        if class_id is not None:
+            queryset = queryset.filter(class_id=class_id)
+        serializer = SectionSerializer(queryset.order_by('section_id'), many=True)
         return Response(serializer.data)
 
 
@@ -171,11 +226,12 @@ class AssessmentScoreBulkView(AssessmentAPIView):
         assessment = _get_assessment_or_404(assessment_id)
         by_student = {}
         for score in AssessmentScore.objects.filter(assessment=assessment).select_related('student', 'subject'):
+            max_marks = _subject_max_marks(assessment, score.subject_id)
             by_student.setdefault(score.student_id, {'studentId': score.student_id, 'admissionNumber': score.student.student_id, 'studentName': score.student.full_name if hasattr(score.student, 'full_name') else str(score.student_id), 'scores': []})
             by_student[score.student_id]['scores'].append({
                 'subjectId': score.subject.subject_id,
                 'subject': score.subject.name,
-                'maxMarks': float(score.max_marks),
+                'maxMarks': float(max_marks),
                 'obtainedMarks': float(score.obtained_marks),
             })
 
@@ -216,7 +272,7 @@ class AssessmentScoreBulkView(AssessmentAPIView):
                     assessment=assessment,
                     student=student,
                     subject=subject,
-                    defaults={'obtained_marks': Decimal(str(score_payload.get('obtainedMarks', 0))), 'max_marks': Decimal(str(score_payload.get('maxMarks', 100)))},
+                    defaults={'obtained_marks': Decimal(str(score_payload.get('obtainedMarks', 0)))},
                 )
                 saved_scores += 1
 
@@ -230,9 +286,10 @@ class AssessmentScoreBulkView(AssessmentAPIView):
             score_items = [{
                 'subjectId': item.subject.subject_id,
                 'obtainedMarks': float(item.obtained_marks),
+                'maxMarks': float(_subject_max_marks(assessment, item.subject_id)),
             } for item in scores]
             total_marks = sum(float(item.obtained_marks) for item in scores)
-            max_marks = sum(float(item.max_marks) for item in scores) or Decimal('100')
+            max_marks = _score_max_total(assessment, scores) or Decimal('100')
             percentage = _percentage(total_marks, max_marks)
             results.append({
                 'studentId': student.student_id,
@@ -508,7 +565,7 @@ class ComparisonView(AssessmentAPIView):
         if not scores.exists():
             return Decimal('0')
         total_marks = scores.aggregate(Sum('obtained_marks'))['obtained_marks__sum'] or Decimal('0')
-        max_marks = scores.aggregate(Sum('max_marks'))['max_marks__sum'] or Decimal('0')
+        max_marks = _score_max_total(assessment, scores)
         return _percentage(total_marks, max_marks) if max_marks else Decimal('0')
 
 
@@ -526,10 +583,10 @@ class SubjectComparisonView(AssessmentAPIView):
                 continue
             previous = AssessmentScore.objects.filter(assessment=previous_assessment, subject=subject) if previous_assessment else None
             current_total = sum(float(item.obtained_marks) for item in current)
-            current_max = sum(float(item.max_marks) for item in current)
+            current_max = _score_max_total(assessment, current)
             current_percentage = _percentage(current_total, current_max) if current_max else Decimal('0')
             previous_total = sum(float(item.obtained_marks) for item in previous) if previous and previous.exists() else 0
-            previous_max = sum(float(item.max_marks) for item in previous) if previous and previous.exists() else 0
+            previous_max = _score_max_total(previous_assessment, previous) if previous and previous.exists() else Decimal('0')
             previous_percentage = _percentage(previous_total, previous_max) if previous_max else Decimal('0')
             change = current_percentage - previous_percentage
             trend = 'UP' if change > 0 else 'DOWN' if change < 0 else 'STABLE'
@@ -560,10 +617,11 @@ class StudentComparisonView(AssessmentAPIView):
         for student in Student.objects.filter(assessment_scores__assessment=assessment).distinct():
             current = AssessmentScore.objects.filter(assessment=assessment, student=student)
             current_total = sum(float(item.obtained_marks) for item in current)
-            current_max = sum(float(item.max_marks) for item in current) or Decimal('100')
+            current_max = _score_max_total(assessment, current) or Decimal('100')
             current_percentage = _percentage(current_total, current_max)
-            previous_total = sum(float(item.obtained_marks) for item in AssessmentScore.objects.filter(assessment=previous_assessment, student=student)) if previous_assessment else 0
-            previous_max = sum(float(item.max_marks) for item in AssessmentScore.objects.filter(assessment=previous_assessment, student=student)) if previous_assessment else Decimal('100')
+            previous_rows = AssessmentScore.objects.filter(assessment=previous_assessment, student=student) if previous_assessment else AssessmentScore.objects.none()
+            previous_total = sum(float(item.obtained_marks) for item in previous_rows)
+            previous_max = _score_max_total(previous_assessment, previous_rows) if previous_assessment else Decimal('100')
             previous_percentage = _percentage(previous_total, previous_max) if previous_assessment else Decimal('0')
             change = current_percentage - previous_percentage
             trend = 'UP' if change > 0 else 'DOWN' if change < 0 else 'STABLE'
@@ -588,7 +646,7 @@ class StudentPerformanceTrendView(AssessmentAPIView):
         rows = []
         for score in queryset.select_related('assessment', 'assessment__assessment_type').order_by('assessment__assessment_date'):
             total = float(score.obtained_marks)
-            max_value = float(score.max_marks or 100)
+            max_value = float(_subject_max_marks(score.assessment, score.subject_id))
             rows.append({
                 'assessment': f'{score.assessment.assessment_type.name} {score.assessment.term}',
                 'percentage': float(_percentage(total, max_value)),
@@ -607,7 +665,7 @@ class AssessmentStatisticsView(AssessmentAPIView):
         for student_id in scorerows.values_list('student_id', flat=True).distinct():
             rows = scorerows.filter(student_id=student_id)
             total_marks = sum(float(item.obtained_marks) for item in rows)
-            max_marks = sum(float(item.max_marks) for item in rows) or Decimal('100')
+            max_marks = _score_max_total(assessment, rows) or Decimal('100')
             totals.append(float(_percentage(total_marks, max_marks)))
         prev_qs = Assessment.objects.filter(
             class_id=assessment.class_id,
@@ -646,7 +704,7 @@ class AssessmentStatisticsView(AssessmentAPIView):
         for student_id in student_ids:
             rows = scorerows.filter(student_id=student_id)
             total_marks = sum(float(item.obtained_marks) for item in rows)
-            max_marks = sum(float(item.max_marks) for item in rows) or Decimal('100')
+            max_marks = _score_max_total(assessment, rows) or Decimal('100')
             totals.append(float(_percentage(total_marks, max_marks)))
         return Decimal(str(round(sum(totals) / len(totals), 2))) if totals else Decimal('0')
 
@@ -660,11 +718,13 @@ class StudentDashboardView(AssessmentAPIView):
         latest_assessment = Assessment.objects.filter(assessment__scores__student=student).first() if False else None
         current_assessment = Assessment.objects.filter(scores__student=student).order_by('-assessment_date').first()
         previous_assessment = Assessment.objects.filter(scores__student=student, assessment_date__lt=current_assessment.assessment_date).order_by('-assessment_date').first() if current_assessment else None
-        current_total = sum(float(item.obtained_marks) for item in AssessmentScore.objects.filter(assessment=current_assessment, student=student)) if current_assessment else 0
-        current_max = sum(float(item.max_marks) for item in AssessmentScore.objects.filter(assessment=current_assessment, student=student)) or Decimal('100') if current_assessment else Decimal('100')
+        current_rows = AssessmentScore.objects.filter(assessment=current_assessment, student=student) if current_assessment else AssessmentScore.objects.none()
+        current_total = sum(float(item.obtained_marks) for item in current_rows) if current_assessment else 0
+        current_max = _score_max_total(current_assessment, current_rows) or Decimal('100') if current_assessment else Decimal('100')
         current_percentage = _percentage(current_total, current_max) if current_assessment else Decimal('0')
-        previous_total = sum(float(item.obtained_marks) for item in AssessmentScore.objects.filter(assessment=previous_assessment, student=student)) if previous_assessment else 0
-        previous_max = sum(float(item.max_marks) for item in AssessmentScore.objects.filter(assessment=previous_assessment, student=student)) or Decimal('100') if previous_assessment else Decimal('100')
+        previous_rows = AssessmentScore.objects.filter(assessment=previous_assessment, student=student) if previous_assessment else AssessmentScore.objects.none()
+        previous_total = sum(float(item.obtained_marks) for item in previous_rows) if previous_assessment else 0
+        previous_max = _score_max_total(previous_assessment, previous_rows) or Decimal('100') if previous_assessment else Decimal('100')
         previous_percentage = _percentage(previous_total, previous_max) if previous_assessment else Decimal('0')
         change = current_percentage - previous_percentage
         behaviour = StudentLearningBehaviour.objects.filter(student=student, assessment=current_assessment).select_related('behaviour').first() if current_assessment else None

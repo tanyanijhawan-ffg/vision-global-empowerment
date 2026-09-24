@@ -1,17 +1,254 @@
-# Assessment APIs
+# Assessment and Metadata API Reference
 
-This document describes the assessment metadata, score capture, diagnostics, behaviour tracking, comparison, and student dashboard APIs for the school platform.
+This document lists the current assessment-related API endpoints exposed by the Django backend, together with sample requests and example responses.
 
 ## Base URL
 
-- Production: `https://<host>/api/v1`
 - Local: `http://localhost:8000/api/v1`
+- Production: `https://<host>/api/v1`
 
-## 1. Assessment Types Metadata
+> Public request payloads use camelCase such as `classId`, `assessmentTypeId`, `sortOrder`, and `isActive`.
+> Internal database fields remain snake_case in Django.
 
-### GET /api/v1/assessment-types
+---
 
-Returns the assessment type catalog used by the UI.
+## 1. Academic Year, Class, and Section Master Data
+
+### 1.1 Academic Years
+
+#### GET /api/v1/academic-years/
+
+Returns all active academic-year records.
+
+Request:
+
+```http
+GET /api/v1/academic-years/
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "2025-26",
+    "startDate": "2025-04-01",
+    "endDate": "2026-03-31",
+    "isCurrent": true,
+    "isActive": true
+  }
+]
+```
+
+#### POST /api/v1/metadata/academic-years/
+
+Request body:
+
+```json
+{
+  "name": "2026-27",
+  "startDate": "2026-04-01",
+  "endDate": "2027-03-31",
+  "isCurrent": true,
+  "isActive": true
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 2,
+  "name": "2026-27",
+  "startDate": "2026-04-01",
+  "endDate": "2027-03-31",
+  "isCurrent": true,
+  "isActive": true
+}
+```
+
+#### PUT /api/v1/metadata/academic-years/{id}/
+
+Request body:
+
+```json
+{
+  "name": "2026-27",
+  "isCurrent": false,
+  "isActive": true
+}
+```
+
+#### DELETE /api/v1/metadata/academic-years/{id}/
+
+Response:
+
+```http
+204 No Content
+```
+
+---
+
+### 1.2 Classes
+
+#### GET /api/v1/classes/
+
+Request:
+
+```http
+GET /api/v1/classes/
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Grade 1",
+    "code": "G1",
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "name": "Grade 5",
+    "code": "G5",
+    "isActive": true
+  }
+]
+```
+
+#### POST /api/v1/metadata/classes/
+
+Request body:
+
+```json
+{
+  "name": "Grade 6",
+  "code": "G6",
+  "isActive": true
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 3,
+  "name": "Grade 6",
+  "code": "G6",
+  "isActive": true
+}
+```
+
+#### PUT /api/v1/metadata/classes/{id}/
+
+Request body:
+
+```json
+{
+  "name": "Grade 6",
+  "code": "GRADE_6",
+  "isActive": true
+}
+```
+
+#### DELETE /api/v1/metadata/classes/{id}/
+
+Response:
+
+```http
+204 No Content
+```
+
+---
+
+### 1.3 Sections
+
+#### GET /api/v1/sections/?classId=5
+
+Request:
+
+```http
+GET /api/v1/sections/?classId=5
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "classId": 5,
+    "name": "A",
+    "code": "A",
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "classId": 5,
+    "name": "B",
+    "code": "B",
+    "isActive": true
+  }
+]
+```
+
+#### POST /api/v1/metadata/sections/
+
+Request body:
+
+```json
+{
+  "classId": 5,
+  "name": "C",
+  "code": "C",
+  "isActive": true
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 3,
+  "classId": 5,
+  "name": "C",
+  "code": "C",
+  "isActive": true
+}
+```
+
+#### PUT /api/v1/metadata/sections/{id}/
+
+Request body:
+
+```json
+{
+  "name": "C",
+  "code": "SEC-C",
+  "isActive": true
+}
+```
+
+#### DELETE /api/v1/metadata/sections/{id}/
+
+Response:
+
+```http
+204 No Content
+```
+
+---
+
+## 1. Metadata APIs
+
+### 1.1 Assessment Types
+
+#### GET /api/v1/assessment-types
+
+Returns the active assessment type catalog.
 
 Request:
 
@@ -19,7 +256,7 @@ Request:
 GET /api/v1/assessment-types
 ```
 
-Response:
+Example response:
 
 ```json
 [
@@ -27,33 +264,196 @@ Response:
     "id": 1,
     "code": "QUARTERLY",
     "name": "Quarterly",
-    "durationMonths": 3
+    "durationMonths": 3,
+    "isActive": true
   },
   {
     "id": 2,
     "code": "HALF_YEARLY",
     "name": "Half-Yearly",
-    "durationMonths": 6
+    "durationMonths": 6,
+    "isActive": true
   },
   {
     "id": 3,
     "code": "ANNUAL",
     "name": "Annual",
-    "durationMonths": 12
+    "durationMonths": 12,
+    "isActive": true
   }
 ]
 ```
 
-Usage:
+#### POST /api/v1/metadata/assessment-types/
 
-- Use this to populate the assessment type dropdown in the assessment creation form.
-- The response is sourced from the `assessment_type` table in PostgreSQL.
+Create an assessment type.
 
-## 2. Subject Catalog
+Request body:
 
-### GET /api/v1/subjects?classId=5
+```json
+{
+  "code": "MID_YEAR",
+  "name": "Mid-Year",
+  "durationMonths": 6,
+  "isActive": true
+}
+```
 
-Returns subjects for a selected class.
+Example response:
+
+```json
+{
+  "id": 4,
+  "code": "MID_YEAR",
+  "name": "Mid-Year",
+  "durationMonths": 6,
+  "isActive": true
+}
+```
+
+#### PUT /api/v1/metadata/assessment-types/{id}/
+
+Update an assessment type.
+
+Request body:
+
+```json
+{
+  "name": "Mid-Year Assessment",
+  "durationMonths": 5,
+  "isActive": true
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 4,
+  "code": "MID_YEAR",
+  "name": "Mid-Year Assessment",
+  "durationMonths": 5,
+  "isActive": true
+}
+```
+
+#### DELETE /api/v1/metadata/assessment-types/{id}/
+
+Soft deletes the record by setting `isActive` to `false`.
+
+Response:
+
+```http
+204 No Content
+```
+
+---
+
+### 1.2 Assessment Subjects
+
+This table maps a subject to a given academic year, class, and assessment type.
+
+#### GET /api/v1/metadata/assessment-subjects/
+
+Request:
+
+```http
+GET /api/v1/metadata/assessment-subjects/
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "academicYearId": 1,
+    "classId": 5,
+    "assessmentTypeId": 1,
+    "subjectId": 10,
+    "subjectName": "Mathematics",
+    "assessmentTypeName": "Quarterly",
+    "maxMarks": 100,
+    "isActive": true
+  }
+]
+```
+
+#### POST /api/v1/metadata/assessment-subjects/
+
+Request body:
+
+```json
+{
+  "academicYearId": 1,
+  "classId": 5,
+  "assessmentTypeId": 1,
+  "subjectId": 12,
+  "maxMarks": 100,
+  "isActive": true
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 2,
+  "academicYearId": 1,
+  "classId": 5,
+  "assessmentTypeId": 1,
+  "subjectId": 12,
+  "subjectName": "Science",
+  "assessmentTypeName": "Quarterly",
+  "maxMarks": 100,
+  "isActive": true
+}
+```
+
+#### PUT /api/v1/metadata/assessment-subjects/{id}/
+
+Request body:
+
+```json
+{
+  "maxMarks": 120,
+  "isActive": true
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 2,
+  "academicYearId": 1,
+  "classId": 5,
+  "assessmentTypeId": 1,
+  "subjectId": 12,
+  "subjectName": "Science",
+  "assessmentTypeName": "Quarterly",
+  "maxMarks": 120,
+  "isActive": true
+}
+```
+
+#### DELETE /api/v1/metadata/assessment-subjects/{id}/
+
+Soft deletes the record by setting `isActive` to `false`.
+
+Response:
+
+```http
+204 No Content
+```
+
+---
+
+### 1.3 Subjects
+
+#### GET /api/v1/subjects?classId=5
+
+Returns active subjects for a class.
 
 Request:
 
@@ -61,181 +461,160 @@ Request:
 GET /api/v1/subjects?classId=5
 ```
 
-Response:
+Example response:
 
 ```json
 [
-  { "id": 1, "name": "Tamil" },
-  { "id": 2, "name": "English" },
-  { "id": 3, "name": "Mathematics" },
-  { "id": 4, "name": "Science" },
-  { "id": 5, "name": "Social Science" }
+  {
+    "id": 1,
+    "name": "Tamil",
+    "code": "TAMIL",
+    "classId": 5,
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "name": "English",
+    "code": "ENGLISH",
+    "classId": 5,
+    "isActive": true
+  }
 ]
 ```
 
-Notes:
-
-- `classId` is optional; if omitted, all active subjects are returned.
-- Records are stored in the `subject` table and are seeded using the metadata command.
-
-## 3. Create Assessment
-
-### POST /api/v1/assessments
+#### POST /api/v1/metadata/subjects/
 
 Request body:
 
 ```json
 {
-  "academicYearId": 2026,
-  "classId": 5,
-  "sectionId": 1,
-  "assessmentTypeId": 1,
-  "term": "Q1",
-  "assessmentDate": "2026-07-15"
+  "name": "Computer Science",
+  "code": "CS",
+  "classId": 7,
+  "isActive": true
 }
 ```
 
-Response:
+Example response:
 
 ```json
 {
-  "id": 501,
-  "status": "DRAFT",
-  "academicYear": "2026-27",
-  "class": "Grade 5",
-  "section": "A",
-  "assessmentType": "Quarterly",
-  "term": "Q1"
+  "id": 7,
+  "name": "Computer Science",
+  "code": "CS",
+  "classId": 7,
+  "isActive": true
 }
 ```
 
-## 4. Get Assessment Details
-
-### GET /api/v1/assessments/501
-
-Response:
-
-```json
-{
-  "id": 501,
-  "status": "DRAFT",
-  "assessmentType": "Quarterly",
-  "term": "Q1",
-  "academicYear": "2026-27",
-  "class": "Grade 5",
-  "section": "A",
-  "totalStudents": 28
-}
-```
-
-## 5. Scores API
-
-### GET /api/v1/assessments/501/scores
-
-Response:
-
-```json
-{
-  "assessmentId": 501,
-  "students": [
-    {
-      "studentId": 101,
-      "admissionNumber": "STU-001",
-      "studentName": "Rahul Kumar",
-      "scores": [
-        {
-          "subjectId": 1,
-          "subject": "Tamil",
-          "maxMarks": 100,
-          "obtainedMarks": 82
-        },
-        {
-          "subjectId": 2,
-          "subject": "English",
-          "maxMarks": 100,
-          "obtainedMarks": 76
-        },
-        {
-          "subjectId": 3,
-          "subject": "Mathematics",
-          "maxMarks": 100,
-          "obtainedMarks": 91
-        }
-      ],
-      "total": 412,
-      "percentage": 82.4
-    }
-  ]
-}
-```
-
-### PUT /api/v1/assessments/501/scores/bulk
+#### PUT /api/v1/metadata/subjects/{id}/
 
 Request body:
 
 ```json
 {
-  "students": [
-    {
-      "studentId": 101,
-      "scores": [
-        { "subjectId": 1, "obtainedMarks": 82 },
-        { "subjectId": 2, "obtainedMarks": 76 },
-        { "subjectId": 3, "obtainedMarks": 91 },
-        { "subjectId": 4, "obtainedMarks": 85 },
-        { "subjectId": 5, "obtainedMarks": 78 }
-      ]
-    },
-    {
-      "studentId": 102,
-      "scores": [
-        { "subjectId": 1, "obtainedMarks": 78 }
-      ]
-    }
-  ]
+  "code": "COMP_SCI",
+  "isActive": true
 }
 ```
 
+#### DELETE /api/v1/metadata/subjects/{id}/
+
 Response:
+
+```http
+204 No Content
+```
+
+---
+
+### 1.4 Diagnostic Options
+
+#### GET /api/v1/metadata/diagnostic-options/
+
+Returns active diagnostic metadata records.
+
+Request:
+
+```http
+GET /api/v1/metadata/diagnostic-options/
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "category": "understanding_level",
+    "code": "CLEAR",
+    "name": "Understands clearly",
+    "sortOrder": 1,
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "category": "understanding_level",
+    "code": "REPETITION",
+    "name": "Needs repetition",
+    "sortOrder": 2,
+    "isActive": true
+  }
+]
+```
+
+#### POST /api/v1/metadata/diagnostic-options/
+
+Request body:
 
 ```json
 {
-  "assessmentId": 501,
-  "students": [
-    {
-      "studentId": 101,
-      "scores": [
-        { "subjectId": 1, "obtainedMarks": 82 },
-        { "subjectId": 2, "obtainedMarks": 76 },
-        { "subjectId": 3, "obtainedMarks": 91 },
-        { "subjectId": 4, "obtainedMarks": 85 },
-        { "subjectId": 5, "obtainedMarks": 78 }
-      ],
-      "totalMarks": 412,
-      "maxMarks": 500,
-      "percentage": 82.4
-    },
-    {
-      "studentId": 102,
-      "scores": [
-        { "subjectId": 1, "obtainedMarks": 78 }
-      ],
-      "totalMarks": 78,
-      "maxMarks": 100,
-      "percentage": 78.0
-    }
-  ],
-  "savedStudents": 2,
-  "savedScores": 6,
-  "status": "SUCCESS"
+  "category": "understanding_level",
+  "code": "STILL_LEARNING",
+  "name": "Still learning",
+  "sortOrder": 4,
+  "isActive": true
 }
 ```
 
-## 6. Diagnostic Options and Assessment Diagnostics
+Example response:
 
-### GET /api/v1/diagnostic-options
+```json
+{
+  "id": 10,
+  "category": "understanding_level",
+  "code": "STILL_LEARNING",
+  "name": "Still learning",
+  "sortOrder": 4,
+  "isActive": true
+}
+```
+
+#### PUT /api/v1/metadata/diagnostic-options/{id}/
+
+Request body:
+
+```json
+{
+  "name": "Needs more practice",
+  "sortOrder": 5,
+  "isActive": true
+}
+```
+
+#### DELETE /api/v1/metadata/diagnostic-options/{id}/
 
 Response:
+
+```http
+204 No Content
+```
+
+#### GET /api/v1/diagnostic-options
+
+Returns grouped options for the assessment UI.
+
+Example response:
 
 ```json
 {
@@ -257,7 +636,355 @@ Response:
 }
 ```
 
-### PUT /api/v1/assessments/501/diagnostics/bulk
+---
+
+### 1.5 Learning Behaviour Options
+
+#### GET /api/v1/metadata/learning-behaviours/
+
+Request:
+
+```http
+GET /api/v1/metadata/learning-behaviours/
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "code": "INDEPENDENT",
+    "name": "Independent",
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "code": "SUPERVISION",
+    "name": "Needs supervision",
+    "isActive": true
+  }
+]
+```
+
+#### POST /api/v1/metadata/learning-behaviours/
+
+Request body:
+
+```json
+{
+  "code": "HIGHLY_MOTIVATED",
+  "name": "Highly motivated",
+  "isActive": true
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 5,
+  "code": "HIGHLY_MOTIVATED",
+  "name": "Highly motivated",
+  "isActive": true
+}
+```
+
+#### PUT /api/v1/metadata/learning-behaviours/{id}/
+
+Request body:
+
+```json
+{
+  "name": "Motivated learner",
+  "isActive": true
+}
+```
+
+#### DELETE /api/v1/metadata/learning-behaviours/{id}/
+
+Response:
+
+```http
+204 No Content
+```
+
+#### GET /api/v1/learning-behaviours
+
+Example response:
+
+```json
+[
+  { "code": "INDEPENDENT", "name": "Independent" },
+  { "code": "SUPERVISION", "name": "Needs supervision" },
+  { "code": "MOTIVATED", "name": "Highly motivated" }
+]
+```
+
+---
+
+## 2. Assessment APIs
+
+### 2.0 Assessment Score Table CRUD
+
+The `assessment_score` table is exposed directly as a CRUD API in addition to the assessment-level bulk score endpoints.
+
+> Important: `max_marks` is not stored in `assessment_score`. The API resolves the maximum for each subject from `assessment_subject` using the assessment's academic year, class, assessment type, and subject. The response still includes `maxMarks`, but clients should not send it in create/update requests.
+
+#### GET /api/v1/assessment-scores/?assessmentId=501&studentId=101
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "assessmentId": 501,
+    "studentId": 101,
+    "subjectId": 1,
+    "maxMarks": 100,
+    "obtainedMarks": 82
+  },
+  {
+    "id": 2,
+    "assessmentId": 501,
+    "studentId": 101,
+    "subjectId": 2,
+    "maxMarks": 100,
+    "obtainedMarks": 76
+  }
+]
+```
+
+#### POST /api/v1/assessment-scores/
+
+Request body:
+
+```json
+{
+  "assessmentId": 501,
+  "studentId": 101,
+  "subjectId": 3,
+  "obtainedMarks": 88
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 12,
+  "assessmentId": 501,
+  "studentId": 101,
+  "subjectId": 3,
+  "maxMarks": 100,
+  "obtainedMarks": 88
+}
+```
+
+#### GET /api/v1/assessment-scores/{id}/
+
+Example response:
+
+```json
+{
+  "id": 12,
+  "assessmentId": 501,
+  "studentId": 101,
+  "subjectId": 3,
+  "maxMarks": 100,
+  "obtainedMarks": 88
+}
+```
+
+#### PUT /api/v1/assessment-scores/{id}/
+
+Request body:
+
+```json
+{
+  "assessmentId": 501,
+  "studentId": 101,
+  "subjectId": 3,
+  "obtainedMarks": 90
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 12,
+  "assessmentId": 501,
+  "studentId": 101,
+  "subjectId": 3,
+  "maxMarks": 100,
+  "obtainedMarks": 90
+}
+```
+
+#### DELETE /api/v1/assessment-scores/{id}/
+
+Response:
+
+```http
+204 No Content
+```
+
+---
+
+### 2.1 Create Assessment
+
+#### POST /api/v1/assessments/
+
+Request body:
+
+```json
+{
+  "academicYearId": 1,
+  "classId": 5,
+  "sectionId": 1,
+  "assessmentTypeId": 1,
+  "term": "Q1",
+  "assessmentDate": "2026-07-15"
+}
+```
+
+Example response:
+
+```json
+{
+  "id": 501,
+  "status": "DRAFT",
+  "academicYear": "2026-27",
+  "class_name": "Grade 5",
+  "section": "A",
+  "assessmentType": "Quarterly",
+  "term": "Q1"
+}
+```
+
+### 2.2 Get Assessment Details
+
+#### GET /api/v1/assessments/{assessment_id}/
+
+Example response:
+
+```json
+{
+  "id": 501,
+  "status": "DRAFT",
+  "academicYear": "2026-27",
+  "class_name": "Grade 5",
+  "section": "A",
+  "assessmentType": "Quarterly",
+  "term": "Q1"
+}
+```
+
+---
+
+### 2.3 Scores
+
+#### GET /api/v1/assessments/{assessment_id}/scores/
+
+Example response:
+
+```json
+{
+  "assessmentId": 501,
+  "students": [
+    {
+      "studentId": 101,
+      "admissionNumber": "STU-001",
+      "studentName": "Rahul Kumar",
+      "scores": [
+        {
+          "subjectId": 1,
+          "subject": "Tamil",
+          "maxMarks": 100,
+          "obtainedMarks": 82
+        },
+        {
+          "subjectId": 2,
+          "subject": "English",
+          "maxMarks": 100,
+          "obtainedMarks": 76
+        }
+      ],
+      "total": 158,
+      "percentage": 79
+    }
+  ]
+}
+```
+
+#### PUT /api/v1/assessments/{assessment_id}/scores/bulk
+
+Request body:
+
+```json
+{
+  "students": [
+    {
+      "studentId": 101,
+      "scores": [
+        { "subjectId": 1, "obtainedMarks": 82 },
+        { "subjectId": 2, "obtainedMarks": 76 }
+      ]
+    }
+  ]
+}
+```
+
+Example response:
+
+```json
+{
+  "assessmentId": 501,
+  "students": [
+    {
+      "studentId": 101,
+      "scores": [
+        { "subjectId": 1, "obtainedMarks": 82 },
+        { "subjectId": 2, "obtainedMarks": 76 }
+      ],
+      "totalMarks": 158,
+      "maxMarks": 200,
+      "percentage": 79
+    }
+  ],
+  "savedStudents": 1,
+  "savedScores": 2,
+  "status": "SUCCESS"
+}
+```
+
+---
+
+### 2.4 Diagnostic Data
+
+#### GET /api/v1/assessments/{assessment_id}/diagnostics/
+
+Example response:
+
+```json
+{
+  "assessmentId": 501,
+  "diagnostics": [
+    {
+      "studentId": 101,
+      "subjectId": 3,
+      "subject": "Mathematics",
+      "understanding_level": "CLEAR",
+      "application_ability": "APPLIES",
+      "interest_level": "INTERESTED"
+    }
+  ]
+}
+```
+
+#### PUT /api/v1/assessments/{assessment_id}/diagnostics/bulk
 
 Request body:
 
@@ -270,33 +997,42 @@ Request body:
       "understandingLevel": "CLEAR",
       "applicationAbility": "APPLIES",
       "interestLevel": "INTERESTED"
-    },
-    {
-      "studentId": 102,
-      "subjectId": 3,
-      "understandingLevel": "REPETITION",
-      "applicationAbility": "MEMORISES",
-      "interestLevel": "NEUTRAL"
     }
   ]
 }
 ```
 
-## 7. Learning Behaviour APIs
-
-### GET /api/v1/learning-behaviours
-
-Returns the behaviour catalog.
+Example response:
 
 ```json
-[
-  { "code": "INDEPENDENT", "name": "Independent" },
-  { "code": "SUPERVISION", "name": "Needs supervision" },
-  { "code": "MOTIVATED", "name": "Motivated" }
-]
+{
+  "assessmentId": 501,
+  "saved": 1,
+  "status": "SUCCESS"
+}
 ```
 
-### PUT /api/v1/assessments/501/behaviours/bulk
+---
+
+### 2.5 Learning Behaviour
+
+#### GET /api/v1/assessments/{assessment_id}/behaviours/
+
+Example response:
+
+```json
+{
+  "assessmentId": 501,
+  "students": [
+    {
+      "studentId": 101,
+      "behaviour": "INDEPENDENT"
+    }
+  ]
+}
+```
+
+#### PUT /api/v1/assessments/{assessment_id}/behaviours/bulk
 
 Request body:
 
@@ -304,15 +1040,57 @@ Request body:
 {
   "students": [
     { "studentId": 101, "behaviour": "INDEPENDENT" },
-    { "studentId": 102, "behaviour": "SUPERVISION" },
-    { "studentId": 103, "behaviour": "MOTIVATED" }
+    { "studentId": 102, "behaviour": "SUPERVISION" }
   ]
 }
 ```
 
-## 8. Narrative Observation APIs
+Example response:
 
-### PUT /api/v1/assessments/501/students/101/observation
+```json
+{
+  "assessmentId": 501,
+  "saved": 2,
+  "status": "SUCCESS"
+}
+```
+
+---
+
+### 2.6 Observation Notes
+
+#### GET /api/v1/assessments/{assessment_id}/observations/
+
+Example response:
+
+```json
+{
+  "assessmentId": 501,
+  "students": [
+    {
+      "studentId": 101,
+      "keyImprovements": "Improved in Mathematics and reading.",
+      "subjectsNeedingSupport": "Science",
+      "interventionPlan": "Weekly revision"
+    }
+  ]
+}
+```
+
+#### GET /api/v1/assessments/{assessment_id}/students/{student_id}/observation
+
+Example response:
+
+```json
+{
+  "studentId": 101,
+  "keyImprovements": "Improved in Mathematics and reading.",
+  "subjectsNeedingSupport": "Science",
+  "interventionPlan": "Weekly revision"
+}
+```
+
+#### PUT /api/v1/assessments/{assessment_id}/students/{student_id}/observation
 
 Request body:
 
@@ -324,7 +1102,18 @@ Request body:
 }
 ```
 
-Validation behavior:
+Example response:
+
+```json
+{
+  "studentId": 101,
+  "keyImprovements": "Good improvement in Mathematics and Tamil.",
+  "subjectsNeedingSupport": "Science and Social Science.",
+  "interventionPlan": "Weekly revision and additional worksheets."
+}
+```
+
+Validation example:
 
 ```json
 {
@@ -332,32 +1121,41 @@ Validation behavior:
 }
 ```
 
-## 9. Submit Assessment
+---
 
-### POST /api/v1/assessments/501/submit
+### 2.7 Submit and Reopen Assessment
 
-Response:
+#### POST /api/v1/assessments/{assessment_id}/submit
+
+Example response:
 
 ```json
 {
   "assessmentId": 501,
   "status": "SUBMITTED",
-  "submittedAt": "2026-08-16T13:20:00"
+  "submittedAt": "2026-08-16T13:20:00Z"
 }
 ```
 
-The backend checks the following conditions before allowing submission:
+#### POST /api/v1/assessments/{assessment_id}/reopen
 
-- all students have scores
-- all subjects have scores
-- diagnostic data exists
-- learning behaviour data exists
-- narrative observation exists
-- required fields are populated
+Example response:
 
-## 10. Comparison and Statistics APIs
+```json
+{
+  "assessmentId": 501,
+  "status": "DRAFT",
+  "message": "Assessment reopened successfully."
+}
+```
 
-### GET /api/v1/assessments/501/comparison
+---
+
+### 2.8 Comparison and Analytics
+
+#### GET /api/v1/assessments/{assessment_id}/comparison
+
+Example response:
 
 ```json
 {
@@ -367,13 +1165,15 @@ The backend checks the following conditions before allowing submission:
 }
 ```
 
-### GET /api/v1/assessments/501/comparison/subjects
+#### GET /api/v1/assessments/{assessment_id}/comparison/subjects
+
+Example response:
 
 ```json
 [
   {
     "subject": "Tamil",
-    "previousPercentage": 80.0,
+    "previousPercentage": 80,
     "currentPercentage": 87.86,
     "change": 7.86,
     "trend": "UP"
@@ -381,7 +1181,9 @@ The backend checks the following conditions before allowing submission:
 ]
 ```
 
-### GET /api/v1/assessments/501/comparison/students
+#### GET /api/v1/assessments/{assessment_id}/comparison/students
+
+Example response:
 
 ```json
 [
@@ -396,7 +1198,9 @@ The backend checks the following conditions before allowing submission:
 ]
 ```
 
-### GET /api/v1/students/101/performance/trends?subjectId=3
+#### GET /api/v1/students/{student_id}/performance/trends?subjectId=3
+
+Example response:
 
 ```json
 [
@@ -415,7 +1219,9 @@ The backend checks the following conditions before allowing submission:
 ]
 ```
 
-### GET /api/v1/assessments/501/statistics
+#### GET /api/v1/assessments/{assessment_id}/statistics
+
+Example response:
 
 ```json
 {
@@ -429,7 +1235,9 @@ The backend checks the following conditions before allowing submission:
 }
 ```
 
-### GET /api/v1/students/101/dashboard
+#### GET /api/v1/students/{student_id}/dashboard
+
+Example response:
 
 ```json
 {
@@ -445,22 +1253,28 @@ The backend checks the following conditions before allowing submission:
   "learningBehaviour": "INDEPENDENT",
   "areasNeedingSupport": ["Science"],
   "observation": {
-    "keyImprovements": "...",
-    "subjectsNeedingSupport": "...",
-    "interventionPlan": "..."
+    "keyImprovements": "Good improvement in Mathematics and Tamil.",
+    "subjectsNeedingSupport": "Science",
+    "interventionPlan": "Weekly revision"
   }
 }
 ```
 
-## 11. Complete Assessment View
+#### GET /api/v1/assessments/{assessment_id}/details
 
-### GET /api/v1/assessments/501/details
-
-Response shape:
+Example response:
 
 ```json
 {
-  "assessment": {},
+  "assessment": {
+    "id": 501,
+    "status": "DRAFT",
+    "academicYear": "2026-27",
+    "class_name": "Grade 5",
+    "section": "A",
+    "assessmentType": "Quarterly",
+    "term": "Q1"
+  },
   "students": [],
   "scores": [],
   "diagnostics": [],
@@ -472,24 +1286,12 @@ Response shape:
 }
 ```
 
-## 12. Metadata Tables and Data Sources
+---
 
-These records are returned from database tables:
+## 3. Notes
 
-- `assessment_type`
-- `subject`
-- `diagnostic_option`
-- `learning_behaviour_option`
-
-Seed the data with:
-
-```bash
-cd backend/django-backend
-python manage.py seed_assessment_metadata
-```
-
-## 13. Useful Notes
-
-- All assessment endpoints are under the `school` Django app.
-- The routes are mounted under `api/v1` via the main project URL configuration.
-- The data contract uses camelCase for the public API names (`assessmentTypeId`, `classId`, `subjectId`, `maxMarks`, etc.).
+- The app exposes metadata and assessment APIs under `/api/v1`.
+- The API uses camelCase for client-facing fields.
+- The metadata list endpoints return only active records (`isActive = true`).
+- Delete requests use soft delete semantics: the record remains in the database but is hidden from active lists.
+- The schema backing these APIs is defined in the assessment migration script and matches the PostgreSQL tables used by the application.
