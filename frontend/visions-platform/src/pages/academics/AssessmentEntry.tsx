@@ -39,7 +39,6 @@ export default function AssessmentEntry() {
   const [classId, setClassId] = useState<number | ''>('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | ''>('');
   const [assessmentTypeId, setAssessmentTypeId] = useState<number | ''>('');
-  const [sectionId, setSectionId] = useState(1);
   const [term, setTerm] = useState('');
   const [assessmentDate, setAssessmentDate] = useState('2026-08-29');
 
@@ -737,7 +736,6 @@ export default function AssessmentEntry() {
         const result = await createAssessment({
           academicYearId: new Date().getFullYear(),
           classId: Number(classId),
-          sectionId,
           assessmentTypeId: Number(assessmentTypeId || 1),
           term,
           assessmentDate,
@@ -830,7 +828,6 @@ export default function AssessmentEntry() {
         const result = await createAssessment({
           academicYearId: new Date().getFullYear(),
           classId: Number(classId),
-          sectionId,
           assessmentTypeId: Number(assessmentTypeId),
           term,
           assessmentDate,
@@ -1002,7 +999,6 @@ export default function AssessmentEntry() {
         const result = await createAssessment({
           academicYearId: new Date().getFullYear(),
           classId: Number(classId),
-          sectionId,
           assessmentTypeId: Number(assessmentTypeId || 1),
           term,
           assessmentDate,

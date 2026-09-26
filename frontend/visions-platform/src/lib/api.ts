@@ -235,7 +235,6 @@ export interface Assessment {
   status: string;
   academicYear: string;
   class: string;
-  section: string;
   assessmentType: string;
   term: string;
   totalStudents?: number;
@@ -395,7 +394,6 @@ export const fetchSubjects = (classId?: number) => apiRequest<Subject[]>(`/v1/su
 export const createAssessment = (payload: {
   academicYearId: number;
   classId: number;
-  sectionId: number;
   assessmentTypeId: number;
   term: string;
   assessmentDate: string;

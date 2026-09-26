@@ -10,7 +10,6 @@ from school.models.assessment import (
     DiagnosticOption,
     LearningBehaviourOption,
     SchoolClass,
-    Section,
     StudentLearningBehaviour,
     StudentObservation,
     Subject,
@@ -72,16 +71,6 @@ class SchoolClassSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'code', 'isActive']
 
 
-class SectionSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(source='section_id', read_only=True)
-    classId = serializers.IntegerField(source='class_id', read_only=True)
-    isActive = serializers.BooleanField(source='is_active', read_only=True)
-
-    class Meta:
-        model = Section
-        fields = ['id', 'classId', 'name', 'code', 'isActive']
-
-
 class SubjectSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='subject_id', read_only=True)
     classId = serializers.IntegerField(source='class_id', read_only=True)
@@ -97,11 +86,10 @@ class AssessmentSerializer(serializers.ModelSerializer):
     academicYear = serializers.SerializerMethodField()
     assessmentType = serializers.SerializerMethodField()
     class_name = serializers.SerializerMethodField()
-    section = serializers.SerializerMethodField()
 
     class Meta:
         model = Assessment
-        fields = ['id', 'status', 'academicYear', 'class_name', 'section', 'assessmentType', 'term']
+        fields = ['id', 'status', 'academicYear', 'class_name', 'assessmentType', 'term']
 
     def get_academicYear(self, obj):
         return f'{obj.academic_year_id}-{str(obj.academic_year_id + 1)[-2:]}'
@@ -111,9 +99,6 @@ class AssessmentSerializer(serializers.ModelSerializer):
 
     def get_class_name(self, obj):
         return f'Grade {obj.class_id}'
-
-    def get_section(self, obj):
-        return chr(64 + obj.section_id) if obj.section_id else 'A'
 
 
 class AssessmentScoreSerializer(serializers.ModelSerializer):

@@ -59,8 +59,6 @@ academic_year
 
 class
   |
-  +---- section
-  |
   +---- subject
   |
   +---- assessment_subject
@@ -85,7 +83,6 @@ Core tables relevant to the assessment module:
 ```text
 academic_year
 class
-section
 assessment_type
 subject
 assessment_subject
@@ -102,10 +99,10 @@ assessment_submission
 Key relationships:
 
 - `academic_year` defines the academic cycle and is linked to `assessment_subject` and `assessment`.
-- `class` and `section` define the student grouping context for assessments.
+- `class` defines the student grouping context for assessments.
 - `assessment_type` is reusable master data for quarterly/half-yearly/annual cycles.
 - `subject` belongs to a class and is mapped into `assessment_subject` for a given year + class + type.
-- `assessment` represents one actual assessment event and is unique per academic year, class, section, and assessment type.
+- `assessment` represents one actual assessment event and is unique per academic year, class, and assessment type.
 - `assessment_score`, `assessment_diagnostic`, `student_learning_behaviour`, `student_observation`, and `assessment_submission` are child records tied to that assessment.
 - Uniqueness constraints are enforced for one score, one diagnostic, one behaviour, and one observation per assessment + student + subject or assessment + student context.
 

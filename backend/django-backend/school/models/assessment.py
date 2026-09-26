@@ -69,23 +69,6 @@ class SchoolClass(models.Model):
         return self.name
 
 
-class Section(models.Model):
-    section_id = models.AutoField(primary_key=True)
-    class_id = models.IntegerField()
-    name = models.CharField(max_length=100)
-    code = models.CharField(max_length=50, blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'section'
-        unique_together = ('class_id', 'name')
-
-    def __str__(self):
-        return f'{self.class_id}:{self.name}'
-
-
 class Subject(models.Model):
     subject_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
@@ -112,7 +95,6 @@ class Assessment(models.Model):
     centre = models.ForeignKey(Center, on_delete=models.CASCADE, related_name='assessments', db_column='centre_id', null=True, blank=True)
     academic_year_id = models.IntegerField()
     class_id = models.IntegerField()
-    section_id = models.IntegerField(default=1)
     assessment_type = models.ForeignKey(AssessmentType, on_delete=models.CASCADE, related_name='assessments')
     term = models.CharField(max_length=20)
     assessment_date = models.DateField()

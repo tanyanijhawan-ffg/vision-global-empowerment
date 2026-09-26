@@ -10,7 +10,6 @@ from school.models.assessment import (
     DiagnosticOption,
     LearningBehaviourOption,
     SchoolClass,
-    Section,
     Subject,
 )
 from school.serializers.assessment import (
@@ -21,7 +20,6 @@ from school.serializers.assessment import (
     DiagnosticOptionSerializer,
     LearningBehaviourOptionSerializer,
     SchoolClassSerializer,
-    SectionSerializer,
     SubjectSerializer,
 )
 
@@ -96,46 +94,6 @@ class SchoolClassMetadataDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def update(self, request, *args, **kwargs):
         payload = request.data.copy()
-        if 'isActive' in payload:
-            payload['is_active'] = payload.pop('isActive')
-        serializer = self.get_serializer(self.get_object(), data=payload, partial=True)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
-
-    def delete(self, request, *args, **kwargs):
-        instance = self.get_object()
-        instance.is_active = False
-        instance.save(update_fields=['is_active'])
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class SectionMetadataListCreateView(generics.ListCreateAPIView):
-    permission_classes = [AllowAny]
-    queryset = Section.objects.filter(is_active=True).order_by('section_id')
-    serializer_class = SectionSerializer
-
-    def create(self, request, *args, **kwargs):
-        payload = request.data.copy()
-        if 'classId' in payload:
-            payload['class_id'] = payload.pop('classId')
-        if 'isActive' in payload:
-            payload['is_active'] = payload.pop('isActive')
-        serializer = self.get_serializer(data=payload)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-class SectionMetadataDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [AllowAny]
-    queryset = Section.objects.all().order_by('section_id')
-    serializer_class = SectionSerializer
-
-    def update(self, request, *args, **kwargs):
-        payload = request.data.copy()
-        if 'classId' in payload:
-            payload['class_id'] = payload.pop('classId')
         if 'isActive' in payload:
             payload['is_active'] = payload.pop('isActive')
         serializer = self.get_serializer(self.get_object(), data=payload, partial=True)

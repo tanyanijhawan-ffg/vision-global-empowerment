@@ -17,7 +17,6 @@ from school.models.assessment import (
     DiagnosticOption,
     LearningBehaviourOption,
     SchoolClass,
-    Section,
     StudentLearningBehaviour,
     StudentObservation,
     Subject,
@@ -30,19 +29,12 @@ from school.serializers.assessment import (
     DiagnosticOptionSerializer,
     LearningBehaviourOptionSerializer,
     SchoolClassSerializer,
-    SectionSerializer,
     SubjectSerializer,
 )
 
 
 def _format_year(value):
     return f'{value}-{str(value + 1)[-2:]}'
-
-
-def _section_label(section_id):
-    if not section_id:
-        return 'A'
-    return chr(64 + int(section_id)) if int(section_id) <= 26 else str(section_id)
 
 
 def _percentage(total, maximum):
@@ -105,16 +97,6 @@ class SchoolClassListView(AssessmentAPIView):
         return Response(serializer.data)
 
 
-class SectionListView(AssessmentAPIView):
-    def get(self, request):
-        class_id = request.query_params.get('classId')
-        queryset = Section.objects.filter(is_active=True)
-        if class_id is not None:
-            queryset = queryset.filter(class_id=class_id)
-        serializer = SectionSerializer(queryset.order_by('section_id'), many=True)
-        return Response(serializer.data)
-
-
 class SubjectListView(AssessmentAPIView):
     def get(self, request):
         class_id = request.query_params.get('classId')
@@ -154,7 +136,6 @@ class AssessmentCreateView(AssessmentAPIView):
                 'status': a.status,
                 'academicYear': _format_year(a.academic_year_id),
                 'class': f'Grade {a.class_id}',
-                'section': _section_label(a.section_id),
                 'assessmentType': a.assessment_type.name if a.assessment_type else '',
                 'term': a.term,
                 'assessmentDate': str(a.assessment_date) if a.assessment_date else '',
@@ -167,7 +148,6 @@ class AssessmentCreateView(AssessmentAPIView):
         assessment_type_id = request.data.get('assessmentTypeId')
         academic_year_id = request.data.get('academicYearId')
         class_id = request.data.get('classId')
-        section_id = request.data.get('sectionId', 1)
         term = request.data.get('term')
         assessment_date = request.data.get('assessmentDate')
         centre_id = request.data.get('centreId') or request.data.get('centre_id')
@@ -182,7 +162,6 @@ class AssessmentCreateView(AssessmentAPIView):
         assessment = Assessment.objects.create(
             academic_year_id=int(academic_year_id),
             class_id=int(class_id),
-            section_id=int(section_id),
             centre_id=int(centre_id) if centre_id else None,
             assessment_type=assessment_type,
             term=term,
@@ -196,7 +175,6 @@ class AssessmentCreateView(AssessmentAPIView):
             'status': assessment.status,
             'academicYear': response['academicYear'],
             'class': response['class_name'],
-            'section': response['section'],
             'assessmentType': response['assessmentType'],
             'term': assessment.term,
             'centreId': assessment.centre_id,
@@ -216,7 +194,6 @@ class AssessmentDetailView(AssessmentAPIView):
             'term': assessment.term,
             'academicYear': _format_year(assessment.academic_year_id),
             'class': f'Grade {assessment.class_id}',
-            'section': _section_label(assessment.section_id),
             'totalStudents': student_count,
         })
 
@@ -730,7 +707,7 @@ class StudentDashboardView(AssessmentAPIView):
         behaviour = StudentLearningBehaviour.objects.filter(student=student, assessment=current_assessment).select_related('behaviour').first() if current_assessment else None
 
         return Response({
-            'student': {'id': student.student_id, 'name': student.full_name, 'class': f'Grade {current_assessment.class_id if current_assessment else 0}', 'section': _section_label(current_assessment.section_id if current_assessment else 1)},
+            'student': {'id': student.student_id, 'name': student.full_name, 'class': f'Grade {current_assessment.class_id if current_assessment else 0}'},
             'currentPerformance': {'percentage': float(current_percentage)},
             'previousPerformance': {'percentage': float(previous_percentage)},
             'improvement': {'percentage': float(change), 'trend': 'UP' if change > 0 else 'DOWN' if change < 0 else 'STABLE'},

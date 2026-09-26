@@ -373,7 +373,6 @@ BEGIN
   FROM assessment
   WHERE academic_year_id = 2026
     AND class_id = 5
-    AND section_id = 1
     AND assessment_type_id = assessment_type_key
     AND term = 'Q1'
     AND assessment_date = DATE '2026-07-15'
@@ -386,7 +385,6 @@ BEGIN
     INSERT INTO assessment (
       academic_year_id,
       class_id,
-      section_id,
       assessment_type_id,
       term,
       assessment_date,
@@ -395,7 +393,6 @@ BEGIN
     VALUES (
       2026,
       5,
-      1,
       assessment_type_key,
       'Q1',
       DATE '2026-07-15',

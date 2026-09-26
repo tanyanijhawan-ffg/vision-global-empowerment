@@ -4,7 +4,7 @@
 --
 -- Supports:
 --   Academic Year
---   Class / Section
+--   Class
 --   Subjects
 --   Assessment Types
 --   Assessment Subject Configuration
@@ -93,40 +93,7 @@ CREATE TABLE IF NOT EXISTS class (
 
 
 -- ============================================================
--- 3. SECTION
---
--- If your application already has a section table,
--- DO NOT create this table. Reference the existing table instead.
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS section (
-    section_id SERIAL PRIMARY KEY,
-
-    class_id INTEGER NOT NULL,
-
-    name VARCHAR(100) NOT NULL,
-    code VARCHAR(50),
-
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    CONSTRAINT fk_section_class
-        FOREIGN KEY (class_id)
-        REFERENCES class(class_id)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT uq_section_class_name
-        UNIQUE (class_id, name),
-
-    CONSTRAINT uq_section_class_code
-        UNIQUE (class_id, code)
-);
-
-
--- ============================================================
--- 4. ASSESSMENT TYPE
+-- 3. ASSESSMENT TYPE
 --
 -- Reusable master data.
 --
@@ -329,7 +296,6 @@ CREATE TABLE IF NOT EXISTS assessment (
 
     academic_year_id INTEGER NOT NULL,
     class_id INTEGER NOT NULL,
-    section_id INTEGER NOT NULL,
     assessment_type_id INTEGER NOT NULL,
 
     assessment_date DATE,
@@ -347,11 +313,6 @@ CREATE TABLE IF NOT EXISTS assessment (
     CONSTRAINT fk_assessment_class
         FOREIGN KEY (class_id)
         REFERENCES class(class_id)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT fk_assessment_section
-        FOREIGN KEY (section_id)
-        REFERENCES section(section_id)
         ON DELETE RESTRICT,
 
     CONSTRAINT fk_assessment_type
@@ -374,7 +335,6 @@ CREATE TABLE IF NOT EXISTS assessment (
         UNIQUE (
             academic_year_id,
             class_id,
-            section_id,
             assessment_type_id
         )
 );

@@ -78,7 +78,7 @@ class SubjectAdmin(admin.ModelAdmin):
 
 @admin.register(Assessment)
 class AssessmentAdmin(admin.ModelAdmin):
-    list_display = ('assessment_id', 'assessment_type', 'term', 'academic_year_id', 'class_id', 'section_id', 'assessment_date', 'status')
+    list_display = ('assessment_id', 'assessment_type', 'term', 'academic_year_id', 'class_id', 'assessment_date', 'status')
     list_filter = ('status', 'assessment_type', 'term', 'class_id')
     search_fields = ('assessment_type__name', 'term')
 

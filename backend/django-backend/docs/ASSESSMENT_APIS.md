@@ -12,7 +12,7 @@ This document lists the current assessment-related API endpoints exposed by the 
 
 ---
 
-## 1. Academic Year, Class, and Section Master Data
+## 1. Academic Year and Class Master Data
 
 ### 1.1 Academic Years
 
@@ -155,84 +155,6 @@ Request body:
 ```
 
 #### DELETE /api/v1/metadata/classes/{id}/
-
-Response:
-
-```http
-204 No Content
-```
-
----
-
-### 1.3 Sections
-
-#### GET /api/v1/sections/?classId=5
-
-Request:
-
-```http
-GET /api/v1/sections/?classId=5
-```
-
-Example response:
-
-```json
-[
-  {
-    "id": 1,
-    "classId": 5,
-    "name": "A",
-    "code": "A",
-    "isActive": true
-  },
-  {
-    "id": 2,
-    "classId": 5,
-    "name": "B",
-    "code": "B",
-    "isActive": true
-  }
-]
-```
-
-#### POST /api/v1/metadata/sections/
-
-Request body:
-
-```json
-{
-  "classId": 5,
-  "name": "C",
-  "code": "C",
-  "isActive": true
-}
-```
-
-Example response:
-
-```json
-{
-  "id": 3,
-  "classId": 5,
-  "name": "C",
-  "code": "C",
-  "isActive": true
-}
-```
-
-#### PUT /api/v1/metadata/sections/{id}/
-
-Request body:
-
-```json
-{
-  "name": "C",
-  "code": "SEC-C",
-  "isActive": true
-}
-```
-
-#### DELETE /api/v1/metadata/sections/{id}/
 
 Response:
 
@@ -843,7 +765,6 @@ Request body:
 {
   "academicYearId": 1,
   "classId": 5,
-  "sectionId": 1,
   "assessmentTypeId": 1,
   "term": "Q1",
   "assessmentDate": "2026-07-15"
@@ -858,7 +779,6 @@ Example response:
   "status": "DRAFT",
   "academicYear": "2026-27",
   "class_name": "Grade 5",
-  "section": "A",
   "assessmentType": "Quarterly",
   "term": "Q1"
 }
@@ -876,7 +796,6 @@ Example response:
   "status": "DRAFT",
   "academicYear": "2026-27",
   "class_name": "Grade 5",
-  "section": "A",
   "assessmentType": "Quarterly",
   "term": "Q1"
 }
@@ -1244,8 +1163,7 @@ Example response:
   "student": {
     "id": 101,
     "name": "Rahul Kumar",
-    "class": "Grade 5",
-    "section": "A"
+    "class": "Grade 5"
   },
   "currentPerformance": { "percentage": 84.6 },
   "previousPerformance": { "percentage": 78.2 },
@@ -1271,7 +1189,6 @@ Example response:
     "status": "DRAFT",
     "academicYear": "2026-27",
     "class_name": "Grade 5",
-    "section": "A",
     "assessmentType": "Quarterly",
     "term": "Q1"
   },
