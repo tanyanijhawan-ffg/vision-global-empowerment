@@ -4,6 +4,7 @@ from school.views.auth import LoginView, PasswordResetConfirmView, PasswordReset
 from school.views.master import MasterBulkUploadView, MasterCentreListCreateView, MasterExportView, MasterRegionListCreateView
 from school.views.student_bulk import StudentBulkUploadView, StudentWorkbookExportView
 from school.views.user import UserDetailView, UserListCreateView
+from school.views.attendance import AbsenceAlertListView
 from .views import (
     AttendanceCreateView,
     AttendanceListView,
@@ -28,6 +29,7 @@ urlpatterns = [
     path('users/', UserListCreateView.as_view(), name='user-list-create'),
     path('users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),
     path('attendance/', AttendanceListView.as_view(), name='attendance-list'),
+    path('attendance/alerts/absence/', AbsenceAlertListView.as_view(), name='attendance-absence-alerts'),
     path('attendance/record/', AttendanceCreateView.as_view(), name='attendance-create'),
     path('students/', StudentListView.as_view(), name='student-list'),
     path('students/<int:pk>/', StudentRetrieveUpdateDestroyView.as_view(), name='student-detail'),

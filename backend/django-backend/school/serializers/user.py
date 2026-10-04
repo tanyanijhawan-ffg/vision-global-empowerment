@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password as validate_django_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
@@ -43,11 +45,25 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(required=True, allow_blank=False, trim_whitespace=True)
     role = serializers.CharField(required=True)
     region = serializers.PrimaryKeyRelatedField(queryset=Region.objects.all(), required=True, allow_null=False)
     full_name = serializers.CharField(required=True, allow_blank=False, allow_null=False)
     password = serializers.CharField(write_only=True, required=True, allow_blank=False)
     mobile_number = serializers.CharField(required=True, allow_blank=False, trim_whitespace=True)
+
+    def validate_password(self, value):
+        try:
+            validate_django_password(value)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(list(error.messages)) from error
+        return value
+
+    def validate_email(self, value):
+        email = value.strip()
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError('A user with this email address already exists.')
+        return email
 
     class Meta:
         model = User
@@ -142,6 +158,28 @@ class UserSerializer(serializers.ModelSerializer):
         role_name = normalize_role_name(validated_data.pop('role', None))
         region_id = validated_data.pop('region_id', None)
 
+        role_or_region_requested = 'role' in self.initial_data or 'region_id' in self.initial_data
+        if role_or_region_requested:
+            request = self.context.get('request')
+            requester = getattr(request, 'user', None)
+            requester_profile = getattr(requester, 'profile', None)
+            requester_role = normalize_role_name(getattr(getattr(requester_profile, 'role', None), 'name', None))
+
+            if requester is None or requester.pk == instance.pk:
+                raise PermissionDenied('You cannot change your own role or region.')
+            if requester_role != 'super_admin':
+                raise PermissionDenied('Only super admins can change user roles or regions.')
+
+        if role_name is not None and role_name not in ALLOWED_ROLE_NAMES:
+            raise serializers.ValidationError({'role': 'Invalid role selected.'})
+
+        selected_region = None
+        if region_id is not None:
+            try:
+                selected_region = Region.objects.get(pk=region_id)
+            except Region.DoesNotExist as error:
+                raise serializers.ValidationError({'region_id': 'Selected region does not exist.'}) from error
+
         if mobile_number is not None:
             mobile_number = validate_mobile_number(mobile_number)
 
@@ -156,14 +194,9 @@ class UserSerializer(serializers.ModelSerializer):
             if mobile_number is not None:
                 profile.mobile_number = mobile_number.strip()
             if role_name is not None:
-                if role_name not in ALLOWED_ROLE_NAMES:
-                    raise serializers.ValidationError({'role': 'Invalid role selected.'})
                 profile.role, _ = Role.objects.get_or_create(name=role_name)
-            if region_id is not None:
-                try:
-                    profile.region = Region.objects.get(pk=region_id)
-                except Region.DoesNotExist as error:
-                    raise serializers.ValidationError({'region_id': 'Selected region does not exist.'}) from error
+            if selected_region is not None:
+                profile.region = selected_region
             elif 'region_id' in self.initial_data:
                 profile.region = None
             profile.save()

@@ -35,7 +35,6 @@ import SettingsLayout from './pages/settings/SettingsLayout';
 import ProfileSettings from './pages/settings/ProfileSettings';
 import OrgSettings from './pages/settings/OrgSettings';
 import NotificationSettings from './pages/settings/NotificationSettings';
-import ThemeSettings from './pages/settings/ThemeSettings';
 
 const queryClient = new QueryClient();
 
@@ -84,7 +83,6 @@ function App() {
               <Route path="profile" element={<ProfileSettings />} />
               <Route path="organization" element={<ProtectedRoute minimumRole="SUPER_ADMIN"><OrgSettings /></ProtectedRoute>} />
               <Route path="notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
-              <Route path="theme" element={<ProtectedRoute><ThemeSettings /></ProtectedRoute>} />
             </Route>
           </Route>
 

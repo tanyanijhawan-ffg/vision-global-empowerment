@@ -21,6 +21,36 @@ const ROLE_OPTIONS = [
   { value: 'community_educator', label: 'Community Educator' },
 ] as const;
 
+const USER_FIELD_LABELS: Record<string, string> = {
+  username: 'Username',
+  email: 'Email',
+  password: 'Password',
+  full_name: 'Full name',
+  mobile_number: 'Mobile number',
+  role: 'Role',
+  region: 'Region',
+  non_field_errors: 'User details',
+};
+
+function formatCreateUserError(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return 'Unable to create user. Please try again.';
+
+  const errors = payload as Record<string, unknown>;
+  if (typeof errors.detail === 'string') return errors.detail;
+
+  const fieldErrors = Object.entries(errors)
+    .filter(([field]) => field !== 'detail')
+    .flatMap(([field, messages]) => {
+      const label = USER_FIELD_LABELS[field] ?? field.replaceAll('_', ' ');
+      const details = Array.isArray(messages) ? messages : [messages];
+      return details
+        .filter((message): message is string => typeof message === 'string')
+        .map(message => `${label}: ${message}`);
+    });
+
+  return fieldErrors.length ? fieldErrors.join(' ') : 'Unable to create user. Please try again.';
+}
+
 export default function UserCreateDialog({
   open,
   onClose,
@@ -132,8 +162,7 @@ export default function UserCreateDialog({
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        const message = payload?.detail || payload?.non_field_errors?.[0] || payload?.role?.[0] || 'Unable to create user.';
-        throw new Error(message);
+        throw new Error(formatCreateUserError(payload));
       }
 
       onCreated();
@@ -144,7 +173,7 @@ export default function UserCreateDialog({
       setMobileNumber('');
       setPassword('');
     } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : 'Unable to create user.';
+      const message = submitError instanceof Error ? submitError.message : 'Unable to create user. Please check your connection and try again.';
       setError(message);
     } finally {
       setLoading(false);
