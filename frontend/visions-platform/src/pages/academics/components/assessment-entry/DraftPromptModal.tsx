@@ -1,17 +1,15 @@
 import React from 'react';
-import { FolderDown, X, RotateCcw } from 'lucide-react';
-import { type AttendanceCentre, type Subject } from '../../../../lib/api';
+import { FolderDown, X, RotateCcw, Trash2 } from 'lucide-react';
 
 /**
  * Props for DraftPromptModal component.
  */
 interface DraftPromptModalProps {
   isOpen: boolean;
-  centre?: AttendanceCentre;
-  classId: number | '';
-  subject?: Subject;
+  info?: { label: string; date?: string } | null;
   onDismiss: () => void;
   onLoadDraft: () => void;
+  onStartFresh?: () => void;
 }
 
 /**
@@ -20,13 +18,12 @@ interface DraftPromptModalProps {
  */
 export const DraftPromptModal: React.FC<DraftPromptModalProps> = ({
   isOpen,
-  centre,
-  classId,
-  subject,
+  info,
   onDismiss,
   onLoadDraft,
+  onStartFresh,
 }) => {
-  if (!isOpen) return null;
+  if (!isOpen || !info) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
@@ -39,7 +36,7 @@ export const DraftPromptModal: React.FC<DraftPromptModalProps> = ({
             <div>
               <h3 className="text-base font-bold text-slate-900">Saved Draft Available</h3>
               <p className="text-xs text-slate-500 font-medium">
-                {centre?.name} &nbsp;•&nbsp; Class {classId} — {subject?.name}
+                {info.label}
               </p>
             </div>
           </div>
@@ -53,20 +50,36 @@ export const DraftPromptModal: React.FC<DraftPromptModalProps> = ({
         </div>
 
         <p className="text-xs text-slate-600 leading-relaxed">
-          A previously saved draft was found for <strong>{centre?.name}</strong>, Class {classId} - {subject?.name}. Would you like to load and resume your entries from this draft?
+          A previously saved draft was found. Would you like to load and resume your entries from this draft?
         </p>
 
         <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+          {onStartFresh && (
+            <button
+              type="button"
+              onClick={() => {
+                onStartFresh();
+                onDismiss();
+              }}
+              className="px-3.5 py-2 border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold rounded-lg transition cursor-pointer flex items-center gap-1.5"
+            >
+              <Trash2 size={13} />
+              Start Fresh
+            </button>
+          )}
           <button
             type="button"
             onClick={onDismiss}
             className="px-3.5 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold rounded-lg transition cursor-pointer"
           >
-            Start Fresh / Dismiss
+            Dismiss
           </button>
           <button
             type="button"
-            onClick={onLoadDraft}
+            onClick={() => {
+              onLoadDraft();
+              onDismiss();
+            }}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer"
           >
             <RotateCcw size={13} />

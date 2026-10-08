@@ -1,11 +1,13 @@
 from django.contrib import admin
 from .models import (
     AcademicAssessment,
+    AcademicYear,
     Aspiration,
     Assessment,
     AssessmentDiagnostic,
     AssessmentScore,
     AssessmentSubmission,
+    AssessmentSubject,
     AssessmentType,
     Attendance,
     Center,
@@ -18,11 +20,13 @@ from .models import (
     Program,
     Region,
     Role,
+    SchoolClass,
     SocioEconomic,
     Student,
     StudentLearningBehaviour,
     StudentObservation,
     StudentVulnerability,
+    StudentYearRecord,
     Subject,
     SubjectScore,
     UserProfile,
@@ -64,23 +68,44 @@ class AttendanceAdmin(admin.ModelAdmin):
     search_fields = ('student__full_name',)
 
 
+@admin.register(AcademicYear)
+class AcademicYearAdmin(admin.ModelAdmin):
+    list_display = ('academic_year_id', 'name', 'start_date', 'end_date', 'is_current', 'is_active')
+    list_filter = ('is_current', 'is_active')
+    search_fields = ('name',)
+
+
 @admin.register(AssessmentType)
 class AssessmentTypeAdmin(admin.ModelAdmin):
-    list_display = ('assessment_type_id', 'code', 'name', 'duration_months', 'is_active')
+    list_display = ('assessment_type_id', 'code', 'name', 'academic_year', 'is_active')
+    list_filter = ('academic_year', 'is_active')
     search_fields = ('code', 'name')
+
+
+@admin.register(SchoolClass)
+class SchoolClassAdmin(admin.ModelAdmin):
+    list_display = ('class_id', 'name', 'code', 'is_active')
+    search_fields = ('name', 'code')
+    list_filter = ('is_active',)
 
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
-    list_display = ('subject_id', 'code', 'name', 'class_id', 'is_active')
+    list_display = ('subject_id', 'code', 'name')
     search_fields = ('code', 'name')
+
+
+@admin.register(AssessmentSubject)
+class AssessmentSubjectAdmin(admin.ModelAdmin):
+    list_display = ('assessment_subject_id', 'academic_year_id', 'centre_id', 'class_id', 'exam_id', 'subject_ids', 'max_marks', 'is_active')
+    list_filter = ('academic_year_id', 'class_id', 'exam_id', 'centre_id', 'is_active')
 
 
 @admin.register(Assessment)
 class AssessmentAdmin(admin.ModelAdmin):
-    list_display = ('assessment_id', 'assessment_type', 'term', 'academic_year_id', 'class_id', 'assessment_date', 'status')
-    list_filter = ('status', 'assessment_type', 'term', 'class_id')
-    search_fields = ('assessment_type__name', 'term')
+    list_display = ('assessment_id', 'assessment_type', 'academic_year_id', 'class_id', 'assessment_date', 'status')
+    list_filter = ('status', 'assessment_type', 'class_id')
+    search_fields = ('assessment_type__name',)
 
 
 @admin.register(AssessmentScore)
@@ -127,6 +152,13 @@ class AssessmentSubmissionAdmin(admin.ModelAdmin):
     search_fields = ('submitted_by',)
 
 
+@admin.register(StudentYearRecord)
+class StudentYearRecordAdmin(admin.ModelAdmin):
+    list_display = ('student_year_record_id', 'student', 'academic_year', 'is_active')
+    list_filter = ('academic_year', 'is_active')
+    search_fields = ('student__full_name',)
+
+
 admin.site.register(Program)
 admin.site.register(Region)
 admin.site.register(District)
@@ -139,4 +171,3 @@ admin.site.register(Aspiration)
 admin.site.register(LearningBehaviour)
 admin.site.register(AcademicAssessment)
 admin.site.register(SubjectScore)
-

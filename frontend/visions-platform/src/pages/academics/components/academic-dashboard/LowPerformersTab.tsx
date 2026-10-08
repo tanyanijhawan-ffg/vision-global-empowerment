@@ -151,7 +151,7 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
                   <th className="py-3 px-3 text-center bg-slate-50">Class</th>
                   <th className="py-3 px-3 text-center bg-slate-50">Academic Score</th>
                   <th className="py-3 px-4 bg-slate-50">Diagnostic Observation</th>
-                  <th className="py-3 px-4 text-right bg-slate-50">Recommended Action</th>
+                  <th className="py-3 px-4 text-left bg-slate-50">Recommended Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm bg-white">
@@ -185,7 +185,7 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
                           {observation}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-left">
                         <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200/60 inline-block">
                           {action}
                         </span>

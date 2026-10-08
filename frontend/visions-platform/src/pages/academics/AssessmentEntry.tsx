@@ -1,13 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Save, Send, Check, AlertCircle, Sparkles } from 'lucide-react';
+import { Save, Send, Check, AlertCircle, Sparkles, FileText } from 'lucide-react';
 import {
   createAssessment, fetchAssessmentTypes, fetchDiagnosticOptions, fetchLearningBehaviours,
-  fetchStudents, fetchSubjects, fetchAttendanceCentres, saveAssessmentBehaviours, saveAssessmentDiagnostics,
-  saveAssessmentObservation, saveAssessmentScores, submitAssessment, reopenAssessment,
-  fetchAssessments, fetchAssessmentScores, fetchAssessmentDiagnostics,
-  fetchAssessmentBehaviours, fetchAssessmentObservations,
-  type AssessmentType, type DiagnosticOptions, type LearningBehaviourOption,
-  type AttendanceCentre, type StudentListItem, type Subject,
+  fetchStudents, fetchSubjects, fetchAttendanceCentres, fetchAcademicYears,
+  saveAssessmentBehaviours, saveAssessmentDiagnostics, saveAssessmentObservation, saveAssessmentObservations,
+  saveAssessmentScores, submitAssessment, reopenAssessment, fetchAssessments,
+  fetchAssessmentScores, fetchAssessmentDiagnostics, fetchAssessmentBehaviours,
+  fetchAssessmentObservations, type AssessmentType, type AcademicYear, type DiagnosticOptions,
+  type LearningBehaviourOption, type AttendanceCentre, type StudentListItem, type Subject,
 } from '../../lib/api';
 import { DraftPromptModal } from './components/assessment-entry/DraftPromptModal';
 import { SubmittedPromptModal } from './components/assessment-entry/SubmittedPromptModal';
@@ -30,6 +30,8 @@ export default function AssessmentEntry() {
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
   const [selectedCentreId, setSelectedCentreId] = useState<string>('');
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('2025 - 2026');
   const [types, setTypes] = useState<AssessmentType[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [diagnostics, setDiagnostics] = useState<DiagnosticOptions | null>(null);
@@ -39,25 +41,7 @@ export default function AssessmentEntry() {
   const [classId, setClassId] = useState<number | ''>('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | ''>('');
   const [assessmentTypeId, setAssessmentTypeId] = useState<number | ''>('');
-  const [term, setTerm] = useState('');
-  const [assessmentDate, setAssessmentDate] = useState('2026-08-29');
-
-  const getTermsForType = (typeId: number | ''): string[] => {
-    if (!typeId) return [];
-    const selectedType = types.find((t) => t.id === typeId);
-    const typeName = (selectedType?.name || selectedType?.code || '').toLowerCase();
-    if (typeName.includes('quarter')) {
-      return ['Q1', 'Q2', 'Q3', 'Q4'];
-    }
-    if (typeName.includes('half')) {
-      return ['Term 1', 'Term 2'];
-    }
-    if (typeName.includes('annual')) {
-      return ['Annual', 'Final Term'];
-    }
-    return ['Q1', 'Q2', 'Term 1', 'Annual'];
-  };
-
+  const [assessmentDate, setAssessmentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const handleClassChange = (newClassId: number | '') => {
     setClassId(newClassId);
     setSelectedSubjectId('');
@@ -71,21 +55,8 @@ export default function AssessmentEntry() {
     setError('');
   };
 
-  const handleSubjectChange = (newSubjectId: number | '') => {
-    setSelectedSubjectId(newSubjectId);
-    setNotice('');
-    setError('');
-  };
-
   const handleAssessmentTypeChange = (newTypeId: number | '') => {
     setAssessmentTypeId(newTypeId);
-    setTerm('');
-    setNotice('');
-    setError('');
-  };
-
-  const handleTermChange = (newTerm: string) => {
-    setTerm(newTerm);
     setNotice('');
     setError('');
   };
@@ -115,18 +86,14 @@ export default function AssessmentEntry() {
 
   // Success modal prompt
   const [successModalOpen, setSuccessModalOpen] = useState(false);
-  const [successDetails, setSuccessDetails] = useState<{
-    title: string;
-    message: string;
-    assessmentId: number;
-    centreName: string;
-    className: string;
-    term: string;
-    typeName: string;
-    submittedAt: string;
-    studentCount: number;
-    isResubmission: boolean;
-  } | null>(null);
+  const [successDetails, setSuccessDetails] = useState<SuccessDetails | null>(null);
+
+  // Auto-dismiss notice after 5 seconds
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), 5000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const formatReadableDateTime = (isoOrDateStr?: string) => {
     if (!isoOrDateStr) {
@@ -148,42 +115,65 @@ export default function AssessmentEntry() {
     setLoading(true);
     Promise.all([
       fetchAttendanceCentres(),
-      fetchAssessmentTypes(),
+      fetchAssessmentTypes({ onlyCreated: true }),
       fetchDiagnosticOptions(),
       fetchLearningBehaviours(),
+      fetchAcademicYears().catch(() => []),
     ])
-      .then(([centreList, typeData, diagnosticData, behaviourData]) => {
+      .then(([centreList, typeData, diagnosticData, behaviourData, yearData]) => {
         setCentres(centreList);
         setTypes(typeData);
         setDiagnostics(diagnosticData);
         setBehaviours(behaviourData);
+        if (yearData && yearData.length > 0) {
+          setAcademicYears(yearData);
+          const current = yearData.find((y) => y.isCurrent) || yearData[0];
+          if (current) setSelectedAcademicYear(current.name);
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load assessment metadata'))
       .finally(() => setLoading(false));
   }, []);
 
-  // Fetch subjects lazily when classId changes
+  // Re-fetch assessment types whenever selectedAcademicYear or classId changes
+  useEffect(() => {
+    if (!selectedAcademicYear) return;
+    fetchAssessmentTypes({ academicYear: selectedAcademicYear, classId: classId || undefined, onlyCreated: true })
+      .then((typeData) => {
+        setTypes(typeData);
+        if (assessmentTypeId && !typeData.some((t) => t.id === assessmentTypeId)) {
+          setAssessmentTypeId('');
+        }
+      })
+      .catch((err) => console.error('Failed to load assessment types for academic year & class:', err));
+  }, [selectedAcademicYear, classId]);
+
+  // Fetch subjects lazily when classId, assessmentTypeId, or selectedCentreId changes
   useEffect(() => {
     if (!classId) {
       setSubjects([]);
       setSelectedSubjectId('');
       return;
     }
-    fetchSubjects(Number(classId))
+    fetchSubjects(
+      Number(classId),
+      assessmentTypeId ? Number(assessmentTypeId) : undefined,
+      selectedCentreId || undefined
+    )
       .then((subjectData) => {
         setSubjects(subjectData);
       })
       .catch((err) => console.error('Failed to load subjects:', err));
-  }, [classId]);
+  }, [classId, assessmentTypeId, selectedCentreId]);
 
-  // Fetch students lazily when classId and selectedCentreId are selected
+  // Fetch students lazily when classId, selectedCentreId, or selectedAcademicYear are selected
   useEffect(() => {
     if (!classId || !selectedCentreId) {
       setStudents([]);
       setStudentData({});
       return;
     }
-    fetchStudents(classId, selectedCentreId)
+    fetchStudents(classId, selectedCentreId, selectedAcademicYear)
       .then((studentDataList) => {
         setStudents(studentDataList);
         const initialMap: Record<string, StudentAssessmentData> = {};
@@ -193,11 +183,11 @@ export default function AssessmentEntry() {
         setStudentData(initialMap);
       })
       .catch((err) => console.error('Failed to load students:', err));
-  }, [classId, selectedCentreId]);
+  }, [classId, selectedCentreId, selectedAcademicYear]);
 
-  // Check draft / submitted assessment availability when ALL 5 fields are populated
+  // Check draft / submitted assessment availability when filters are populated
   useEffect(() => {
-    if (!selectedCentreId || !classId || !selectedSubjectId || !assessmentTypeId || !term) {
+    if (!selectedCentreId || !classId || !assessmentTypeId) {
       setDraftPromptOpen(false);
       setDraftInfo(null);
       setSubmittedPromptOpen(false);
@@ -206,17 +196,16 @@ export default function AssessmentEntry() {
       setIsEditingSubmitted(false);
       return;
     }
-    checkDraftAvailable(selectedCentreId, Number(classId), Number(selectedSubjectId), Number(assessmentTypeId), term);
-  }, [selectedCentreId, classId, selectedSubjectId, assessmentTypeId, term]);
+    checkDraftAvailable(selectedCentreId, Number(classId), Number(selectedSubjectId || 1), Number(assessmentTypeId));
+  }, [selectedCentreId, classId, assessmentTypeId, types]);
 
   const checkDraftAvailable = async (
     targetCentreId: string,
     targetClassId: number | '',
     targetSubId: number | '',
-    targetTypeId: number | '',
-    targetTerm: string
+    targetTypeId: number | ''
   ) => {
-    if (!targetCentreId || !targetClassId || !targetSubId || !targetTypeId || !targetTerm) {
+    if (!targetCentreId || !targetClassId || !targetTypeId) {
       setDraftPromptOpen(false);
       setDraftInfo(null);
       setSubmittedPromptOpen(false);
@@ -228,19 +217,40 @@ export default function AssessmentEntry() {
     setDraftPromptOpen(false);
     setDraftInfo(null);
 
-    // 1. Check local storage draft
-    const localKey = `assessment_draft_${targetCentreId}_${targetClassId}_${targetSubId}_${targetTypeId}_${targetTerm}`;
+    // 1. Check for SUBMITTED/PUBLISHED assessments first
+    try {
+      const submittedAssessments = await fetchAssessments({
+        classId: targetClassId,
+        centreId: targetCentreId || selectedCentreId || undefined,
+        assessmentTypeId: targetTypeId || undefined,
+        status: 'SUBMITTED',
+      });
+
+      const submittedMatch = submittedAssessments[0];
+      if (submittedMatch) {
+        const examName = submittedMatch.assessmentType || types.find((t) => t.id === Number(targetTypeId))?.name || 'Exam';
+        const className = submittedMatch.class ? `Class ${submittedMatch.class}` : `Class ${targetClassId}`;
+        const centreName = currentCentre?.name || '';
+        const matchLabel = [examName, className, centreName].filter(Boolean).join(' · ');
+
+        setSubmittedAssessmentInfo({
+          id: submittedMatch.id,
+          label: matchLabel || `${examName} – ${className}`,
+        });
+        setSubmittedPromptOpen(true);
+        return;
+      }
+    } catch (e) {
+      console.error('Failed checking submitted assessment:', e);
+    }
+
+    // 2. Check local storage draft
+    const localKey = `assessment_draft_${targetCentreId}_${targetClassId}_${targetTypeId}`;
     const localDraft = localStorage.getItem(localKey);
     if (localDraft) {
       try {
         const parsed = JSON.parse(localDraft);
-        const hasLocalData = parsed.studentData && Object.values(parsed.studentData).some((sd: any) => {
-          const hasScore = sd.scores && sd.scores[targetSubId] !== undefined && sd.scores[targetSubId] !== '';
-          const hasDiag = Boolean(sd.diagnostics && sd.diagnostics[targetSubId]?.understanding);
-          return hasScore || hasDiag;
-        });
-
-        if (hasLocalData) {
+        if (parsed.studentData && Object.keys(parsed.studentData).length > 0) {
           setDraftInfo({
             label: parsed.savedAt ? `Saved locally at ${parsed.savedAt}` : 'Saved local draft',
           });
@@ -254,13 +264,12 @@ export default function AssessmentEntry() {
       }
     }
 
-    // 2. Check backend draft matching class, assessment type, AND term
+    // 3. Check backend draft
     try {
       const allAssessments = await fetchAssessments({
         classId: targetClassId,
         centreId: targetCentreId || selectedCentreId || undefined,
         assessmentTypeId: targetTypeId || undefined,
-        term: targetTerm || undefined,
         status: 'DRAFT',
       });
 
@@ -269,13 +278,10 @@ export default function AssessmentEntry() {
       if (backendDraft) {
         setAssessmentId(backendDraft.id);
 
-        // Fetch scores & diagnostics to check if this draft has any non-empty marks/diagnostics for targetSubId
-        const [scoreRes, diagRes] = await Promise.all([
+        const [scoreRes] = await Promise.all([
           fetchAssessmentScores(backendDraft.id).catch(() => null),
-          fetchAssessmentDiagnostics(backendDraft.id).catch(() => null),
         ]);
 
-        // Always merge existing backend scores so scores for other subjects are preserved
         if (scoreRes?.students) {
           setStudentData((prevData) => {
             const merged = { ...prevData };
@@ -292,84 +298,24 @@ export default function AssessmentEntry() {
           });
         }
 
-        const hasSubjectScore = Boolean(
-          scoreRes?.students?.some((s: any) =>
-            s.scores?.some(
-              (sc: any) =>
-                sc.subjectId === targetSubId &&
-                sc.obtainedMarks !== '' &&
-                sc.obtainedMarks !== null &&
-                sc.obtainedMarks !== undefined
-            )
-          )
-        );
-
-        const hasSubjectDiag = Boolean(
-          diagRes?.diagnostics?.some(
-            (d: any) => d.subjectId === targetSubId && Boolean(d.understandingLevel)
-          )
-        );
-
-        if (hasSubjectScore || hasSubjectDiag) {
-          setDraftInfo({
-            label: `Saved draft on server (Assessment #${backendDraft.id} - ${backendDraft.assessmentType} ${backendDraft.term})`,
-          });
-          setDraftPromptOpen(true);
-        } else {
-          // Assessment container exists, but no marks or diagnostics yet for this specific subject
-          setDraftPromptOpen(false);
-          setDraftInfo(null);
-        }
+        const examName = backendDraft.assessmentType || types.find((t) => t.id === Number(targetTypeId))?.name || 'Exam';
+        const className = backendDraft.class ? `Class ${backendDraft.class}` : `Class ${targetClassId}`;
+        const centreName = currentCentre?.name || '';
+        const draftParts = [examName, className, centreName].filter(Boolean).join(' · ');
+        setDraftInfo({
+          label: draftParts || 'Saved draft on server',
+        });
+        setDraftPromptOpen(true);
       } else {
-        // No draft exists – also check for SUBMITTED assessments that can be edited
-        try {
-          const submittedAssessments = await fetchAssessments({
-            classId: targetClassId,
-            centreId: targetCentreId || selectedCentreId || undefined,
-            assessmentTypeId: targetTypeId || undefined,
-            term: targetTerm || undefined,
-            status: 'SUBMITTED',
-          });
-
-          const submittedMatch = submittedAssessments[0];
-          if (submittedMatch) {
-            setSubmittedAssessmentInfo({
-              id: submittedMatch.id,
-              label: `${submittedMatch.assessmentType} ${submittedMatch.term} – ${submittedMatch.class}`,
-            });
-            setSubmittedPromptOpen(true);
-          } else {
-            setAssessmentId(null);
-            setIsEditingSubmitted(false);
-            const freshMap: Record<string, StudentAssessmentData> = {};
-            students.forEach((s) => {
-              freshMap[s.id] = newStudentData();
-            });
-            setStudentData(freshMap);
-          }
-        } catch {
-          setAssessmentId(null);
-          setIsEditingSubmitted(false);
-          const freshMap: Record<string, StudentAssessmentData> = {};
-          students.forEach((s) => {
-            freshMap[s.id] = newStudentData();
-          });
-          setStudentData(freshMap);
-        }
+        setAssessmentId(null);
+        setIsEditingSubmitted(false);
       }
     } catch (e) {
-      // If error occurs, ensure entries are reset cleanly
       setAssessmentId(null);
       setIsEditingSubmitted(false);
-      const freshMap: Record<string, StudentAssessmentData> = {};
-      students.forEach((s) => {
-        freshMap[s.id] = newStudentData();
-      });
-      setStudentData(freshMap);
     }
   };
 
-  // Load submitted assessment for editing
   const loadSubmittedForEditing = async () => {
     if (!submittedAssessmentInfo) return;
     setSaving(true);
@@ -378,12 +324,10 @@ export default function AssessmentEntry() {
     setSubmittedPromptOpen(false);
 
     try {
-      // Reopen the assessment (backend changes status to DRAFT)
       await reopenAssessment(submittedAssessmentInfo.id);
       setAssessmentId(submittedAssessmentInfo.id);
       setIsEditingSubmitted(true);
 
-      // Load the existing data
       const mergedData: Record<string, StudentAssessmentData> = {};
       students.forEach((s) => {
         mergedData[s.id] = newStudentData();
@@ -438,220 +382,54 @@ export default function AssessmentEntry() {
     }
   };
 
-  // Get selected subject details
-  const selectedSubject = useMemo(
-    () => subjects.find((s) => s.id === selectedSubjectId),
-    [subjects, selectedSubjectId]
-  );
-
-  const maxMarks = selectedSubject?.maxMarks ?? 100;
-
-  // Selected Centre object
-  const currentCentre = useMemo(
-    () => centres.find((c) => String(c.id) === selectedCentreId) || centres[0],
-    [centres, selectedCentreId]
-  );
-
-  // Filter students strictly by Centre
-  const centreStudents = useMemo(() => {
-    if (!selectedCentreId || centres.length === 0) return students;
-    const targetCentre = centres.find((c) => String(c.id) === selectedCentreId);
-    const matched = students.filter((s) => {
-      if (s.centreId !== undefined && s.centreId !== null) {
-        return String(s.centreId) === selectedCentreId;
-      }
-      if (targetCentre && s.centre) {
-        return s.centre.toLowerCase().includes(targetCentre.name.toLowerCase()) ||
-          targetCentre.name.toLowerCase().includes(s.centre.toLowerCase());
-      }
-      return false;
-    });
-
-    if (matched.length === 0 && students.length > 0) {
-      const centreIndex = centres.findIndex(c => String(c.id) === selectedCentreId);
-      const chunkSize = Math.max(3, Math.ceil(students.length / Math.max(1, centres.length)));
-      const start = (Math.max(0, centreIndex) * chunkSize) % students.length;
-      return students.slice(start, start + chunkSize);
-    }
-
-    return matched;
-  }, [students, selectedCentreId, centres]);
-
-  // Compute completion stats for the selected Centre's students
-  const stats = useMemo(() => {
-    const total = centreStudents.length;
-    let completed = 0;
-
-    centreStudents.forEach((student) => {
-      const data = studentData[student.id];
-      if (data && selectedSubject) {
-        const hasScore = data.scores[selectedSubject.id] !== undefined && data.scores[selectedSubject.id] !== '';
-        const hasUnderstanding = data.diagnostics[selectedSubject.id]?.understanding;
-        if (hasScore && hasUnderstanding) {
-          completed++;
-        }
-      }
-    });
-
-    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, percentage };
-  }, [centreStudents, studentData, selectedSubject]);
-
-  // Filter centre students by Search and Status
-  const filteredStudents = useMemo(() => {
-    return centreStudents.filter((student) => {
-      const matchesSearch = !searchQuery ||
-        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.id.toString().includes(searchQuery);
-
-      if (!matchesSearch) return false;
-      if (statusFilter === 'All') return true;
-
-      const data = studentData[student.id];
-      if (!data || !selectedSubject) return false;
-
-      const hasScore = data.scores[selectedSubject.id] !== undefined && data.scores[selectedSubject.id] !== '';
-      const hasUnderstanding = Boolean(data.diagnostics[selectedSubject.id]?.understanding);
-      const isComplete = hasScore && hasUnderstanding;
-
-      if (statusFilter === 'Completed') return isComplete;
-      if (statusFilter === 'Incomplete') return !isComplete;
-      if (statusFilter === 'Needs Attention') {
-        const understanding = data.diagnostics[selectedSubject.id]?.understanding;
-        return understanding === 'NOT_UNDERSTAND' || understanding === 'REPETITION';
-      }
-
-      return true;
-    });
-  }, [centreStudents, studentData, searchQuery, statusFilter, selectedSubject]);
-
-  const updateStudentData = (studentId: string, update: Partial<StudentAssessmentData>) => {
-    setStudentData((current) => ({
-      ...current,
-      [studentId]: {
-        ...(current[studentId] ?? newStudentData()),
-        ...update,
-        lastUpdated: 'Today, Just now',
-      },
-    }));
-  };
-
-  const updateScore = (studentId: string, subjectId: number, value: number | '') => {
-    const validVal = value === '' ? '' : Math.min(maxMarks, Math.max(0, value));
-    updateStudentData(studentId, {
-      scores: { ...(studentData[studentId]?.scores ?? {}), [subjectId]: validVal },
-    });
-  };
-
-  const updateDiagnostic = (studentId: string, subjectId: number, field: 'understanding' | 'application' | 'interest', value: string) => {
-    updateStudentData(studentId, {
-      diagnostics: {
-        ...(studentData[studentId]?.diagnostics ?? {}),
-        [subjectId]: { ...(studentData[studentId]?.diagnostics[subjectId] ?? {}), [field]: value },
-      },
-    });
-  };
-
-  const getUnderstandingBadge = (studentId: string) => {
-    if (!selectedSubject) return <span className="text-slate-400 font-normal text-xs">—</span>;
-    const understanding = studentData[studentId]?.diagnostics[selectedSubject.id]?.understanding;
-
-    if (understanding === 'CLEAR') {
-      return (
-        <span className="inline-flex items-center gap-1.5 font-medium text-xs text-slate-800">
-          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-          Understands
-        </span>
-      );
-    }
-    if (understanding === 'REPETITION') {
-      return (
-        <span className="inline-flex items-center gap-1.5 font-medium text-xs text-amber-700">
-          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-          Needs Improvement
-        </span>
-      );
-    }
-    if (understanding === 'NOT_UNDERSTAND') {
-      return (
-        <span className="inline-flex items-center gap-1.5 font-medium text-xs text-rose-700">
-          <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-          Needs Support
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-slate-400 font-normal">
-        <span className="w-2 h-2 rounded-full bg-slate-300"></span>
-        Not Assessed
-      </span>
-    );
-  };
-
-  // Load last saved draft
   const loadLastDraft = async () => {
-    if (!selectedSubject) return;
+    setDraftPromptOpen(false);
     setSaving(true);
     setError('');
     setNotice('');
-    setDraftPromptOpen(false);
-    setQuickActionsOpen(false);
 
     try {
+      const mergedData: Record<string, StudentAssessmentData> = {};
+      students.forEach((s) => {
+        mergedData[s.id] = newStudentData();
+      });
+
       let loaded = false;
-      let draftLabel = '';
-      const mergedData = { ...studentData };
 
-      // 1. Try to load from backend assessments
-      const allAssessments = await fetchAssessments({
-        classId: Number(classId),
-        assessmentTypeId: assessmentTypeId || undefined,
-        term: term || undefined,
-        status: 'DRAFT',
-      }).catch(() => []);
-
-      const backendDraft = allAssessments[0];
-
-      if (backendDraft) {
-        setAssessmentId(backendDraft.id);
+      if (assessmentId) {
         const [scoreRes, diagRes, behavRes, obsRes] = await Promise.all([
-          fetchAssessmentScores(backendDraft.id).catch(() => null),
-          fetchAssessmentDiagnostics(backendDraft.id).catch(() => null),
-          fetchAssessmentBehaviours(backendDraft.id).catch(() => null),
-          fetchAssessmentObservations(backendDraft.id).catch(() => null),
+          fetchAssessmentScores(assessmentId).catch(() => null),
+          fetchAssessmentDiagnostics(assessmentId).catch(() => null),
+          fetchAssessmentBehaviours(assessmentId).catch(() => null),
+          fetchAssessmentObservations(assessmentId).catch(() => null),
         ]);
 
-        // Merge backend scores
         scoreRes?.students?.forEach((s: any) => {
           const sid = String(s.studentId);
           if (!mergedData[sid]) mergedData[sid] = newStudentData();
           s.scores?.forEach((sc: any) => {
             mergedData[sid].scores[sc.subjectId] = sc.obtainedMarks;
           });
+          loaded = true;
         });
 
-        // Merge backend diagnostics
         diagRes?.diagnostics?.forEach((d: any) => {
           const sid = String(d.studentId);
           if (!mergedData[sid]) mergedData[sid] = newStudentData();
-          if (!mergedData[sid].diagnostics[d.subjectId]) {
-            mergedData[sid].diagnostics[d.subjectId] = { understanding: '', application: '', interest: '' };
-          }
           mergedData[sid].diagnostics[d.subjectId] = {
             understanding: d.understandingLevel || '',
             application: d.applicationAbility || '',
             interest: d.interestLevel || '',
           };
+          loaded = true;
         });
 
-        // Merge behaviours
         behavRes?.students?.forEach((b: any) => {
           const sid = String(b.studentId);
           if (!mergedData[sid]) mergedData[sid] = newStudentData();
           mergedData[sid].behaviour = b.behaviour || 'INDEPENDENT';
         });
 
-        // Merge observations
         obsRes?.students?.forEach((o: any) => {
           const sid = String(o.studentId);
           if (!mergedData[sid]) mergedData[sid] = newStudentData();
@@ -660,54 +438,13 @@ export default function AssessmentEntry() {
           mergedData[sid].interventionPlan = o.interventionPlan || '';
           mergedData[sid].comments = o.comments || '';
         });
-
-        // Check if any subject-specific data was loaded
-        const hasBackendData = scoreRes?.students?.some((s: any) =>
-          s.scores?.some((sc: any) => sc.subjectId === selectedSubject.id && sc.obtainedMarks !== '' && sc.obtainedMarks !== null)
-        ) || diagRes?.diagnostics?.some((d: any) => d.subjectId === selectedSubject.id && Boolean(d.understandingLevel));
-
-        if (hasBackendData) {
-          loaded = true;
-          draftLabel = `Server Draft (${backendDraft.assessmentType} ${backendDraft.term})`;
-        }
-      }
-
-      // 2. Also check local storage
-      const localKey = `assessment_draft_${selectedCentreId}_${classId}_${selectedSubject.id}_${assessmentTypeId}_${term}`;
-      const localSaved = localStorage.getItem(localKey);
-      if (localSaved) {
-        try {
-          const parsed = JSON.parse(localSaved);
-          if (parsed.studentData) {
-            let hasLocalSubjectData = false;
-            Object.keys(parsed.studentData).forEach((sid) => {
-              const sd = parsed.studentData[sid];
-              if (
-                (sd?.scores && sd.scores[selectedSubject.id] !== undefined && sd.scores[selectedSubject.id] !== '') ||
-                Boolean(sd?.diagnostics && sd.diagnostics[selectedSubject.id]?.understanding)
-              ) {
-                hasLocalSubjectData = true;
-              }
-              mergedData[sid] = {
-                ...(mergedData[sid] ?? newStudentData()),
-                ...parsed.studentData[sid],
-              };
-            });
-            if (hasLocalSubjectData) {
-              loaded = true;
-              draftLabel = parsed.savedAt ? `Saved at ${parsed.savedAt}` : 'Local Draft';
-            }
-          }
-        } catch (e) {
-          console.error('Failed to parse local draft:', e);
-        }
       }
 
       if (loaded) {
         setStudentData(mergedData);
-        setNotice(`Successfully loaded last saved draft for ${currentCentre?.name || 'Centre'}, Class ${classId} - ${selectedSubject.name}.`);
+        setNotice(`Successfully loaded last saved draft for ${currentCentre?.name || 'Centre'}, Class ${classId}.`);
       } else {
-        setNotice(`No saved draft entries found for ${currentCentre?.name || 'Centre'}, Class ${classId} - ${selectedSubject.name}.`);
+        setNotice(`No saved draft entries found.`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load draft');
@@ -716,20 +453,182 @@ export default function AssessmentEntry() {
     }
   };
 
+  const maxMarks = useMemo(() => {
+    if (subjects.length > 0) return subjects.reduce((sum, s) => sum + (s.maxMarks || 100), 0);
+    const selectedType = types.find((t) => t.id === assessmentTypeId);
+    if (selectedType?.maxMarks) return selectedType.maxMarks;
+    return 600;
+  }, [subjects, types, assessmentTypeId]);
+
+  const currentCentre = useMemo(
+    () => centres.find((c) => String(c.id) === selectedCentreId) || centres[0],
+    [centres, selectedCentreId]
+  );
+
+  const centreStudents = useMemo(() => {
+    if (!selectedCentreId || centres.length === 0) return students;
+    const targetCentre = centres.find((c) => String(c.id) === selectedCentreId);
+    return students.filter((s) => {
+      if (s.centreId !== undefined && s.centreId !== null) {
+        return String(s.centreId) === selectedCentreId;
+      }
+      if (targetCentre && s.centre) {
+        return s.centre.toLowerCase().includes(targetCentre.name.toLowerCase()) ||
+          targetCentre.name.toLowerCase().includes(s.centre.toLowerCase());
+      }
+      return true;
+    });
+  }, [students, selectedCentreId, centres]);
+
+  const filteredStudents = useMemo(() => {
+    return centreStudents.filter((s) => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesName = s.name.toLowerCase().includes(q);
+        const matchesId = String(s.id).includes(q);
+        if (!matchesName && !matchesId) return false;
+      }
+
+      const sData = studentData[s.id];
+      const hasScores = sData && Object.values(sData.scores).some((v) => typeof v === 'number' && v > 0);
+
+      if (statusFilter === 'Completed') return hasScores;
+      if (statusFilter === 'Incomplete') return !hasScores;
+      return true;
+    });
+  }, [centreStudents, searchQuery, statusFilter, studentData]);
+
+  const stats = useMemo(() => {
+    const total = centreStudents.length;
+    let completed = 0;
+    centreStudents.forEach((s) => {
+      const sData = studentData[s.id];
+      if (sData && Object.values(sData.scores).some((v) => typeof v === 'number' && v > 0)) {
+        completed += 1;
+      }
+    });
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, percentage };
+  }, [centreStudents, studentData]);
+
+  const updateScore = (studentId: string, subjectId: number, value: number | '') => {
+    setStudentData((prev) => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
+        scores: {
+          ...prev[studentId]?.scores,
+          [subjectId]: value,
+        },
+        lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    }));
+  };
+
+  const updateDiagnostic = (studentId: string, subjectId: number, field: 'understanding' | 'application' | 'interest', value: string) => {
+    setStudentData((prev) => {
+      const studentObj = prev[studentId] || newStudentData();
+      const subjectDiag = studentObj.diagnostics[subjectId] || { understanding: '', application: '', interest: '' };
+      return {
+        ...prev,
+        [studentId]: {
+          ...studentObj,
+          diagnostics: {
+            ...studentObj.diagnostics,
+            [subjectId]: {
+              ...subjectDiag,
+              [field]: value,
+            },
+          },
+          lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      };
+    });
+  };
+
+  const updateStudentData = (studentId: string, updates: Partial<StudentAssessmentData>) => {
+    setStudentData((prev) => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
+        ...updates,
+        lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    }));
+  };
+
+  const persistAllData = async (id: number) => {
+    // 1. Scores
+    const scoresPayload = centreStudents
+      .map((s) => ({
+        studentId: Number(s.id),
+        scores: subjects
+          .filter((sub) => studentData[s.id]?.scores[sub.id] !== undefined && studentData[s.id]?.scores[sub.id] !== '')
+          .map((sub) => ({ subjectId: sub.id, obtainedMarks: Number(studentData[s.id].scores[sub.id]) })),
+      }))
+      .filter((s) => s.scores.length > 0);
+
+    if (scoresPayload.length > 0) {
+      await saveAssessmentScores(id, scoresPayload);
+    }
+
+    // 2. Behaviours
+    const behavioursPayload = centreStudents
+      .map((s) => ({
+        studentId: Number(s.id),
+        behaviour: studentData[s.id]?.behaviour || 'INDEPENDENT',
+      }))
+      .filter((s) => Boolean(s.behaviour));
+
+    if (behavioursPayload.length > 0) {
+      await saveAssessmentBehaviours(id, behavioursPayload);
+    }
+
+    // 3. Diagnostics
+    const diagPayload: Array<Record<string, number | string>> = [];
+    centreStudents.forEach((s) => {
+      const sDiag = studentData[s.id]?.diagnostics || {};
+      Object.entries(sDiag).forEach(([subId, d]) => {
+        if (d.understanding || d.application || d.interest) {
+          diagPayload.push({
+            studentId: Number(s.id),
+            subjectId: Number(subId),
+            understandingLevel: d.understanding || 'GOOD',
+            applicationAbility: d.application || 'GOOD',
+            interestLevel: d.interest || 'HIGH',
+          });
+        }
+      });
+    });
+
+    if (diagPayload.length > 0) {
+      await saveAssessmentDiagnostics(id, diagPayload);
+    }
+
+    // 4. Observations
+    const obsPayload = centreStudents
+      .map((s) => {
+        const sData = studentData[s.id];
+        const text = sData?.keyImprovements || sData?.comments || sData?.subjectsNeedingSupport || sData?.interventionPlan || '';
+        return {
+          studentId: Number(s.id),
+          keyImprovements: sData?.keyImprovements || sData?.comments || text,
+          subjectsNeedingSupport: sData?.subjectsNeedingSupport || '',
+          interventionPlan: sData?.interventionPlan || '',
+          comments: sData?.comments || '',
+        };
+      })
+      .filter((obs) => Boolean(obs.keyImprovements || obs.subjectsNeedingSupport || obs.interventionPlan || obs.comments));
+
+    if (obsPayload.length > 0) {
+      await saveAssessmentObservations(id, obsPayload);
+    }
+  };
+
   const saveSingleStudent = async (studentId: string) => {
-    if (!selectedSubject) return;
     try {
       const sData = studentData[studentId];
       if (!sData) return;
-
-      const hasScore = sData.scores[selectedSubject.id] !== undefined && sData.scores[selectedSubject.id] !== '';
-      const diag = sData.diagnostics[selectedSubject.id];
-      const hasDiag = Boolean(diag?.understanding);
-      const hasObs = Boolean(sData.keyImprovements || sData.subjectsNeedingSupport || sData.interventionPlan || sData.comments);
-
-      if (!hasScore && !hasDiag && !hasObs) {
-        return;
-      }
 
       let id = assessmentId;
       if (!id) {
@@ -737,7 +636,6 @@ export default function AssessmentEntry() {
           academicYearId: new Date().getFullYear(),
           classId: Number(classId),
           assessmentTypeId: Number(assessmentTypeId || 1),
-          term,
           assessmentDate,
           centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
         });
@@ -745,76 +643,56 @@ export default function AssessmentEntry() {
         setAssessmentId(id);
       }
 
-      // 1. Save score only if explicitly entered
-      if (hasScore) {
-        await saveAssessmentScores(id, [{
-          studentId: Number(studentId),
-          scores: [{ subjectId: selectedSubject.id, obtainedMarks: Number(sData.scores[selectedSubject.id]) }]
-        }]);
+      // Save scores
+      const scoreInputs = subjects
+        .filter((sub) => sData.scores[sub.id] !== undefined && sData.scores[sub.id] !== '')
+        .map((sub) => ({ subjectId: sub.id, obtainedMarks: Number(sData.scores[sub.id]) }));
+
+      if (scoreInputs.length > 0) {
+        await saveAssessmentScores(id, [{ studentId: Number(studentId), scores: scoreInputs }]);
       }
 
-      // 2. Save diagnostic only if entered
-      if (hasDiag) {
-        await saveAssessmentDiagnostics(id, [{
-          studentId: Number(studentId),
-          subjectId: selectedSubject.id,
-          understandingLevel: diag?.understanding || 'CLEAR',
-          applicationAbility: diag?.application || 'APPLIES',
-          interestLevel: diag?.interest || 'INTERESTED',
-        }]);
-      }
-
-      // 3. Save behaviour
+      // Save behaviour
       if (sData.behaviour) {
-        await saveAssessmentBehaviours(id, [{
-          studentId: Number(studentId),
-          behaviour: sData.behaviour,
-        }]);
+        await saveAssessmentBehaviours(id, [{ studentId: Number(studentId), behaviour: sData.behaviour }]);
       }
 
-      // 4. Save observation if provided
-      if (hasObs) {
-        await saveAssessmentObservation(id, Number(studentId), {
-          keyImprovements: sData.keyImprovements || '',
+      // Save diagnostics
+      const diagPayload: Array<Record<string, number | string>> = [];
+      Object.entries(sData.diagnostics || {}).forEach(([subId, d]) => {
+        if (d.understanding || d.application || d.interest) {
+          diagPayload.push({
+            studentId: Number(studentId),
+            subjectId: Number(subId),
+            understandingLevel: d.understanding || 'GOOD',
+            applicationAbility: d.application || 'GOOD',
+            interestLevel: d.interest || 'HIGH',
+          });
+        }
+      });
+      if (diagPayload.length > 0) {
+        await saveAssessmentDiagnostics(id, diagPayload);
+      }
+
+      // Save observations
+      const obsText = sData.keyImprovements || sData.comments || sData.subjectsNeedingSupport || sData.interventionPlan;
+      if (obsText) {
+        await saveAssessmentObservations(id, [{
+          studentId: Number(studentId),
+          keyImprovements: sData.keyImprovements || sData.comments || obsText,
           subjectsNeedingSupport: sData.subjectsNeedingSupport || '',
           interventionPlan: sData.interventionPlan || '',
           comments: sData.comments || '',
-        });
+        }]);
       }
-
-      // Sync local cache
-      const localKey = `assessment_draft_${selectedCentreId}_${classId}_${selectedSubject.id}_${assessmentTypeId}_${term}`;
-      localStorage.setItem(localKey, JSON.stringify({
-        centreId: selectedCentreId,
-        classId,
-        subjectId: selectedSubject.id,
-        assessmentTypeId,
-        term,
-        studentData,
-        savedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      }));
     } catch (e) {
       console.error('Failed to auto-save student:', e);
     }
   };
 
   const saveDraft = async () => {
-    if (!assessmentTypeId || !selectedSubject) {
-      return setError('Please select assessment type and subject before saving.');
-    }
-
-    // Guard: Don't save draft if no marks or diagnostics have been entered for this subject
-    const hasAnySubjectData = centreStudents.some((s) => {
-      const d = studentData[s.id];
-      if (!d) return false;
-      const hasScore = d.scores[selectedSubject.id] !== undefined && d.scores[selectedSubject.id] !== '';
-      const hasDiag = Boolean(d.diagnostics[selectedSubject.id]?.understanding);
-      return hasScore || hasDiag;
-    });
-
-    if (!hasAnySubjectData) {
-      setError(`Cannot save draft: No marks or diagnostics have been entered for ${selectedSubject.name}.`);
-      return;
+    if (!assessmentTypeId) {
+      return setError('Please select an Exam before saving draft.');
     }
 
     setSaving(true);
@@ -829,7 +707,6 @@ export default function AssessmentEntry() {
           academicYearId: new Date().getFullYear(),
           classId: Number(classId),
           assessmentTypeId: Number(assessmentTypeId),
-          term,
           assessmentDate,
           centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
         });
@@ -837,88 +714,9 @@ export default function AssessmentEntry() {
         setAssessmentId(id);
       }
 
-      // Save scores for all active centre students
-      const scoresPayload = centreStudents.map((s) => ({
-        studentId: Number(s.id),
-        scores: subjects
-          .filter((sub) => studentData[s.id]?.scores[sub.id] !== undefined && studentData[s.id]?.scores[sub.id] !== '')
-          .map((sub) => ({ subjectId: sub.id, obtainedMarks: Number(studentData[s.id].scores[sub.id]) })),
-      })).filter((s) => s.scores.length > 0);
+      await persistAllData(id);
 
-      if (scoresPayload.length > 0) {
-        await saveAssessmentScores(id, scoresPayload);
-      }
-
-      // Save diagnostics for all assessed subjects
-      const diagnosticsPayload: Array<Record<string, number | string>> = [];
-      centreStudents.forEach((s) => {
-        const d = studentData[s.id];
-        if (!d) return;
-        subjects.forEach((sub) => {
-          const diag = d.diagnostics[sub.id];
-          const hasScore = d.scores[sub.id] !== undefined && d.scores[sub.id] !== '';
-          if (diag?.understanding || hasScore) {
-            diagnosticsPayload.push({
-              studentId: Number(s.id),
-              subjectId: sub.id,
-              understandingLevel: diag?.understanding || 'CLEAR',
-              applicationAbility: diag?.application || 'APPLIES',
-              interestLevel: diag?.interest || 'INTERESTED',
-            });
-          }
-        });
-      });
-
-      if (diagnosticsPayload.length > 0) {
-        await saveAssessmentDiagnostics(id, diagnosticsPayload);
-      }
-
-      // Save behaviours for all assessed students
-      const behavioursPayload = centreStudents
-        .filter((s) => studentData[s.id]?.behaviour)
-        .map((s) => ({
-          studentId: Number(s.id),
-          behaviour: studentData[s.id]?.behaviour || 'INDEPENDENT',
-        }));
-
-      if (behavioursPayload.length > 0) {
-        await saveAssessmentBehaviours(id, behavioursPayload);
-      }
-
-      // Save observations only for students who have entered observations
-      const observationPromises = centreStudents
-        .filter((s) => {
-          const d = studentData[s.id];
-          return Boolean(d?.keyImprovements || d?.subjectsNeedingSupport || d?.interventionPlan || d?.comments);
-        })
-        .map((s) => {
-          const d = studentData[s.id];
-          return saveAssessmentObservation(id, Number(s.id), {
-            keyImprovements: d?.keyImprovements || '',
-            subjectsNeedingSupport: d?.subjectsNeedingSupport || '',
-            interventionPlan: d?.interventionPlan || '',
-            comments: d?.comments || '',
-          });
-        });
-
-      if (observationPromises.length > 0) {
-        await Promise.all(observationPromises);
-      }
-
-      // Persist to local storage draft
-      const localKey = `assessment_draft_${selectedCentreId}_${classId}_${selectedSubject.id}_${assessmentTypeId}_${term}`;
-      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      localStorage.setItem(localKey, JSON.stringify({
-        centreId: selectedCentreId,
-        classId,
-        subjectId: selectedSubject.id,
-        assessmentTypeId,
-        term,
-        studentData,
-        savedAt: nowTime,
-      }));
-
-      setNotice(`Draft saved successfully for ${currentCentre?.name || 'Centre'}, Class ${classId}, ${selectedSubject.name} at ${nowTime}.`);
+      setNotice(`Draft saved successfully for ${currentCentre?.name || 'Centre'}, Class ${classId}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save draft');
     } finally {
@@ -927,13 +725,13 @@ export default function AssessmentEntry() {
   };
 
   const clearCurrentEntries = () => {
-    if (window.confirm(`Are you sure you want to clear all entered data for ${currentCentre?.name || 'Centre'}, Class ${classId} - ${selectedSubject?.name}?`)) {
+    if (window.confirm(`Are you sure you want to clear all entered data for ${currentCentre?.name || 'Centre'}, Class ${classId}?`)) {
       const resetMap: Record<string, StudentAssessmentData> = {};
       centreStudents.forEach((s) => {
         resetMap[s.id] = newStudentData();
       });
       setStudentData(resetMap);
-      setNotice(`Cleared entries for ${selectedSubject?.name}.`);
+      setNotice(`Cleared all current entries.`);
       setQuickActionsOpen(false);
     }
   };
@@ -946,61 +744,10 @@ export default function AssessmentEntry() {
     try {
       let id = assessmentId;
       if (!id) {
-        const allAssessments = await fetchAssessments({
-          classId: Number(classId),
-          assessmentTypeId: assessmentTypeId || undefined,
-          term: term || undefined,
-          status: 'DRAFT',
-        }).catch(() => []);
-        if (allAssessments[0]) {
-          id = allAssessments[0].id;
-          setAssessmentId(id);
-        }
-      }
-
-      // Sync backend scores into studentData before checking missing subjects
-      let currentData = { ...studentData };
-      if (id) {
-        const scoreRes = await fetchAssessmentScores(id).catch(() => null);
-        if (scoreRes?.students) {
-          scoreRes.students.forEach((s: any) => {
-            const sid = String(s.studentId);
-            if (!currentData[sid]) currentData[sid] = newStudentData();
-            s.scores?.forEach((sc: any) => {
-              if (sc.obtainedMarks !== '' && sc.obtainedMarks !== null && sc.obtainedMarks !== undefined) {
-                currentData[sid].scores[sc.subjectId] = sc.obtainedMarks;
-              }
-            });
-          });
-          setStudentData(currentData);
-        }
-      }
-
-      // Verify that every subject for this class has scores entered
-      const missingSubjects = subjects.filter((sub) => {
-        const hasAnyScore = centreStudents.some(
-          (s) => currentData[s.id]?.scores[sub.id] !== undefined && currentData[s.id]?.scores[sub.id] !== ''
-        );
-        return !hasAnyScore;
-      });
-
-      if (missingSubjects.length > 0) {
-        const missingNames = missingSubjects.map((s) => s.name).join(', ');
-        const selectedTypeObj = types.find((t) => t.id === assessmentTypeId);
-        const typeName = selectedTypeObj?.name || 'Quarterly';
-        setError(
-          `Not all subjects for Class ${classId} (Type: ${typeName}, Term: ${term}) have been completed (Missing: ${missingNames}). Please save progress as draft instead.`
-        );
-        setSaving(false);
-        return;
-      }
-
-      if (!id) {
         const result = await createAssessment({
           academicYearId: new Date().getFullYear(),
           classId: Number(classId),
           assessmentTypeId: Number(assessmentTypeId || 1),
-          term,
           assessmentDate,
           centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
         });
@@ -1008,146 +755,45 @@ export default function AssessmentEntry() {
         setAssessmentId(id);
       }
 
-      // 1. Save scores for all students and subjects
-      const scoresPayload = centreStudents
-        .map((s) => ({
-          studentId: Number(s.id),
-          scores: subjects
-            .filter((sub) => currentData[s.id]?.scores[sub.id] !== undefined && currentData[s.id]?.scores[sub.id] !== '')
-            .map((sub) => ({ subjectId: sub.id, obtainedMarks: Number(currentData[s.id].scores[sub.id]) })),
-        }))
-        .filter((s) => s.scores.length > 0);
+      await persistAllData(id);
 
-      if (scoresPayload.length > 0) {
-        await saveAssessmentScores(id, scoresPayload);
-      }
-
-      // 2. Save diagnostics for all assessed subjects
-      const diagnosticsPayload: Array<Record<string, number | string>> = [];
-      centreStudents.forEach((s) => {
-        const d = currentData[s.id];
-        if (!d) return;
-        subjects.forEach((sub) => {
-          const diag = d.diagnostics[sub.id];
-          const hasScore = d.scores[sub.id] !== undefined && d.scores[sub.id] !== '';
-          if (diag?.understanding || hasScore) {
-            diagnosticsPayload.push({
-              studentId: Number(s.id),
-              subjectId: sub.id,
-              understandingLevel: diag?.understanding || 'CLEAR',
-              applicationAbility: diag?.application || 'APPLIES',
-              interestLevel: diag?.interest || 'INTERESTED',
-            });
-          }
-        });
-      });
-
-      if (diagnosticsPayload.length > 0) {
-        await saveAssessmentDiagnostics(id, diagnosticsPayload);
-      }
-
-      // 3. Save behaviours
-      const behavioursPayload = centreStudents
-        .filter((s) => currentData[s.id]?.behaviour)
-        .map((s) => ({
-          studentId: Number(s.id),
-          behaviour: currentData[s.id]?.behaviour || 'INDEPENDENT',
-        }));
-
-      if (behavioursPayload.length > 0) {
-        await saveAssessmentBehaviours(id, behavioursPayload);
-      }
-
-      // 4. Save observations
-      const observationPromises = centreStudents
-        .filter((s) => {
-          const d = currentData[s.id];
-          return Boolean(d?.keyImprovements || d?.subjectsNeedingSupport || d?.interventionPlan || d?.comments);
-        })
-        .map((s) => {
-          const d = currentData[s.id];
-          return saveAssessmentObservation(id, Number(s.id), {
-            keyImprovements: d?.keyImprovements || 'Good problem solving and class participation.',
-            subjectsNeedingSupport: d?.subjectsNeedingSupport || 'No specific support needed',
-            interventionPlan: d?.interventionPlan || 'Continue standard classroom practice and periodic revision.',
-            comments: d?.comments || '',
-          });
-        });
-
-      if (observationPromises.length > 0) {
-        await Promise.all(observationPromises);
-      }
-
-      // 5. Perform final submission
       const result = await submitAssessment(id);
-
-      // Clean up local storage drafts for this assessment
-      subjects.forEach((sub) => {
-        const localKey = `assessment_draft_${selectedCentreId}_${classId}_${sub.id}_${assessmentTypeId}_${term}`;
-        localStorage.removeItem(localKey);
-      });
-      setDraftPromptOpen(false);
-      setDraftInfo(null);
-
-      const wasEditing = isEditingSubmitted;
-      setIsEditingSubmitted(false);
-      setSubmittedAssessmentInfo(null);
 
       const typeObj = types.find((t) => t.id === Number(assessmentTypeId));
       const readableTime = formatReadableDateTime(result.submittedAt);
 
       setSuccessDetails({
-        title: wasEditing ? 'Assessment Updated Successfully!' : 'Assessment Submitted Successfully!',
-        message: wasEditing
-          ? 'The assessment marks and observations have been re-submitted and saved.'
-          : 'All marks, diagnostics, and observations have been recorded and saved.',
+        title: isEditingSubmitted ? 'Assessment Updated & Published!' : 'Assessment Published to Dashboard!',
+        message: `Marks and observations for ${stats.completed} student(s) have been recorded.`,
         assessmentId: id,
-        centreName: currentCentre?.name || 'Centre',
+        centreName: currentCentre?.name || 'Selected Centre',
         className: `Class ${classId}`,
-        term,
-        typeName: typeObj?.name || 'Quarterly',
+        typeName: typeObj?.name || 'Exam',
         submittedAt: readableTime,
-        studentCount: centreStudents.length,
-        isResubmission: wasEditing,
+        studentCount: stats.completed,
+        isResubmission: isEditingSubmitted,
       });
+
+      setIsEditingSubmitted(false);
       setSuccessModalOpen(true);
-      setNotice(wasEditing ? 'Assessment updated and re-submitted.' : 'Assessment submitted successfully.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Assessment submission failed');
+      setError(err instanceof Error ? err.message : 'Failed to submit assessment');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-medium">Loading assessment module...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-7xl mx-auto space-y-4 pb-12 font-sans text-slate-900">
-      {/* Submission Success Confirmation Modal */}
-      <SuccessModal
-        isOpen={successModalOpen}
-        details={successDetails}
-        onClose={() => setSuccessModalOpen(false)}
-      />
-
-      {/* Draft Resume Modal Prompt */}
+    <div className="space-y-4 max-w-7xl mx-auto pb-10">
+      {/* Modals */}
       <DraftPromptModal
         isOpen={draftPromptOpen}
-        centre={currentCentre}
-        classId={classId}
-        subject={selectedSubject}
+        info={draftInfo}
         onDismiss={() => setDraftPromptOpen(false)}
         onLoadDraft={loadLastDraft}
+        onStartFresh={clearCurrentEntries}
       />
 
-      {/* Submitted Assessment Edit Prompt Modal */}
       <SubmittedPromptModal
         isOpen={submittedPromptOpen}
         info={submittedAssessmentInfo}
@@ -1156,74 +802,79 @@ export default function AssessmentEntry() {
         onLoadSubmitted={loadSubmittedForEditing}
       />
 
-      {/* Top Bar: Title & Primary Actions */}
+      {successDetails && (
+        <SuccessModal
+          isOpen={successModalOpen}
+          details={successDetails}
+          onClose={() => setSuccessModalOpen(false)}
+        />
+      )}
+
+      {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-1 border-b border-slate-200/60 pb-3">
         <div className="flex items-center gap-2.5">
-          <span className="p-2 bg-indigo-50 text-indigo-700 rounded-xl">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+          <span className="p-2 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100/80">
+            <FileText size={20} />
           </span>
           <div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Assessments Entry</h1>
             {isEditingSubmitted && (
-              <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+              <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md ml-2">
                 ✏️ Editing Submitted Assessment #{assessmentId}
               </span>
             )}
           </div>
         </div>
 
-        {/* Action Buttons (Save Draft + Submit Assessment) */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-2.5 flex-nowrap shrink-0">
           <button
             type="button"
             onClick={saveDraft}
-            disabled={saving || !(selectedCentreId && classId && selectedSubjectId && assessmentTypeId && term)}
-            className="h-8 inline-flex items-center gap-1.5 px-3.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50 transition shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer"
+            disabled={saving || !(selectedCentreId && classId && assessmentTypeId)}
+            className="h-9 inline-flex items-center gap-1.5 px-4 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer"
           >
-            <Save size={13} />
+            <Save size={14} />
             {saving ? 'Saving...' : 'Save Draft'}
           </button>
 
           <button
             type="button"
             onClick={submitDraft}
-            disabled={saving || !(selectedCentreId && classId && selectedSubjectId && assessmentTypeId && term)}
-            className={`h-8 inline-flex items-center gap-1.5 px-4 text-white text-xs font-semibold rounded-lg transition shadow-xs disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer ${isEditingSubmitted ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-600 hover:bg-indigo-700'
-              }`}
+            disabled={saving || !(selectedCentreId && classId && assessmentTypeId)}
+            className={`h-9 inline-flex items-center gap-1.5 px-4 text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer ${
+              isEditingSubmitted ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-600 hover:bg-indigo-700'
+            }`}
           >
-            <Send size={13} />
-            {isEditingSubmitted ? 'Re-Submit Assessment' : 'Submit Assessment'}
+            <Send size={14} />
+            {isEditingSubmitted ? 'Re-Publish to Dashboard' : 'Publish to Dashboard'}
           </button>
         </div>
       </div>
 
-      {/* Control Filter Bar with all selection pills */}
+      {/* Control Filter Bar */}
       <AssessmentFilterBar
+        academicYears={academicYears}
+        selectedAcademicYear={selectedAcademicYear}
+        onAcademicYearChange={setSelectedAcademicYear}
         centres={centres}
         selectedCentreId={selectedCentreId}
         onCentreChange={handleCentreChange}
         classId={classId}
         onClassChange={handleClassChange}
-        subjects={subjects}
-        selectedSubjectId={selectedSubjectId}
-        onSubjectChange={handleSubjectChange}
         types={types}
         assessmentTypeId={assessmentTypeId}
         onTypeChange={handleAssessmentTypeChange}
-        term={term}
-        onTermChange={handleTermChange}
-        getTermsForType={getTermsForType}
         maxMarks={maxMarks}
       />
 
       {/* Alerts */}
       {(error || notice) && (
-        <div className={`p-3.5 rounded-xl text-sm flex items-start justify-between gap-2.5 ${error ? 'bg-rose-50 text-rose-800 border border-rose-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-          }`}>
+        <div className={`p-3.5 rounded-xl text-xs font-medium flex items-start justify-between gap-2.5 ${
+          error ? 'bg-rose-50 text-rose-800 border border-rose-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+        }`}>
           <div className="flex items-start gap-2.5">
-            {error ? <AlertCircle size={18} className="text-rose-600 flex-shrink-0 mt-0.5" /> : <Check size={18} className="text-emerald-600 flex-shrink-0 mt-0.5" />}
+            {error ? <AlertCircle size={16} className="text-rose-600 shrink-0 mt-0.5" /> : <Check size={16} className="text-emerald-600 shrink-0 mt-0.5" />}
             <div className="whitespace-pre-wrap">{error || notice}</div>
           </div>
           <button
@@ -1232,20 +883,19 @@ export default function AssessmentEntry() {
             className="p-1 rounded-md text-slate-400 hover:text-slate-700 transition cursor-pointer"
             aria-label="Dismiss alert"
           >
-            <span className="sr-only">Close</span>
             ✕
           </button>
         </div>
       )}
 
-      {!(selectedCentreId && classId && selectedSubjectId && assessmentTypeId && term) ? (
+      {!(selectedCentreId && classId && assessmentTypeId) ? (
         <div className="bg-indigo-50/80 border border-indigo-200/80 rounded-2xl p-8 text-center space-y-3 shadow-2xs my-4">
           <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center mx-auto font-bold shadow-xs">
             <Sparkles size={24} />
           </div>
           <h3 className="text-base font-bold text-slate-900">Select All Filters to Begin Assessment Entry</h3>
           <p className="text-xs text-slate-600 max-w-md mx-auto">
-            Please select a <strong>Centre</strong>, <strong>Class</strong>, <strong>Subject</strong>, <strong>Assessment Type</strong>, and <strong>Term</strong> in the control bar above to load students and check for saved drafts or previous assessments.
+            Please select an <strong>Assessment Year</strong>, <strong>Centre</strong>, <strong>Class</strong>, and <strong>Exam</strong> in the control bar above to load students.
           </p>
         </div>
       ) : (
@@ -1263,7 +913,7 @@ export default function AssessmentEntry() {
           onClearCurrentEntries={clearCurrentEntries}
           filteredStudents={filteredStudents}
           studentData={studentData}
-          selectedSubject={selectedSubject}
+          subjects={subjects}
           maxMarks={maxMarks}
           expandedStudentId={expandedStudentId}
           onToggleExpandStudent={setExpandedStudentId}
@@ -1273,7 +923,6 @@ export default function AssessmentEntry() {
           saveSingleStudent={saveSingleStudent}
           diagnostics={diagnostics}
           behaviours={behaviours}
-          getUnderstandingBadge={getUnderstandingBadge}
         />
       )}
     </div>

@@ -26,6 +26,7 @@ const navItems = [
     children: [
       { name: 'Regions', path: '/masters/regions' },
       { name: 'Centres', path: '/masters/centres' },
+      { name: 'Assessments', path: '/masters/assessments' },
     ]
   },
   { name: 'Students', icon: Users, path: '/students' },

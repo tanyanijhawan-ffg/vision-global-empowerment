@@ -156,7 +156,7 @@ export const AcademicFilterBar: React.FC<AcademicFilterBarProps> = ({
                 filterClass &&
                 assessments.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.assessmentType} ({a.term || 'Term'}) - Class {a.class}
+                    {a.assessmentType} - Class {a.class}
                   </option>
                 ))}
             </select>

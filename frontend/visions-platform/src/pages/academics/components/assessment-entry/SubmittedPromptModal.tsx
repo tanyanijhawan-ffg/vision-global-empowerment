@@ -34,7 +34,7 @@ export const SubmittedPromptModal: React.FC<SubmittedPromptModalProps> = ({
               <AlertCircle size={20} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Submitted Assessment Found</h3>
+              <h3 className="text-base font-bold text-slate-900">Published Assessment Found</h3>
               <p className="text-xs text-slate-500 font-medium">{info.label}</p>
             </div>
           </div>
@@ -48,11 +48,11 @@ export const SubmittedPromptModal: React.FC<SubmittedPromptModalProps> = ({
         </div>
 
         <p className="text-xs text-slate-600 leading-relaxed">
-          A <strong>submitted assessment</strong> already exists for this class, type, and term. Would you like to <strong>reopen it to edit marks</strong>? You can update scores, diagnostics, and observations, then re-submit.
+          Data for this exam has already been submitted and published to the dashboard. Would you like to <strong>edit previously published marks</strong>? You can update scores, diagnostics, and observations, then re-publish.
         </p>
 
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-800 font-medium">
-          ⚠️ This will temporarily change the assessment status back to Draft until you re-submit.
+          ⚠️ Reopening will allow you to update scores, diagnostics, and observations, then re-publish to the dashboard.
         </div>
 
         <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
@@ -70,7 +70,7 @@ export const SubmittedPromptModal: React.FC<SubmittedPromptModalProps> = ({
             className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
             <RotateCcw size={13} />
-            {saving ? 'Reopening...' : 'Edit Marks'}
+            {saving ? 'Reopening...' : 'Edit Previously Published Marks'}
           </button>
         </div>
       </div>

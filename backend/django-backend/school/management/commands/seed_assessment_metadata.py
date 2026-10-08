@@ -1,28 +1,68 @@
 from django.core.management.base import BaseCommand
 
 from school.models.assessment import (
+    AcademicYear,
     AssessmentType,
     DiagnosticOption,
     LearningBehaviourOption,
     Subject,
 )
+from school.models.student import Student, StudentYearRecord
 
 
 class Command(BaseCommand):
     help = 'Seed assessment metadata and default subject catalog for the assessment APIs.'
 
     def handle(self, *args, **options):
+        academic_years = [
+            {'name': '2025 - 2026', 'start_date': '2025-06-01', 'end_date': '2026-05-31', 'is_current': True},
+            {'name': '2026 - 2027', 'start_date': '2026-06-01', 'end_date': '2027-05-31', 'is_current': False},
+        ]
+        ay_instances = []
+        for year in academic_years:
+            ay_obj, _ = AcademicYear.objects.update_or_create(
+                name=year['name'],
+                defaults={'start_date': year['start_date'], 'end_date': year['end_date'], 'is_current': year['is_current'], 'is_active': True},
+            )
+            ay_instances.append(ay_obj)
+
+        # Seed student year records for existing students for 2026 - 2027 (and 2025 - 2026)
+        all_students = Student.objects.all()
+        for student in all_students:
+            for ay in ay_instances:
+                StudentYearRecord.objects.get_or_create(
+                    student=student,
+                    academic_year=ay,
+                    defaults={'is_active': True},
+                )
+
         assessment_types = [
-            {'code': 'QUARTERLY', 'name': 'Quarterly', 'duration_months': 3},
-            {'code': 'HALF_YEARLY', 'name': 'Half-Yearly', 'duration_months': 6},
-            {'code': 'ANNUAL', 'name': 'Annual', 'duration_months': 12},
+            {'code': 'FIRST_EXAM', 'name': 'First Exam', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
+            {'code': 'MID_TERM', 'name': 'Mid-Term', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
+            {'code': 'SECOND_EXAM', 'name': 'Second Exam', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
+            {'code': 'QUARTERLY', 'name': 'Quarterly', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
+            {'code': 'HALF_YEARLY', 'name': 'Half-Yearly', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
+            {'code': 'ANNUAL', 'name': 'Annual', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
         ]
 
-        for item in assessment_types:
-            AssessmentType.objects.update_or_create(
-                code=item['code'],
-                defaults={'name': item['name'], 'duration_months': item['duration_months'], 'is_active': True},
-            )
+        for ay in ay_instances:
+            for item in assessment_types:
+                code_val = f"{item['code']}_{ay.academic_year_id}"
+                AssessmentType.objects.update_or_create(
+                    code=code_val,
+                    defaults={
+                        'name': item['name'],
+                        'academic_year': ay,
+                        'max_marks': item['max_marks'],
+                        'classes': item['classes'],
+                        'is_active': True,
+                    },
+                )
+
+        # Ensure any legacy assessment types are linked to the current academic year
+        current_ay = ay_instances[0] if ay_instances else None
+        if current_ay:
+            AssessmentType.objects.filter(academic_year__isnull=True).update(academic_year=current_ay)
 
         diagnostic_options = [
             ('understanding_level', 'CLEAR', 'Understands clearly', 1),

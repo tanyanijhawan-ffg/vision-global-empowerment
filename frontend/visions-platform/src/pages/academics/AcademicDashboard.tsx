@@ -272,13 +272,13 @@ export default function AcademicDashboard() {
 
   // Live statistics
   const currentAvgScore = useMemo(() => {
-    if (statistics?.averagePercentage) return Math.round(statistics.averagePercentage);
-    if (comparison?.current?.percentage) return Math.round(comparison.current.percentage);
+    if (statistics?.averagePercentage) return Number(statistics.averagePercentage.toFixed(1));
+    if (comparison?.current?.percentage) return Number(comparison.current.percentage.toFixed(1));
     const validScores = filteredStudentsWithScores
       .map(s => s.academicScore)
       .filter((sc): sc is number => sc !== undefined && sc !== null);
     if (validScores.length > 0) {
-      return Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
+      return Number((validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(1));
     }
     return 0;
   }, [statistics, comparison, filteredStudentsWithScores]);
@@ -425,6 +425,31 @@ export default function AcademicDashboard() {
       const passCount = scoredStudents.filter(s => (s.academicScore || 0) >= 50).length;
       const passRate = hasData ? Math.round((passCount / scoredStudents.length) * 100) : null;
 
+      // Find top subject for centre
+      const centreStudentIds = new Set(centreStudents.map(s => Number(s.id)));
+      const subjectSums = new Map<string, { totalPct: number; count: number }>();
+      scoresData.forEach(st => {
+        if (centreStudentIds.has(Number(st.studentId))) {
+          st.scores?.forEach(sc => {
+            if (sc.subject) {
+              const cur = subjectSums.get(sc.subject) || { totalPct: 0, count: 0 };
+              const pct = sc.maxMarks ? (sc.obtainedMarks / sc.maxMarks) * 100 : sc.obtainedMarks;
+              subjectSums.set(sc.subject, { totalPct: cur.totalPct + pct, count: cur.count + 1 });
+            }
+          });
+        }
+      });
+
+      let topSubjName = 'N/A';
+      let maxAvg = -1;
+      subjectSums.forEach((val, subjName) => {
+        const avg = val.totalPct / val.count;
+        if (avg > maxAvg) {
+          maxAvg = avg;
+          topSubjName = subjName;
+        }
+      });
+
       return {
         id: c.id,
         name: c.name,
@@ -433,7 +458,7 @@ export default function AcademicDashboard() {
         studentsCount: centreStudents.length,
         avgScore: score,
         passRate,
-        topSubject: hasData ? (score! >= 75 ? 'Mathematics' : 'Tamil') : 'N/A',
+        topSubject: hasData ? topSubjName : 'N/A',
         status: hasData ? (score! >= 75 ? 'High Performing' : score! >= 60 ? 'Average' : 'Needs Support') : 'No Data',
         hasData,
       };
@@ -448,7 +473,7 @@ export default function AcademicDashboard() {
     });
 
     return reports.map((r, idx) => ({ ...r, rank: idx + 1 }));
-  }, [availableCentres, filteredStudentsWithScores]);
+  }, [availableCentres, filteredStudentsWithScores, scoresData]);
 
   // Region comparison report
   const regionComparisonReport = useMemo(() => {
@@ -462,7 +487,7 @@ export default function AcademicDashboard() {
       const avg = hasData
         ? Math.round(validScores.reduce((acc, s) => acc + s, 0) / validScores.length)
         : null;
-      const passCount = validScores.filter(sc => sc >= 50).length;
+      const passCount = validScores.filter(sc => sc >= 30).length;
       const passRate = hasData ? Math.round((passCount / validScores.length) * 100) : null;
       const lowCount = validScores.filter(sc => sc < 60).length;
 

@@ -30,35 +30,38 @@ class AcademicYearSerializer(serializers.ModelSerializer):
 
 class AssessmentTypeSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='assessment_type_id', read_only=True)
-    durationMonths = serializers.IntegerField(source='duration_months', read_only=True)
+    academicYearId = serializers.IntegerField(source='academic_year_id', required=False, allow_null=True)
+    academicYearName = serializers.SerializerMethodField()
     isActive = serializers.BooleanField(source='is_active', read_only=True)
 
     class Meta:
         model = AssessmentType
-        fields = ['id', 'code', 'name', 'durationMonths', 'isActive']
+        fields = ['id', 'code', 'name', 'academicYearId', 'academicYearName', 'isActive']
+
+    def get_academicYearName(self, obj):
+        return obj.academic_year.name if obj.academic_year else None
 
 
 class AssessmentSubjectSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='assessment_subject_id', read_only=True)
-    academicYearId = serializers.IntegerField(source='academic_year_id')
-    classId = serializers.IntegerField(source='class_id')
-    assessmentTypeId = serializers.IntegerField(source='assessment_type_id')
-    subjectId = serializers.IntegerField(source='subject_id')
-    maxMarks = serializers.DecimalField(source='max_marks', max_digits=6, decimal_places=2)
-    isActive = serializers.BooleanField(source='is_active')
-    subjectName = serializers.SerializerMethodField()
+    academicYearId = serializers.IntegerField(source='academic_year_id', required=False, allow_null=True)
+    centreId = serializers.IntegerField(source='centre_id', required=False, allow_null=True)
+    classId = serializers.IntegerField(source='class_id', required=False, allow_null=True)
+    examId = serializers.IntegerField(source='exam_id', required=False, allow_null=True)
+    assessmentTypeId = serializers.IntegerField(source='exam_id', required=False, allow_null=True)
+    subjectIds = serializers.JSONField(source='subject_ids', required=False)
+    maxMarks = serializers.DecimalField(source='max_marks', max_digits=6, decimal_places=2, required=False)
+    isActive = serializers.BooleanField(source='is_active', required=False)
     assessmentTypeName = serializers.SerializerMethodField()
 
     class Meta:
         model = AssessmentSubject
-        fields = ['id', 'academicYearId', 'classId', 'assessmentTypeId', 'subjectId', 'subjectName', 'assessmentTypeName', 'maxMarks', 'isActive']
-
-    def get_subjectName(self, obj):
-        subject = Subject.objects.filter(subject_id=obj.subject_id).first()
-        return subject.name if subject else None
+        fields = ['id', 'academicYearId', 'centreId', 'classId', 'examId', 'assessmentTypeId', 'subjectIds', 'assessmentTypeName', 'maxMarks', 'isActive']
 
     def get_assessmentTypeName(self, obj):
-        assessment_type = AssessmentType.objects.filter(assessment_type_id=obj.assessment_type_id).first()
+        if not obj.exam_id:
+            return None
+        assessment_type = AssessmentType.objects.filter(assessment_type_id=obj.exam_id).first()
         return assessment_type.name if assessment_type else None
 
 
@@ -73,12 +76,10 @@ class SchoolClassSerializer(serializers.ModelSerializer):
 
 class SubjectSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='subject_id', read_only=True)
-    classId = serializers.IntegerField(source='class_id', read_only=True)
-    isActive = serializers.BooleanField(source='is_active', read_only=True)
 
     class Meta:
         model = Subject
-        fields = ['id', 'name', 'code', 'classId', 'isActive']
+        fields = ['id', 'name', 'code']
 
 
 class AssessmentSerializer(serializers.ModelSerializer):
@@ -89,7 +90,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Assessment
-        fields = ['id', 'status', 'academicYear', 'class_name', 'assessmentType', 'term']
+        fields = ['id', 'status', 'academicYear', 'class_name', 'assessmentType']
 
     def get_academicYear(self, obj):
         return f'{obj.academic_year_id}-{str(obj.academic_year_id + 1)[-2:]}'
@@ -115,15 +116,20 @@ class AssessmentScoreSerializer(serializers.ModelSerializer):
 
     def get_maxMarks(self, obj):
         assessment = obj.assessment
-        config = AssessmentSubject.objects.filter(
-            academic_year_id=assessment.academic_year_id,
+        if not assessment:
+            return 100.0
+        configs = AssessmentSubject.objects.filter(
             class_id=assessment.class_id,
-            assessment_type_id=assessment.assessment_type_id,
-            subject_id=obj.subject_id,
+            exam_id=assessment.assessment_type_id,
             is_active=True,
-        ).order_by('-assessment_subject_id').first()
-        if config and config.max_marks is not None:
-            return float(config.max_marks)
+        )
+        if assessment.centre_id:
+            c_cfg = configs.filter(centre_id=assessment.centre_id).order_by('-assessment_subject_id').first()
+            if c_cfg and obj.subject_id in (c_cfg.subject_ids or []):
+                return float(c_cfg.max_marks)
+        cfg = configs.order_by('-assessment_subject_id').first()
+        if cfg and cfg.max_marks is not None and obj.subject_id in (cfg.subject_ids or []):
+            return float(cfg.max_marks)
         return 100.0
 
 

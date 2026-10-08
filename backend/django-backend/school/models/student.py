@@ -34,3 +34,19 @@ class Student(models.Model):
 
     def __str__(self):
         return self.full_name or f'Student {self.student_id}'
+
+
+class StudentYearRecord(models.Model):
+    student_year_record_id = models.AutoField(primary_key=True)
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='year_records')
+    academic_year = models.ForeignKey('school.AcademicYear', on_delete=models.CASCADE, related_name='student_year_records')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'student_year_record'
+        unique_together = ('student', 'academic_year')
+
+    def __str__(self):
+        return f"{self.student.full_name} - {self.academic_year.name}"

@@ -7,7 +7,6 @@ export interface SuccessDetails {
   assessmentId: number;
   centreName: string;
   className: string;
-  term: string;
   typeName: string;
   submittedAt: string;
   studentCount: number;
@@ -61,8 +60,8 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
             <span className="font-bold text-slate-900">{details.centreName}</span>
           </div>
           <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-            <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Class & Term</span>
-            <span className="font-bold text-slate-900">{details.className} • {details.term} ({details.typeName})</span>
+            <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Class & Exam</span>
+            <span className="font-bold text-slate-900">{details.className} • {details.typeName}</span>
           </div>
           <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
             <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Students Recorded</span>

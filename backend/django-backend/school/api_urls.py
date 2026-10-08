@@ -81,6 +81,7 @@ urlpatterns = [
     path('assessments/<int:assessment_id>/behaviours/', AssessmentBehaviourView.as_view(), name='assessment-behaviours'),
     path('assessments/<int:assessment_id>/behaviours/bulk', AssessmentBehaviourView.as_view(), name='assessment-behaviours-bulk'),
     path('assessments/<int:assessment_id>/observations/', AssessmentObservationListView.as_view(), name='assessment-observations'),
+    path('assessments/<int:assessment_id>/observations/bulk', AssessmentObservationListView.as_view(), name='assessment-observations-bulk'),
     path('assessments/<int:assessment_id>/students/<int:student_id>/observation', StudentObservationView.as_view(), name='student-observation'),
     path('assessments/<int:assessment_id>/submit', AssessmentSubmitView.as_view(), name='assessment-submit'),
     path('assessments/<int:assessment_id>/reopen', AssessmentReopenView.as_view(), name='assessment-reopen'),

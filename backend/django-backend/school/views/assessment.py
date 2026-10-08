@@ -50,14 +50,17 @@ def _get_assessment_or_404(assessment_id):
 def _subject_max_marks(assessment, subject_id):
     if assessment is None or subject_id is None:
         return Decimal('100')
-    config = AssessmentSubject.objects.filter(
-        academic_year_id=assessment.academic_year_id,
+    configs = AssessmentSubject.objects.filter(
         class_id=assessment.class_id,
-        assessment_type_id=assessment.assessment_type_id,
-        subject_id=subject_id,
+        exam_id=assessment.assessment_type_id,
         is_active=True,
-    ).order_by('-assessment_subject_id').first()
-    if config and config.max_marks is not None:
+    )
+    if assessment.centre_id:
+        c_config = configs.filter(centre_id=assessment.centre_id).order_by('-assessment_subject_id').first()
+        if c_config and c_config.max_marks is not None and subject_id in (c_config.subject_ids or []):
+            return Decimal(str(c_config.max_marks))
+    config = configs.order_by('-assessment_subject_id').first()
+    if config and config.max_marks is not None and subject_id in (config.subject_ids or []):
         return Decimal(str(config.max_marks))
     return Decimal('100')
 
@@ -78,7 +81,65 @@ class AssessmentAPIView(APIView):
 
 class AssessmentTypeListView(AssessmentAPIView):
     def get(self, request):
-        queryset = AssessmentType.objects.filter(is_active=True).order_by('assessment_type_id')
+        queryset = AssessmentType.objects.filter(is_active=True)
+        academic_year_id = request.query_params.get('academicYearId') or request.query_params.get('academic_year_id')
+        academic_year = request.query_params.get('academicYear') or request.query_params.get('academic_year')
+        class_id = request.query_params.get('classId') or request.query_params.get('class_id')
+        only_created = request.query_params.get('onlyCreated') or request.query_params.get('configuredOnly')
+
+        if academic_year_id:
+            # Include exams explicitly linked to this year OR exams with no year (legacy/global)
+            queryset = queryset.filter(Q(academic_year_id=academic_year_id) | Q(academic_year__isnull=True))
+        elif academic_year:
+            queryset = queryset.filter(
+                Q(academic_year__name__iexact=academic_year.strip()) | Q(academic_year__isnull=True)
+            )
+        else:
+            current_ay = AcademicYear.objects.filter(is_current=True).first()
+            if current_ay:
+                queryset = queryset.filter(
+                    Q(academic_year=current_ay) | Q(academic_year__isnull=True)
+                )
+
+        # Whenever class_id is passed OR only_created is true:
+        # Only show exams for which an AssessmentSubject entry exists for the selected class
+        if class_id or only_created:
+            as_qs = AssessmentSubject.objects.filter(is_active=True)
+
+            if class_id:
+                try:
+                    cid = int(class_id)
+                    as_qs = as_qs.filter(class_id=cid)
+                except ValueError:
+                    pass
+
+            if academic_year_id:
+                try:
+                    ayid = int(academic_year_id)
+                    as_qs = as_qs.filter(academic_year_id=ayid)
+                except ValueError:
+                    pass
+            elif academic_year:
+                ay_obj = AcademicYear.objects.filter(name__iexact=academic_year.strip()).first()
+                if ay_obj:
+                    as_qs = as_qs.filter(academic_year_id=ay_obj.academic_year_id)
+
+            configured_exam_ids = set(as_qs.values_list('exam_id', flat=True))
+
+            # Also check if an Assessment record exists for this class
+            a_qs = Assessment.objects.all()
+            if class_id:
+                try:
+                    cid = int(class_id)
+                    a_qs = a_qs.filter(class_id=cid)
+                except ValueError:
+                    pass
+            created_exam_ids = set(a_qs.values_list('assessment_type_id', flat=True))
+
+            valid_exam_ids = configured_exam_ids.union(created_exam_ids)
+            queryset = queryset.filter(assessment_type_id__in=valid_exam_ids)
+
+        queryset = list(queryset.order_by('assessment_type_id'))
         serializer = AssessmentTypeSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -99,75 +160,233 @@ class SchoolClassListView(AssessmentAPIView):
 
 class SubjectListView(AssessmentAPIView):
     def get(self, request):
-        class_id = request.query_params.get('classId')
-        queryset = Subject.objects.filter(is_active=True)
-        if class_id is not None:
-            queryset = queryset.filter(class_id=class_id)
-        serializer = SubjectSerializer(queryset.order_by('subject_id'), many=True)
-        return Response(serializer.data)
+        class_id = request.query_params.get('classId') or request.query_params.get('class_id')
+        exam_id = request.query_params.get('examId') or request.query_params.get('exam_id') or request.query_params.get('assessmentTypeId') or request.query_params.get('assessment_type_id')
+        centre_id = request.query_params.get('centreId') or request.query_params.get('centre_id')
+        academic_year_id = request.query_params.get('academicYearId') or request.query_params.get('academic_year_id')
+
+        as_qs = AssessmentSubject.objects.filter(is_active=True)
+        if class_id:
+            try:
+                as_qs = as_qs.filter(class_id=int(class_id))
+            except ValueError:
+                pass
+        if exam_id:
+            try:
+                as_qs = as_qs.filter(exam_id=int(exam_id))
+            except ValueError:
+                pass
+        if academic_year_id:
+            try:
+                as_qs = as_qs.filter(academic_year_id=int(academic_year_id))
+            except ValueError:
+                pass
+        if centre_id:
+            try:
+                cid = int(centre_id)
+                as_qs = as_qs.filter(Q(centre_id=cid) | Q(centre_id__isnull=True))
+            except ValueError:
+                pass
+
+        as_entries = list(as_qs)
+
+        allowed_subject_ids = set()
+        subject_max_marks_map = {}
+
+        for entry in as_entries:
+            s_ids = entry.subject_ids
+            if isinstance(s_ids, list):
+                for sid in s_ids:
+                    try:
+                        sid_int = int(sid)
+                        allowed_subject_ids.add(sid_int)
+                        if sid_int not in subject_max_marks_map or entry.centre_id is not None:
+                            subject_max_marks_map[sid_int] = float(entry.max_marks)
+                    except (ValueError, TypeError):
+                        pass
+
+        if allowed_subject_ids:
+            queryset = Subject.objects.filter(subject_id__in=allowed_subject_ids)
+        else:
+            queryset = Subject.objects.all()
+
+        subjects = list(queryset.order_by('subject_id'))
+        serializer = SubjectSerializer(subjects, many=True)
+        data = serializer.data
+
+        for subj in data:
+            subj_id = subj.get('id')
+            if subj_id in subject_max_marks_map:
+                subj['maxMarks'] = subject_max_marks_map[subj_id]
+            else:
+                subj['maxMarks'] = 100.0
+
+        return Response(data)
 
 
 class AssessmentCreateView(AssessmentAPIView):
 
     def get(self, request):
-        queryset = Assessment.objects.select_related('assessment_type', 'centre').all().order_by('-assessment_id')
-        status_param = request.query_params.get('status')
-        if status_param:
-            queryset = queryset.filter(status__iexact=status_param)
         class_id = request.query_params.get('classId')
-        if class_id:
-            queryset = queryset.filter(class_id=class_id)
         centre_id = request.query_params.get('centreId') or request.query_params.get('centre_id')
-        if centre_id:
-            queryset = queryset.filter(centre_id=centre_id)
         assessment_type_id = request.query_params.get('assessmentTypeId')
-        if assessment_type_id:
-            queryset = queryset.filter(assessment_type_id=assessment_type_id)
-        term = request.query_params.get('term')
-        if term:
-            queryset = queryset.filter(term__iexact=term.strip())
         academic_year_id = request.query_params.get('academicYearId')
-        if academic_year_id:
-            queryset = queryset.filter(academic_year_id=academic_year_id)
+        status_param = request.query_params.get('status')
+
+        ay_map = {y.academic_year_id: y.name for y in AcademicYear.objects.all()}
+        exam_map = {e.assessment_type_id: e for e in AssessmentType.objects.all()}
+
+        seen_pairs = set()
         results = []
-        for a in queryset:
+
+        # 1. Process AssessmentSubject master configs
+        as_qs = AssessmentSubject.objects.filter(is_active=True).order_by('-assessment_subject_id')
+        if class_id:
+            as_qs = as_qs.filter(class_id=class_id)
+        if assessment_type_id:
+            as_qs = as_qs.filter(exam_id=assessment_type_id)
+        if academic_year_id:
+            as_qs = as_qs.filter(academic_year_id=academic_year_id)
+
+        for as_entry in as_qs:
+            pair = (as_entry.class_id, as_entry.exam_id)
+            seen_pairs.add(pair)
+
+            exam_obj = exam_map.get(as_entry.exam_id)
+            if not exam_obj:
+                continue
+
+            ay_id = as_entry.academic_year_id or (exam_obj.academic_year_id if exam_obj else None)
+            year_name = ay_map.get(ay_id) or _format_year(ay_id)
+
+            a_filter = {
+                'class_id': as_entry.class_id,
+                'assessment_type_id': as_entry.exam_id,
+            }
+            if centre_id:
+                a_filter['centre_id'] = centre_id
+
+            a_obj = Assessment.objects.filter(**a_filter).first()
+
+            if status_param and a_obj and a_obj.status.lower() != status_param.lower():
+                continue
+            if status_param and not a_obj:
+                continue
+
+            results.append({
+                'id': a_obj.assessment_id if a_obj else as_entry.assessment_subject_id,
+                'status': a_obj.status if a_obj else 'DRAFT',
+                'academicYear': year_name,
+                'academicYearId': ay_id,
+                'class': f'Grade {as_entry.class_id}',
+                'classId': as_entry.class_id,
+                'assessmentType': exam_obj.name,
+                'assessmentTypeId': as_entry.exam_id,
+                'assessmentDate': str(a_obj.assessment_date) if (a_obj and a_obj.assessment_date) else '',
+                'centreId': a_obj.centre_id if a_obj else as_entry.centre_id,
+                'centreName': a_obj.centre.centre_name if (a_obj and a_obj.centre) else '',
+                'maxMarks': float(as_entry.max_marks) if as_entry.max_marks is not None else 100.0,
+                'subjectIds': as_entry.subject_ids or [],
+            })
+
+        # 2. Include any standalone Assessment batch records
+        a_qs = Assessment.objects.select_related('assessment_type', 'centre').all().order_by('-assessment_id')
+        if class_id:
+            a_qs = a_qs.filter(class_id=class_id)
+        if centre_id:
+            a_qs = a_qs.filter(centre_id=centre_id)
+        if assessment_type_id:
+            a_qs = a_qs.filter(assessment_type_id=assessment_type_id)
+        if academic_year_id:
+            a_qs = a_qs.filter(academic_year_id=academic_year_id)
+        if status_param:
+            a_qs = a_qs.filter(status__iexact=status_param)
+
+        for a in a_qs:
+            pair = (a.class_id, a.assessment_type_id)
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+
+            year_name = ay_map.get(a.academic_year_id) or _format_year(a.academic_year_id)
             results.append({
                 'id': a.assessment_id,
                 'status': a.status,
-                'academicYear': _format_year(a.academic_year_id),
+                'academicYear': year_name,
+                'academicYearId': a.academic_year_id,
                 'class': f'Grade {a.class_id}',
+                'classId': a.class_id,
                 'assessmentType': a.assessment_type.name if a.assessment_type else '',
-                'term': a.term,
+                'assessmentTypeId': a.assessment_type_id,
                 'assessmentDate': str(a.assessment_date) if a.assessment_date else '',
                 'centreId': a.centre_id,
                 'centreName': a.centre.centre_name if a.centre else '',
+                'maxMarks': 100.0,
+                'subjectIds': [],
             })
+
         return Response(results)
 
     def post(self, request):
         assessment_type_id = request.data.get('assessmentTypeId')
         academic_year_id = request.data.get('academicYearId')
         class_id = request.data.get('classId')
-        term = request.data.get('term')
         assessment_date = request.data.get('assessmentDate')
         centre_id = request.data.get('centreId') or request.data.get('centre_id')
 
-        if not all([assessment_type_id, academic_year_id, class_id, term, assessment_date]):
+        if not all([assessment_type_id, academic_year_id, class_id, assessment_date]):
             return Response({'error': 'required fields are missing'}, status=status.HTTP_400_BAD_REQUEST)
 
         assessment_type = AssessmentType.objects.filter(assessment_type_id=assessment_type_id).first()
         if not assessment_type:
             return Response({'error': 'assessmentTypeId not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        assessment = Assessment.objects.create(
-            academic_year_id=int(academic_year_id),
+        # Resolve valid AcademicYear ID
+        ay_id = int(academic_year_id)
+        if not AcademicYear.objects.filter(academic_year_id=ay_id).exists():
+            curr_ay = AcademicYear.objects.filter(is_current=True).first() or AcademicYear.objects.first()
+            if curr_ay:
+                ay_id = curr_ay.academic_year_id
+
+        # Match exact class_id AND centre_id if provided
+        filter_kwargs = {
+            'academic_year_id': ay_id,
+            'class_id': int(class_id),
+            'assessment_type': assessment_type,
+        }
+        if centre_id:
+            filter_kwargs['centre_id'] = int(centre_id)
+
+        assessment = Assessment.objects.filter(**filter_kwargs).first()
+
+        if not assessment:
+            assessment = Assessment.objects.create(
+                academic_year_id=ay_id,
+                class_id=int(class_id),
+                centre_id=int(centre_id) if centre_id else None,
+                assessment_type=assessment_type,
+                assessment_date=assessment_date,
+                status=Assessment.STATUS_DRAFT,
+            )
+        else:
+            assessment.assessment_date = assessment_date
+            assessment.save()
+
+        # Ensure AssessmentSubject entry exists for this class & exam
+        as_entry = AssessmentSubject.objects.filter(
             class_id=int(class_id),
-            centre_id=int(centre_id) if centre_id else None,
-            assessment_type=assessment_type,
-            term=term,
-            assessment_date=assessment_date,
-            status=Assessment.STATUS_DRAFT,
-        )
+            exam_id=int(assessment_type_id),
+        ).first()
+        if not as_entry:
+            AssessmentSubject.objects.create(
+                class_id=int(class_id),
+                exam_id=int(assessment_type_id),
+                academic_year_id=ay_id,
+                centre_id=int(centre_id) if centre_id else None,
+                max_marks=Decimal('100.00'),
+                is_active=True,
+                subject_ids=[],
+            )
 
         response = AssessmentSerializer(assessment).data
         return Response({
@@ -176,7 +395,6 @@ class AssessmentCreateView(AssessmentAPIView):
             'academicYear': response['academicYear'],
             'class': response['class_name'],
             'assessmentType': response['assessmentType'],
-            'term': assessment.term,
             'centreId': assessment.centre_id,
         })
 
@@ -187,15 +405,104 @@ class AssessmentDetailView(AssessmentAPIView):
         student_count = Student.objects.filter(assessment_scores__assessment=assessment).distinct().count()
         if not student_count:
             student_count = 0
+        as_entry = AssessmentSubject.objects.filter(
+            class_id=assessment.class_id,
+            exam_id=assessment.assessment_type_id,
+            is_active=True,
+        ).order_by('-assessment_subject_id').first()
+        subject_ids = as_entry.subject_ids if (as_entry and as_entry.subject_ids) else []
+        max_marks = float(as_entry.max_marks) if (as_entry and as_entry.max_marks is not None) else 100.0
         return Response({
             'id': assessment.assessment_id,
             'status': assessment.status,
-            'assessmentType': assessment.assessment_type.name,
-            'term': assessment.term,
+            'assessmentType': assessment.assessment_type.name if assessment.assessment_type else '',
+            'assessmentTypeId': assessment.assessment_type_id,
             'academicYear': _format_year(assessment.academic_year_id),
+            'academicYearId': assessment.academic_year_id,
             'class': f'Grade {assessment.class_id}',
+            'classId': assessment.class_id,
+            'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
+            'centreId': assessment.centre_id,
+            'centreName': assessment.centre.centre_name if assessment.centre else '',
+            'subjectIds': subject_ids,
+            'maxMarks': max_marks,
             'totalStudents': student_count,
         })
+
+    def patch(self, request, assessment_id):
+        assessment = _get_assessment_or_404(assessment_id)
+        data = request.data
+        if 'assessmentTypeId' in data and data['assessmentTypeId']:
+            assessment.assessment_type_id = int(data['assessmentTypeId'])
+        if 'academicYearId' in data and data['academicYearId']:
+            assessment.academic_year_id = int(data['academicYearId'])
+        if 'classId' in data and data['classId']:
+            assessment.class_id = int(data['classId'])
+        if 'assessmentDate' in data and data['assessmentDate']:
+            assessment.assessment_date = data['assessmentDate']
+        if 'centreId' in data:
+            cid = data['centreId']
+            assessment.centre_id = int(cid) if cid else None
+        if 'status' in data and data['status']:
+            assessment.status = data['status']
+        assessment.save()
+
+        max_m = Decimal(str(data['maxMarks'])) if ('maxMarks' in data and data['maxMarks'] is not None) else None
+
+        if ('subjectIds' in data and isinstance(data['subjectIds'], list)) or max_m is not None:
+            as_entry = AssessmentSubject.objects.filter(
+                class_id=assessment.class_id,
+                exam_id=assessment.assessment_type_id,
+            ).order_by('-assessment_subject_id').first()
+            if as_entry:
+                if 'subjectIds' in data and isinstance(data['subjectIds'], list):
+                    as_entry.subject_ids = data['subjectIds']
+                if max_m is not None:
+                    as_entry.max_marks = max_m
+                as_entry.save()
+            else:
+                AssessmentSubject.objects.create(
+                    class_id=assessment.class_id,
+                    exam_id=assessment.assessment_type_id,
+                    academic_year_id=assessment.academic_year_id,
+                    centre_id=assessment.centre_id,
+                    subject_ids=data.get('subjectIds', []),
+                    max_marks=max_m if max_m is not None else Decimal('100'),
+                    is_active=True,
+                )
+
+        return Response({
+            'id': assessment.assessment_id,
+            'status': assessment.status,
+            'assessmentType': assessment.assessment_type.name if assessment.assessment_type else '',
+            'assessmentTypeId': assessment.assessment_type_id,
+            'academicYear': _format_year(assessment.academic_year_id),
+            'academicYearId': assessment.academic_year_id,
+            'class': f'Grade {assessment.class_id}',
+            'classId': assessment.class_id,
+            'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
+            'centreId': assessment.centre_id,
+            'message': 'Assessment updated successfully',
+        })
+
+    def delete(self, request, assessment_id):
+        a_obj = Assessment.objects.filter(assessment_id=assessment_id).first()
+        if a_obj:
+            class_id = a_obj.class_id
+            exam_id = a_obj.assessment_type_id
+            a_obj.delete()
+            AssessmentSubject.objects.filter(class_id=class_id, exam_id=exam_id).delete()
+            return Response({'message': 'Assessment deleted successfully'}, status=status.HTTP_200_OK)
+
+        as_obj = AssessmentSubject.objects.filter(assessment_subject_id=assessment_id).first()
+        if as_obj:
+            class_id = as_obj.class_id
+            exam_id = as_obj.exam_id
+            as_obj.delete()
+            Assessment.objects.filter(class_id=class_id, assessment_type_id=exam_id).delete()
+            return Response({'message': 'Assessment deleted successfully'}, status=status.HTTP_200_OK)
+
+        return Response({'error': 'Assessment not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class AssessmentScoreBulkView(AssessmentAPIView):
@@ -383,6 +690,29 @@ class AssessmentObservationListView(AssessmentAPIView):
             'interventionPlan': row.intervention_plan,
         } for row in rows]})
 
+    def put(self, request, assessment_id):
+        assessment = _get_assessment_or_404(assessment_id)
+        saved = 0
+        for item in request.data.get('students', []):
+            student = Student.objects.filter(student_id=item.get('studentId')).first()
+            if not student:
+                continue
+            key_improvements = item.get('keyImprovements') or item.get('comments') or ''
+            subjects_needing_support = item.get('subjectsNeedingSupport') or ''
+            intervention_plan = item.get('interventionPlan') or ''
+
+            StudentObservation.objects.update_or_create(
+                assessment=assessment,
+                student=student,
+                defaults={
+                    'key_improvements': key_improvements,
+                    'subjects_needing_support': subjects_needing_support,
+                    'intervention_plan': intervention_plan,
+                },
+            )
+            saved += 1
+        return Response({'assessmentId': assessment.assessment_id, 'saved': saved, 'status': 'SUCCESS'})
+
 
 class StudentObservationView(AssessmentAPIView):
     def get(self, request, assessment_id, student_id):
@@ -406,18 +736,17 @@ class StudentObservationView(AssessmentAPIView):
         if not student:
             return Response({'error': 'student not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        required_fields = ['keyImprovements', 'subjectsNeedingSupport', 'interventionPlan']
-        for field in required_fields:
-            if not request.data.get(field):
-                return Response({'error': f'{field} is required'}, status=status.HTTP_400_BAD_REQUEST)
+        key_improvements = request.data.get('keyImprovements') or request.data.get('comments') or ''
+        subjects_needing_support = request.data.get('subjectsNeedingSupport') or ''
+        intervention_plan = request.data.get('interventionPlan') or ''
 
         observation, _ = StudentObservation.objects.update_or_create(
             assessment=assessment,
             student=student,
             defaults={
-                'key_improvements': request.data.get('keyImprovements'),
-                'subjects_needing_support': request.data.get('subjectsNeedingSupport'),
-                'intervention_plan': request.data.get('interventionPlan'),
+                'key_improvements': key_improvements,
+                'subjects_needing_support': subjects_needing_support,
+                'intervention_plan': intervention_plan,
             },
         )
         return Response({
@@ -433,11 +762,15 @@ class AssessmentSubmitView(AssessmentAPIView):
         assessment = _get_assessment_or_404(assessment_id)
         student_ids = set(Student.objects.filter(assessment_scores__assessment=assessment).values_list('student_id', flat=True).distinct())
         
-        class_subjects = Subject.objects.filter(is_active=True)
-        if assessment.class_id:
-            class_subjects = class_subjects.filter(class_id=assessment.class_id)
-        if not class_subjects.exists():
-            class_subjects = Subject.objects.filter(is_active=True)
+        as_entry = AssessmentSubject.objects.filter(
+            class_id=assessment.class_id,
+            exam_id=assessment.assessment_type_id,
+            is_active=True,
+        ).order_by('-assessment_subject_id').first()
+        if as_entry and as_entry.subject_ids:
+            class_subjects = Subject.objects.filter(subject_id__in=as_entry.subject_ids)
+        else:
+            class_subjects = Subject.objects.all()
         
         scores = AssessmentScore.objects.filter(assessment=assessment)
         diagnostics = AssessmentDiagnostic.objects.filter(assessment=assessment)
@@ -452,8 +785,51 @@ class AssessmentSubmitView(AssessmentAPIView):
             type_name = assessment.assessment_type.name if assessment.assessment_type else 'Quarterly'
             missing_str = ', '.join(missing_subjects)
             return Response({
-                'error': f"Not all subjects for Class {assessment.class_id} (Type: {type_name}, Term: {assessment.term}) have been completed (Missing: {missing_str}). Please save progress as draft instead."
+                'error': f"Not all subjects for Class {assessment.class_id} (Type: {type_name}) have been completed (Missing: {missing_str}). Please save progress as draft instead."
             }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Auto-create defaults for missing secondary components if students have scores
+        if not diagnostics.exists() and scores.exists():
+            for score in scores:
+                AssessmentDiagnostic.objects.get_or_create(
+                    assessment=assessment,
+                    student=score.student,
+                    subject=score.subject,
+                    defaults={
+                        'understanding_level': 'GOOD',
+                        'application_ability': 'GOOD',
+                        'interest_level': 'HIGH',
+                    }
+                )
+            diagnostics = AssessmentDiagnostic.objects.filter(assessment=assessment)
+
+        if not behaviours.exists() and student_ids:
+            default_behaviour = LearningBehaviourOption.objects.filter(code='INDEPENDENT').first() or LearningBehaviourOption.objects.first()
+            if default_behaviour:
+                for sid in student_ids:
+                    st = Student.objects.filter(student_id=sid).first()
+                    if st:
+                        StudentLearningBehaviour.objects.get_or_create(
+                            assessment=assessment,
+                            student=st,
+                            defaults={'behaviour_option': default_behaviour}
+                        )
+                behaviours = StudentLearningBehaviour.objects.filter(assessment=assessment)
+
+        if not observations.exists() and student_ids:
+            for sid in student_ids:
+                st = Student.objects.filter(student_id=sid).first()
+                if st:
+                    StudentObservation.objects.get_or_create(
+                        assessment=assessment,
+                        student=st,
+                        defaults={
+                            'key_improvements': 'General observation recorded.',
+                            'subjects_needing_support': '',
+                            'intervention_plan': '',
+                        }
+                    )
+            observations = StudentObservation.objects.filter(assessment=assessment)
 
         missing = []
         if not scores.exists() or not student_ids:
@@ -474,11 +850,10 @@ class AssessmentSubmitView(AssessmentAPIView):
         assessment.save(update_fields=['status', 'updated_at'])
         AssessmentSubmission.objects.update_or_create(assessment=assessment, defaults={'submitted_by': request.user.username if hasattr(request, 'user') else 'system'})
 
-        # Delete any other leftover draft assessments for the same class, assessment type, and term
+        # Delete any other leftover draft assessments for the same class and assessment type
         other_drafts = Assessment.objects.filter(
             class_id=assessment.class_id,
             assessment_type_id=assessment.assessment_type_id,
-            term__iexact=assessment.term,
             status=Assessment.STATUS_DRAFT,
         ).exclude(assessment_id=assessment.assessment_id)
         other_drafts.delete()
@@ -530,7 +905,7 @@ class ComparisonView(AssessmentAPIView):
         trend = 'UP' if change > 0 else 'DOWN' if change < 0 else 'STABLE'
 
         return Response({
-            'current': {'assessment': f'{assessment.assessment_type.name} {assessment.term}', 'percentage': float(current_percentage)},
+            'current': {'assessment': f'{assessment.assessment_type.name}', 'percentage': float(current_percentage)},
             'previous': {'assessment': previous_assessment.assessment_type.name if previous_assessment else 'N/A', 'percentage': float(previous_percentage)},
             'change': {'percentagePoints': float(change), 'trend': trend},
         })
@@ -551,9 +926,15 @@ class SubjectComparisonView(AssessmentAPIView):
         assessment = _get_assessment_or_404(assessment_id)
         previous_assessment = Assessment.objects.filter(class_id=assessment.class_id, assessment_date__lt=assessment.assessment_date).order_by('-assessment_date').first()
         subject_list = []
-        subjects = Subject.objects.filter(is_active=True)
-        if assessment.class_id:
-            subjects = subjects.filter(class_id=assessment.class_id)
+        as_entry = AssessmentSubject.objects.filter(
+            class_id=assessment.class_id,
+            exam_id=assessment.assessment_type_id,
+            is_active=True,
+        ).order_by('-assessment_subject_id').first()
+        if as_entry and as_entry.subject_ids:
+            subjects = Subject.objects.filter(subject_id__in=as_entry.subject_ids)
+        else:
+            subjects = Subject.objects.all()
         for subject in subjects:
             current = AssessmentScore.objects.filter(assessment=assessment, subject=subject)
             if not current.exists():
@@ -625,7 +1006,7 @@ class StudentPerformanceTrendView(AssessmentAPIView):
             total = float(score.obtained_marks)
             max_value = float(_subject_max_marks(score.assessment, score.subject_id))
             rows.append({
-                'assessment': f'{score.assessment.assessment_type.name} {score.assessment.term}',
+                'assessment': f'{score.assessment.assessment_type.name}',
                 'percentage': float(_percentage(total, max_value)),
             })
         return Response(rows)

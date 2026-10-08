@@ -52,8 +52,13 @@ export const ComparativeAnalyticsTab: React.FC<ComparativeAnalyticsTabProps> = (
   displaySubjectTrends,
   diagnosticSummary,
 }) => {
-  const highestSubject = displaySubjectTrends[0];
-  const lowestSubject = displaySubjectTrends[displaySubjectTrends.length - 1];
+  const sortedSubjectTrends = React.useMemo(() => {
+    if (!displaySubjectTrends || displaySubjectTrends.length === 0) return [];
+    return [...displaySubjectTrends].sort((a, b) => b.currentScore - a.currentScore);
+  }, [displaySubjectTrends]);
+
+  const highestSubject = sortedSubjectTrends[0];
+  const lowestSubject = sortedSubjectTrends[sortedSubjectTrends.length - 1];
 
   return (
     <div className="space-y-6">

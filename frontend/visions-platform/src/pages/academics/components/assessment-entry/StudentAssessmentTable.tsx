@@ -1,6 +1,6 @@
-import React, { Fragment } from 'react';
+import React from 'react';
 import {
-  CheckCircle2, Search, ChevronDown, ChevronUp, Sparkles, Save, RotateCcw, Trash2
+  CheckCircle2, Search, ChevronDown, Sparkles, Save, RotateCcw, Trash2
 } from 'lucide-react';
 import {
   type StudentListItem,
@@ -13,9 +13,6 @@ import { ExpandedStudentCard, type StudentAssessmentData } from './ExpandedStude
 
 export type StatusFilter = 'All' | 'Incomplete' | 'Completed' | 'Needs Attention';
 
-/**
- * Props for StudentAssessmentTable component.
- */
 interface StudentAssessmentTableProps {
   stats: { total: number; completed: number; percentage: number };
   currentCentre?: AttendanceCentre;
@@ -30,7 +27,7 @@ interface StudentAssessmentTableProps {
   onClearCurrentEntries: () => void;
   filteredStudents: StudentListItem[];
   studentData: Record<string, StudentAssessmentData>;
-  selectedSubject?: Subject;
+  subjects: Subject[];
   maxMarks: number;
   expandedStudentId: string | null;
   onToggleExpandStudent: (studentId: string | null) => void;
@@ -40,13 +37,9 @@ interface StudentAssessmentTableProps {
   saveSingleStudent: (studentId: string) => Promise<void>;
   diagnostics: DiagnosticOptions | null;
   behaviours: LearningBehaviourOption[];
-  getUnderstandingBadge: (studentId: string) => React.ReactNode;
+  getUnderstandingBadge?: (studentId: string) => React.ReactNode;
 }
 
-/**
- * StudentAssessmentTable component.
- * Displays progress stats, search, quick action dropdown, and the main student marks entry table.
- */
 export const StudentAssessmentTable: React.FC<StudentAssessmentTableProps> = ({
   stats,
   currentCentre,
@@ -61,7 +54,7 @@ export const StudentAssessmentTable: React.FC<StudentAssessmentTableProps> = ({
   onClearCurrentEntries,
   filteredStudents,
   studentData,
-  selectedSubject,
+  subjects,
   maxMarks,
   expandedStudentId,
   onToggleExpandStudent,
@@ -71,13 +64,12 @@ export const StudentAssessmentTable: React.FC<StudentAssessmentTableProps> = ({
   saveSingleStudent,
   diagnostics,
   behaviours,
-  getUnderstandingBadge,
 }) => {
   return (
-    <>
-      {/* Sub-Header Toolbar */}
+    <div className="space-y-4">
+      {/* Sub-Header Progress & Filter Toolbar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-1">
-        {/* Progress & Centre Label */}
+        {/* Progress & Stats */}
         <div className="flex items-center gap-3">
           <span className="p-1 rounded bg-slate-100 text-slate-500">
             <CheckCircle2 size={16} className="text-slate-600" />
@@ -85,20 +77,22 @@ export const StudentAssessmentTable: React.FC<StudentAssessmentTableProps> = ({
           <span className="text-xs font-semibold text-slate-700">
             {stats.completed} of {stats.total} students completed
           </span>
-          <div className="w-32 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+          <div className="w-48 bg-slate-200 rounded-full h-2 overflow-hidden">
             <div
               className="bg-indigo-600 h-full rounded-full transition-all duration-300"
               style={{ width: `${stats.percentage}%` }}
             />
           </div>
-          <span className="text-xs font-bold text-slate-600">{stats.percentage}%</span>
-          <span className="text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-medium hidden sm:inline-block">
-            {currentCentre?.name}
-          </span>
+          <span className="text-xs font-bold text-slate-700">{stats.percentage}%</span>
+          {currentCentre && (
+            <span className="text-xs px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-500 font-medium hidden sm:inline-block">
+              {currentCentre.name}
+            </span>
+          )}
         </div>
 
         {/* Search, Filter, Quick Actions */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Search */}
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -107,30 +101,30 @@ export const StudentAssessmentTable: React.FC<StudentAssessmentTableProps> = ({
               placeholder="Search students..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-48 shadow-2xs"
+              className="pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-48 shadow-2xs"
             />
           </div>
 
-          {/* Filter */}
+          {/* Status Filter */}
           <div className="relative">
             <select
               value={statusFilter}
               onChange={(e) => onStatusFilterChange(e.target.value as StatusFilter)}
-              className="appearance-none bg-white border border-slate-200 text-slate-700 py-1.5 pl-3 pr-7 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+              className="appearance-none bg-white border border-slate-200 text-slate-700 py-1.5 pl-3 pr-7 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-2xs"
             >
               <option value="All">Filter: All</option>
               <option value="Incomplete">Filter: Incomplete</option>
               <option value="Completed">Filter: Completed</option>
               <option value="Needs Attention">Filter: Needs Attention</option>
             </select>
-            <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
 
           {/* Quick Actions Dropdown */}
           <div className="relative">
-            <button 
+            <button
               onClick={onToggleQuickActions}
-              className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+              className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-medium hover:bg-slate-50 transition shadow-2xs cursor-pointer"
             >
               <Sparkles size={13} className="text-slate-600" />
               Quick Actions
@@ -167,128 +161,142 @@ export const StudentAssessmentTable: React.FC<StudentAssessmentTableProps> = ({
         </div>
       </div>
 
-      {/* Gradebook Table */}
-      <div className="bg-white border border-slate-200/80 rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
-            <thead>
-              <tr className="border-b border-slate-200/80 text-[11px] font-semibold text-slate-500 uppercase tracking-wider bg-white">
-                <th className="py-3 px-3 w-8 text-center">#</th>
-                <th className="py-3 px-4">Student Name</th>
-                <th className="py-3 px-4">Marks ( / {maxMarks}) <span className="text-rose-500 font-bold">*</span></th>
-                <th className="py-3 px-4">Understanding / Narrative <span className="text-rose-500 font-bold">*</span></th>
-                <th className="py-3 px-4">Last Updated</th>
-                <th className="py-3 px-3 w-10 text-center"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
-              {filteredStudents.map((student, index) => {
-                const data = studentData[student.id] ?? {
-                  scores: {},
-                  diagnostics: {},
-                  behaviour: 'INDEPENDENT',
-                  keyImprovements: '',
-                  subjectsNeedingSupport: '',
-                  interventionPlan: '',
-                  comments: '',
-                };
-                const score = selectedSubject ? (data.scores[selectedSubject.id] ?? '') : '';
-                const isExpanded = expandedStudentId === student.id;
-
-                return (
-                  <Fragment key={student.id}>
-                    <tr className={`hover:bg-slate-50/70 transition-colors ${isExpanded ? 'bg-slate-50/90' : ''}`}>
-                      <td className="py-3.5 px-3 text-center text-xs text-slate-400 font-medium">
-                        {index + 1}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-xs flex-shrink-0 border border-amber-200">
-                            {student.name.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="font-semibold text-slate-900 text-xs">
-                              {student.name}
-                            </div>
-                            <div className="text-[11px] text-slate-400">
-                              {student.centre || currentCentre?.name}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="number"
-                            min="0"
-                            max={maxMarks}
-                            value={score}
-                            onChange={(e) => {
-                              if (selectedSubject) {
-                                updateScore(student.id, selectedSubject.id, e.target.value === '' ? '' : Number(e.target.value));
-                              }
-                            }}
-                            className="w-14 h-7 px-2 border border-slate-200 rounded-md text-xs font-semibold text-slate-800 text-center focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none bg-white"
-                            placeholder="—"
-                          />
-                          <span className="text-xs text-slate-400 font-medium">/ {maxMarks}</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        {getUnderstandingBadge(student.id)}
-                      </td>
-                      <td className="py-3.5 px-4 text-xs text-slate-500 font-normal whitespace-nowrap">
-                        {data.lastUpdated || '—'}
-                      </td>
-                      <td className="py-3.5 px-3 text-center">
-                        <button
-                          onClick={() => onToggleExpandStudent(isExpanded ? null : student.id)}
-                          className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition cursor-pointer"
-                          aria-label={isExpanded ? 'Collapse' : 'Expand'}
-                        >
-                          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        </button>
-                      </td>
-                    </tr>
-
-                    {/* Expanded Student Card Row */}
-                    {isExpanded && selectedSubject && (
-                      <tr>
-                        <td colSpan={6} className="p-3 bg-indigo-50/20 border-y border-indigo-100">
-                          <ExpandedStudentCard
-                            student={student}
-                            data={data}
-                            subject={selectedSubject}
-                            maxMarks={maxMarks}
-                            diagnostics={diagnostics}
-                            behaviours={behaviours}
-                            onUpdate={(updates) => updateStudentData(student.id, updates)}
-                            onScoreChange={(value) => updateScore(student.id, selectedSubject.id, value)}
-                            onDiagnosticChange={(field, value) => updateDiagnostic(student.id, selectedSubject.id, field, value)}
-                            onClose={() => onToggleExpandStudent(null)}
-                            filteredStudents={filteredStudents}
-                            currentStudentIndex={filteredStudents.findIndex((s) => s.id === student.id)}
-                            onNavigateStudent={async (targetId) => {
-                              await saveSingleStudent(student.id);
-                              onToggleExpandStudent(targetId);
-                            }}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredStudents.length === 0 && (
-          <div className="text-center py-12 text-slate-400 text-xs font-medium">
-            No students found for {currentCentre?.name || 'this Centre'} matching your search or filters.
+      {/* Student Cards List */}
+      <div className="space-y-3">
+        {filteredStudents.length === 0 ? (
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-8 text-center text-slate-500 text-xs font-medium">
+            No students found matching current filters.
           </div>
+        ) : (
+          filteredStudents.map((student, index) => {
+            const data = studentData[student.id] ?? {
+              scores: {},
+              diagnostics: {},
+              behaviour: 'INDEPENDENT',
+              keyImprovements: '',
+              subjectsNeedingSupport: '',
+              interventionPlan: '',
+              comments: '',
+            };
+            const isExpanded = expandedStudentId === student.id;
+
+            // Compute total obtained marks for collapsed card readout
+            const totalObtained = (subjects || []).reduce((sum, s) => {
+              const val = data?.scores?.[s.id];
+              return sum + (typeof val === 'number' ? val : 0);
+            }, 0);
+            const allScoresFilled = (subjects || []).length > 0 && (subjects || []).every((s) => {
+              const val = data?.scores?.[s.id];
+              return typeof val === 'number' && val >= 0;
+            });
+            const hasBehaviour = !!data?.behaviour && data.behaviour !== '';
+            const hasRemarks = !!(data?.keyImprovements || data?.comments);
+            const isComplete = allScoresFilled && hasBehaviour && hasRemarks;
+            const hasAnyData = Object.values(data?.scores || {}).some((v) => typeof v === 'number' && v >= 0);
+
+            const displaySubjects: Subject[] = subjects || [];
+            const visibleSubjects = displaySubjects.slice(0, 5);
+            const extraSubjectsCount = displaySubjects.length > 5 ? displaySubjects.length - 5 : 0;
+
+            return (
+              <div key={student.id}>
+                {isExpanded ? (
+                  <ExpandedStudentCard
+                    student={student}
+                    data={data}
+                    subjects={subjects}
+                    diagnostics={diagnostics}
+                    behaviours={behaviours}
+                    onUpdate={(updates) => updateStudentData(student.id, updates)}
+                    onScoreChange={(subId, val) => updateScore(student.id, subId, val)}
+                    onDiagnosticChange={(field, val) => updateDiagnostic(student.id, subjects[0]?.id || 1, field, val)}
+                    onClose={() => onToggleExpandStudent(null)}
+                    onSaveStudent={() => saveSingleStudent(student.id)}
+                    filteredStudents={filteredStudents}
+                    currentStudentIndex={index}
+                    onNavigateStudent={async (targetId) => {
+                      await saveSingleStudent(student.id);
+                      onToggleExpandStudent(targetId);
+                    }}
+                  />
+                ) : (
+                  <div
+                    onClick={() => onToggleExpandStudent(student.id)}
+                    className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs hover:border-indigo-300 hover:shadow-md hover:bg-indigo-50/30 transition-all duration-200 cursor-pointer space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      {/* Left: Index + Avatar + Name */}
+                      <div className="flex items-center gap-3.5">
+                        <span className="text-xs font-semibold text-slate-400 w-4 text-center">
+                          {index + 1}
+                        </span>
+                        <div className="w-10 h-10 rounded-full bg-amber-100 border border-amber-300 text-amber-900 font-bold flex items-center justify-center text-xs shrink-0 shadow-2xs">
+                          {student.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900 text-xs">
+                            {student.name}
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Student ID: {student.id}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Total Score + Percentage + Status */}
+                      <div className="flex items-center gap-4 sm:justify-end">
+                        <div className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 rounded-xl">
+                          {hasAnyData ? totalObtained : '-'} <span className="font-medium text-slate-400">/ {maxMarks}</span>
+                        </div>
+
+                        {hasAnyData && (
+                          <div className="text-xs font-bold bg-indigo-50 border border-indigo-200/80 text-indigo-700 px-3 py-1.5 rounded-xl">
+                            {maxMarks > 0 ? Math.round((totalObtained / maxMarks) * 100) : 0}%
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-1.5 text-xs font-semibold">
+                          <span className={`w-2 h-2 rounded-full ${isComplete ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                          <span className={isComplete ? 'text-emerald-700' : 'text-rose-600'}>
+                            {isComplete ? 'Complete' : 'Incomplete'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Subject-wise marks row */}
+                    <div className="flex flex-wrap items-center gap-2 pl-[3.75rem]">
+                      {visibleSubjects.map((sub) => {
+                        const val = data?.scores?.[sub.id];
+                        const filled = typeof val === 'number' && val >= 0;
+                        return (
+                          <div
+                            key={sub.id}
+                            className={`text-[11px] px-2.5 py-1 rounded-lg border ${
+                              filled
+                                ? 'bg-slate-50 border-slate-200 text-slate-700 font-medium'
+                                : 'bg-slate-50/50 border-dashed border-slate-200 text-slate-400'
+                            }`}
+                          >
+                            <span className="font-semibold">{sub.name}:</span>{' '}
+                            <span className="font-bold">{filled ? val : '-'}</span>
+                            <span className="font-normal text-slate-400">/{sub.maxMarks || 100}</span>
+                          </div>
+                        );
+                      })}
+                      {extraSubjectsCount > 0 && (
+                        <div className="text-[11px] px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold shadow-2xs">
+                          +{extraSubjectsCount}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
-    </>
+    </div>
   );
 };
