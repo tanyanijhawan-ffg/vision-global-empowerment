@@ -4,13 +4,14 @@ export interface AppUser {
   id: string;
   name: string;
   email: string;
+  mobile_number?: string;
   role: Role;
   region: string;
   centre: string;
   status: 'Active' | 'Inactive';
 }
 
-export type BackendRoleName = 'super_admin' | 'regional_admin' | 'facilitator';
+export type BackendRoleName = 'super_admin' | 'regional_admin' | 'community_educator' | 'facilitator';
 
 const AUTH_TOKEN_KEY = 'vge_auth_token';
 
@@ -29,10 +30,15 @@ export const clearAuthToken = () => {
 
 export function normalizeRole(role?: string | null): Role {
   switch (role) {
+    case 'SUPER_ADMIN':
     case 'super_admin':
       return 'SUPER_ADMIN';
+    case 'REGIONAL_ADMIN':
     case 'regional_admin':
       return 'REGIONAL_ADMIN';
+    case 'COMMUNITY_EDUCATOR':
+    case 'community_educator':
+    case 'FACILITATOR':
     case 'facilitator':
       return 'FACILITATOR';
     default:
@@ -43,7 +49,12 @@ export function normalizeRole(role?: string | null): Role {
 export const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
   REGIONAL_ADMIN: 'Regional Admin',
-  FACILITATOR: 'Facilitator',
+  FACILITATOR: 'Community Educator',
+};
+
+export const getRoleLabel = (role?: string | null) => {
+  const normalized = normalizeRole(role);
+  return ROLE_LABELS[normalized] ?? 'Community Educator';
 };
 
 export const ROLE_HIERARCHY: Record<Role, number> = {
@@ -56,8 +67,13 @@ export const getCurrentUser = (): AppUser | null => {
   try {
     const raw = localStorage.getItem('vge_user');
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as AppUser;
-    return parsed && parsed.email ? parsed : null;
+    const parsed = JSON.parse(raw) as AppUser & { role?: string };
+    if (!parsed || !parsed.email) return null;
+
+    return {
+      ...parsed,
+      role: normalizeRole(parsed.role),
+    };
   } catch {
     return null;
   }
@@ -73,6 +89,7 @@ export const setCurrentUserFromApi = (payload: {
   username?: string;
   email?: string;
   full_name?: string;
+  mobile_number?: string | null;
   role?: string;
   region_id?: number | null;
   region_name?: string | null;
@@ -82,6 +99,7 @@ export const setCurrentUserFromApi = (payload: {
     id: String(backendUser.id ?? backendUser.username ?? 'unknown'),
     name: backendUser.full_name || backendUser.username || 'User',
     email: backendUser.email || backendUser.username || '',
+    mobile_number: backendUser.mobile_number || '',
     role: normalizeRole(backendUser.role),
     region: backendUser.region_name || 'All',
     centre: 'All',

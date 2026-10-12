@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './auth';
+
 export interface StudentListItem {
   id: string;
   name: string;
@@ -38,6 +40,20 @@ export interface AttendanceRecord {
   what_was_different: string | null;
   any_concern: string | null;
   any_positive_change: string | null;
+}
+
+export interface AbsenceAlert {
+  student_id: number;
+  student_name: string;
+  centre_name: string;
+  consecutive_absent_days: number;
+  last_absent_date: string;
+}
+
+export interface AbsenceAlertSummary {
+  enabled: boolean;
+  threshold_days: number;
+  alerts: AbsenceAlert[];
 }
 
 export interface AttendanceInput {
@@ -118,7 +134,9 @@ export async function saveAttendanceBulk(date: string, centre: number, attendanc
     body: JSON.stringify({ date, centre, attendance: attendance.map(({ student_id, ...record }) => ({ student: student_id, ...record, reason: record.absence_reason })) }),
   });
   if (!response.ok) throw new Error(`Failed to save attendance (${response.status})`);
-  return response.json() as Promise<AttendanceRecord[]>;
+  const records = await response.json() as AttendanceRecord[];
+  window.dispatchEvent(new Event('vge-attendance-change'));
+  return records;
 }
 
 export async function fetchAttendanceCentres(): Promise<AttendanceCentre[]> {
@@ -262,6 +280,14 @@ export async function fetchAttendance(params: { date?: string; centreId?: string
   return Array.isArray(payload) ? payload : payload.results ?? [];
 }
 
+export async function fetchAbsenceAlerts(): Promise<AbsenceAlertSummary> {
+  const response = await fetch(`${getApiBaseUrl()}/attendance/alerts/absence/`, {
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  });
+  if (!response.ok) throw new Error(`Failed to load absence notifications (${response.status})`);
+  return response.json() as Promise<AbsenceAlertSummary>;
+}
+
 export async function saveAttendance(input: AttendanceInput): Promise<AttendanceRecord> {
   const response = await fetch(`${getApiBaseUrl()}/attendance/record/`, {
     method: 'POST',
@@ -272,7 +298,9 @@ export async function saveAttendance(input: AttendanceInput): Promise<Attendance
     const detail = await response.json().catch(() => null) as { detail?: string } | null;
     throw new Error(detail?.detail || `Failed to save attendance (${response.status})`);
   }
-  return response.json() as Promise<AttendanceRecord>;
+  const record = await response.json() as AttendanceRecord;
+  window.dispatchEvent(new Event('vge-attendance-change'));
+  return record;
 }
 
 export async function fetchStudents(): Promise<StudentListItem[]> {

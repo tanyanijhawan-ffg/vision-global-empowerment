@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCurrentUser, getRouteAccess, getUserInitials } from '../lib/auth';
+import { getCurrentUser, getRoleLabel, getRouteAccess, getUserInitials } from '../lib/auth';
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(' ');
 
@@ -55,6 +55,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
   const location = useLocation();
   const [currentUser, setCurrentUser] = useState(getCurrentUser);
   const userRole = currentUser?.role ?? 'FACILITATOR';
+  const displayRole = getRoleLabel(currentUser?.role);
 
   useEffect(() => {
     const refreshUser = () => setCurrentUser(getCurrentUser());
@@ -195,7 +196,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
           {isOpen && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">{currentUser?.name || 'User'}</p>
-              <p className="text-xs text-slate-400 truncate">{currentUser?.role === 'SUPER_ADMIN' ? 'Super Admin' : currentUser?.role === 'REGIONAL_ADMIN' ? 'Regional Admin' : 'Facilitator'}</p>
+              <p className="text-xs text-slate-400 truncate">{displayRole}</p>
             </div>
           )}
         </div>
