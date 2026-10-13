@@ -26,6 +26,7 @@ const navItems = [
     children: [
       { name: 'Regions', path: '/masters/regions' },
       { name: 'Centres', path: '/masters/centres' },
+      { name: 'Assessments', path: '/masters/assessments' },
     ]
   },
   { name: 'Students', icon: Users, path: '/students' },
@@ -42,8 +43,7 @@ const navItems = [
     icon: GraduationCap, 
     children: [
       { name: 'Dashboard', path: '/academics' },
-      { name: 'Entry', path: '/academics/entry' },
-      { name: 'Tracking', path: '/academics/tracking' },
+      { name: 'Entry', path: '/academics/entry' }
     ]
   },
   { name: 'Reports', icon: BarChart3, path: '/reports' },

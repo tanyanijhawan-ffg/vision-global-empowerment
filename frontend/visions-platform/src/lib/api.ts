@@ -110,6 +110,8 @@ export interface StudentRecord extends Omit<StudentCreateInput, 'photo' | 'centr
   vulnerabilities?: Array<{ name: string; remarks?: string | null }>;
   motivations?: Array<{ category: string; reason: string; narrative?: string | null }>;
   aspirations?: Array<{ career_goal?: string | null; interests?: string | null; strengths?: string | null }>;
+  attendancePercent?: number;
+  academicScore?: number;
 }
 
 export interface AttendanceIntelligenceSetting {
@@ -231,6 +233,89 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentA
   return response.json() as Promise<StudentApiRecord>;
 }
 
+export interface AcademicYear {
+  id: number;
+  name: string;
+  isCurrent?: boolean;
+}
+
+export interface AssessmentType {
+  id: number;
+  code: string;
+  name: string;
+  academicYearId?: number | null;
+  academicYearName?: string | null;
+  isActive?: boolean;
+}
+
+export interface Subject {
+  id: number;
+  name: string;
+  code?: string;
+}
+
+export interface Assessment {
+  id: number;
+  status: string;
+  academicYear: string;
+  academicYearId?: number;
+  class: string;
+  classId?: number;
+  assessmentType: string;
+  assessmentTypeId?: number;
+  assessmentDate?: string;
+  centreId?: number | null;
+  centreName?: string;
+  maxMarks?: number;
+  totalStudents?: number;
+}
+
+export interface AssessmentScoreInput {
+  subjectId: number;
+  obtainedMarks: number;
+  maxMarks?: number;
+}
+
+export interface AssessmentStudentScores {
+  studentId: number;
+  admissionNumber?: string;
+  studentName?: string;
+  scores: Array<AssessmentScoreInput & { subject?: string; maxMarks: number }>;
+  total?: number;
+  totalMarks?: number;
+  maxMarks?: number;
+  percentage: number;
+}
+
+export interface DiagnosticOptions {
+  understandingLevels: Array<{ code: string; name: string }>;
+  applicationAbilities: Array<{ code: string; name: string }>;
+  interestLevels: Array<{ code: string; name: string }>;
+}
+
+export interface LearningBehaviourOption {
+  code: string;
+  name: string;
+}
+
+export interface AssessmentObservation {
+  studentId: number;
+  keyImprovements: string;
+  subjectsNeedingSupport: string;
+  interventionPlan: string;
+  comments?: string;
+}
+
+export interface AssessmentStatistics {
+  studentCount: number;
+  averagePercentage: number;
+  previousAverage: number;
+  improvement: number;
+  highestPercentage: number;
+  lowestPercentage: number;
+  passPercentage: number;
+}
+
 function getApiBaseUrl(): string {
   const configuredUrl = import.meta.env.VITE_API_BASE_URL?.trim();
   if (configuredUrl) {
@@ -303,19 +388,260 @@ export async function saveAttendance(input: AttendanceInput): Promise<Attendance
   return record;
 }
 
-export async function fetchStudents(): Promise<StudentListItem[]> {
-  const response = await fetch(`${getApiBaseUrl()}/students/`, {
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    ...init,
     headers: {
       Accept: "application/json",
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...init?.headers,
     },
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to load students (${response.status})`);
+    let message = `Request failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as Record<string, unknown>;
+      if (payload && typeof payload === 'object') {
+        if (typeof payload.error === 'string') {
+          message = payload.error;
+        } else if (typeof payload.detail === 'string') {
+          message = payload.detail;
+        } else {
+          const details = Object.entries(payload)
+            .map(([field, errs]) => {
+              const errStr = Array.isArray(errs) ? errs.join(', ') : String(errs);
+              return `${field}: ${errStr}`;
+            })
+            .join('; ');
+          if (details) {
+            message = details;
+          }
+        }
+        if (Array.isArray(payload.missing) && payload.missing.length > 0) {
+          message += ` Missing: ${payload.missing.join(', ')}.`;
+        }
+      }
+    } catch {
+      // Keep the default HTTP error message when response is not JSON
+    }
+    throw new Error(message);
   }
 
-  const payload = (await response.json()) as StudentApiRecord[] | { results?: StudentApiRecord[] };
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+export async function fetchStudents(classId?: number | string, centreId?: number | string, academicYear?: string): Promise<StudentListItem[]> {
+  const params = new URLSearchParams();
+  if (classId !== undefined && classId !== '') params.append('classGrade', String(classId));
+  if (centreId !== undefined && centreId !== '') {
+    params.append('centreId', String(centreId));
+  }
+  if (academicYear !== undefined && academicYear !== '') {
+    params.append('academicYear', academicYear);
+  }
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const payload = await apiRequest<StudentApiRecord[] | { results?: StudentApiRecord[] }>(`/students/${queryString}`);
   const records = Array.isArray(payload) ? payload : payload.results ?? [];
 
   return records.map(mapStudentRecord);
 }
+
+export const fetchAcademicYears = () => apiRequest<AcademicYear[]>("/v1/academic-years/");
+export const fetchAssessmentTypes = (params?: {
+  academicYearId?: number | string;
+  academicYear?: string;
+  classId?: number | string;
+  onlyCreated?: boolean;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.academicYearId) query.set('academicYearId', String(params.academicYearId));
+  if (params?.academicYear) query.set('academicYear', params.academicYear);
+  if (params?.classId) query.set('classId', String(params.classId));
+  if (params?.onlyCreated) query.set('onlyCreated', 'true');
+  const qs = query.toString();
+  return apiRequest<AssessmentType[]>(`/v1/assessment-types/${qs ? `?${qs}` : ''}`);
+};
+export const fetchSubjects = (classId?: number | string, examId?: number | string, centreId?: number | string) => {
+  const query = new URLSearchParams();
+  if (classId) query.set('classId', String(classId));
+  if (examId) {
+    query.set('examId', String(examId));
+    query.set('assessmentTypeId', String(examId));
+  }
+  if (centreId) query.set('centreId', String(centreId));
+  const qs = query.toString();
+  return apiRequest<Subject[]>(`/v1/subjects/${qs ? `?${qs}` : ''}`);
+};
+export const createAssessment = (payload: {
+  academicYearId: number;
+  classId?: number;
+  classIds?: number[];
+  assessmentTypeId?: number;
+  assessmentTypeIds?: number[];
+  assessmentDate: string;
+  centreId?: number | string;
+  subjectIds?: number[];
+  maxMarks?: number;
+}) => apiRequest<Assessment>("/v1/assessments/", { method: "POST", body: JSON.stringify(payload) });
+export const fetchAssessments = (params?: {
+  classId?: number;
+  centreId?: number | string;
+  assessmentTypeId?: number | '';
+  status?: string;
+  academicYearId?: number | string;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.classId) query.set('classId', String(params.classId));
+  if (params?.centreId) query.set('centreId', String(params.centreId));
+  if (params?.assessmentTypeId) query.set('assessmentTypeId', String(params.assessmentTypeId));
+  if (params?.status) query.set('status', params.status);
+  if (params?.academicYearId) query.set('academicYearId', String(params.academicYearId));
+  const qs = query.toString();
+  return apiRequest<Assessment[]>(`/v1/assessments/${qs ? `?${qs}` : ''}`);
+};
+export const fetchAssessmentDetail = (assessmentId: number) =>
+  apiRequest<Assessment & { subjectIds?: number[]; maxMarks?: number; totalStudents?: number }>(`/v1/assessments/${assessmentId}/`);
+export const updateAssessment = (
+  assessmentId: number,
+  payload: {
+    academicYearId?: number;
+    classId?: number;
+    assessmentTypeId?: number;
+    assessmentDate?: string;
+    centreId?: number | string;
+    subjectIds?: number[];
+    maxMarks?: number;
+    status?: string;
+  }
+) => apiRequest<Assessment>(`/v1/assessments/${assessmentId}/`, { method: "PATCH", body: JSON.stringify(payload) });
+export const deleteAssessment = (assessmentId: number) =>
+  apiRequest<{ message: string }>(`/v1/assessments/${assessmentId}/`, { method: "DELETE" });
+export const fetchAssessmentScores = (assessmentId: number) => apiRequest<{ assessmentId: number; students: AssessmentStudentScores[] }>(`/v1/assessments/${assessmentId}/scores/`);
+export const saveAssessmentScores = (assessmentId: number, studentsPayload: Array<{ studentId: number; scores: AssessmentScoreInput[] }>) =>
+  apiRequest<{ assessmentId: number; students: AssessmentStudentScores[]; savedStudents: number; savedScores: number; status: string }>(`/v1/assessments/${assessmentId}/scores/bulk`, {
+    method: "PUT",
+    body: JSON.stringify({ students: studentsPayload }),
+  });
+export const fetchDiagnosticOptions = () => apiRequest<DiagnosticOptions>("/v1/diagnostic-options/");
+export const fetchAssessmentDiagnostics = (assessmentId: number) => apiRequest<{ assessmentId: number; diagnostics: Array<{ studentId: number; studentName: string; subjectId: number; subject: string; understandingLevel: string; applicationAbility: string; interestLevel: string }> }>(`/v1/assessments/${assessmentId}/diagnostics/`);
+export const saveAssessmentDiagnostics = (assessmentId: number, studentsPayload: Array<Record<string, number | string>>) =>
+  apiRequest<{ assessmentId: number; saved: number; status: string }>(`/v1/assessments/${assessmentId}/diagnostics/bulk`, {
+    method: "PUT",
+    body: JSON.stringify({ students: studentsPayload }),
+  });
+export const fetchLearningBehaviours = () => apiRequest<LearningBehaviourOption[]>("/v1/learning-behaviours/");
+export const fetchAssessmentBehaviours = (assessmentId: number) => apiRequest<{ assessmentId: number; students: Array<{ studentId: number; studentName: string; behaviour: string }> }>(`/v1/assessments/${assessmentId}/behaviours/`);
+export const fetchAssessmentObservations = (assessmentId: number) => apiRequest<{ assessmentId: number; students: AssessmentObservation[] }>(`/v1/assessments/${assessmentId}/observations/`);
+export const saveAssessmentBehaviours = (assessmentId: number, studentsPayload: Array<{ studentId: number; behaviour: string }>) =>
+  apiRequest<{ assessmentId: number; saved: number; status: string }>(`/v1/assessments/${assessmentId}/behaviours/bulk`, {
+    method: "PUT",
+    body: JSON.stringify({ students: studentsPayload }),
+  });
+export const saveAssessmentObservations = (assessmentId: number, studentsPayload: Array<{ studentId: number; keyImprovements?: string; subjectsNeedingSupport?: string; interventionPlan?: string; comments?: string }>) =>
+  apiRequest<{ assessmentId: number; saved: number; status: string }>(`/v1/assessments/${assessmentId}/observations/bulk`, {
+    method: "PUT",
+    body: JSON.stringify({ students: studentsPayload }),
+  });
+export const fetchAssessmentObservation = (assessmentId: number, studentId: number) => apiRequest<AssessmentObservation>(`/v1/assessments/${assessmentId}/students/${studentId}/observation`);
+export const saveAssessmentObservation = (assessmentId: number, studentId: number, observation: Omit<AssessmentObservation, "studentId">) =>
+  apiRequest<AssessmentObservation>(`/v1/assessments/${assessmentId}/students/${studentId}/observation`, {
+    method: "PUT",
+    body: JSON.stringify(observation),
+  });
+export const submitAssessment = (assessmentId: number) => apiRequest<{ assessmentId: number; status: string; submittedAt: string }>(`/v1/assessments/${assessmentId}/submit`, { method: "POST" });
+export const reopenAssessment = (assessmentId: number) => apiRequest<{ assessmentId: number; status: string; message: string }>(`/v1/assessments/${assessmentId}/reopen`, { method: "POST" });
+export const fetchAssessmentStatistics = (assessmentId: number) => apiRequest<AssessmentStatistics>(`/v1/assessments/${assessmentId}/statistics`);
+export const fetchAssessmentComparison = (assessmentId: number) => apiRequest<Record<string, unknown>>(`/v1/assessments/${assessmentId}/comparison`);
+export const fetchSubjectComparison = (assessmentId: number) => apiRequest<unknown[]>(`/v1/assessments/${assessmentId}/comparison/subjects`);
+export const fetchStudentComparison = (assessmentId: number) => apiRequest<unknown[]>(`/v1/assessments/${assessmentId}/comparison/students`);
+export const fetchStudentDashboard = (studentId: number) => apiRequest<Record<string, unknown>>(`/v1/students/${studentId}/dashboard`);
+export const fetchStudentPerformanceTrends = (studentId: number, subjectId?: number) => apiRequest<unknown[]>(`/v1/students/${studentId}/performance/trends${subjectId ? `?subjectId=${subjectId}` : ""}`);
+export const fetchAssessmentDetails = (assessmentId: number) => apiRequest<Record<string, unknown>>(`/v1/assessments/${assessmentId}/details`);
+
+export interface CentrePerformanceReportItem {
+  id: number;
+  name: string;
+  region: string;
+  district: string;
+  studentsCount: number;
+  avgScore: number | null;
+  passRate: number | null;
+  topSubject: string;
+  status: string;
+  hasData: boolean;
+  rank: number;
+}
+
+export interface RegionComparisonReportItem {
+  name: string;
+  centresCount: number;
+  studentsCount: number;
+  avgScore: number | null;
+  passRate: number | null;
+  lowCount: number;
+  hasData: boolean;
+  level: string;
+}
+
+export const fetchCentrePerformanceReport = (
+  assessmentId?: number | null,
+  params?: {
+    classId?: number | string;
+    assessmentTypeId?: number | string;
+    academicYearId?: number | string;
+  }
+) => {
+  const query = new URLSearchParams();
+  if (params?.classId) query.set('classId', String(params.classId));
+  if (params?.assessmentTypeId) query.set('assessmentTypeId', String(params.assessmentTypeId));
+  if (params?.academicYearId) query.set('academicYearId', String(params.academicYearId));
+  const qs = query.toString();
+  const endpoint = assessmentId
+    ? `/v1/assessments/${assessmentId}/centre-performance/${qs ? `?${qs}` : ''}`
+    : `/v1/assessments/centre-performance/${qs ? `?${qs}` : ''}`;
+  return apiRequest<{
+    assessmentId: number | null;
+    classId: number;
+    assessmentTypeId: number | null;
+    academicYearId: number | null;
+    centres: CentrePerformanceReportItem[];
+    regions: RegionComparisonReportItem[];
+  }>(endpoint);
+};
+
+export interface SchoolClass {
+  id: number;
+  name: string;
+  code?: string;
+  isActive?: boolean;
+}
+
+export const fetchSchoolClasses = () => apiRequest<SchoolClass[]>("/v1/classes/");
+export const fetchAllSubjects = () => apiRequest<Subject[]>("/v1/metadata/subjects/");
+export const createSubjectMetadata = (payload: { name: string; code: string }) =>
+  apiRequest<Subject>("/v1/metadata/subjects/", { method: "POST", body: JSON.stringify(payload) });
+export const createExamMetadata = (payload: { name: string; code: string; academicYearId?: number }) =>
+  apiRequest<AssessmentType>("/v1/metadata/assessment-types/", { method: "POST", body: JSON.stringify(payload) });
+export const createAssessmentSubjectMetadata = (payload: {
+  academicYearId?: number;
+  classId?: number;
+  classIds?: number[];
+  examId?: number;
+  examIds?: number[];
+  subjectIds: number[];
+  maxMarks?: number;
+  isActive?: boolean;
+}) => apiRequest<any>("/v1/metadata/assessment-subjects/", { method: "POST", body: JSON.stringify(payload) });
+
+export const createAcademicYearMetadata = (payload: {
+  name: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  isActive?: boolean;
+}) => apiRequest<AcademicYear>("/v1/metadata/academic-years/", { method: "POST", body: JSON.stringify(payload) });
+
+export const createAcademicYear = createAcademicYearMetadata;
+
