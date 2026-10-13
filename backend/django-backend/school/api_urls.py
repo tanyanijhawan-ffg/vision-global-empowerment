@@ -1,6 +1,12 @@
 from django.urls import path
 
-from school.views.attendance import AttendanceBulkView, AttendanceCentreListView, AttendanceIntelligenceSettingView
+from school.views.attendance import (
+    AttendanceBulkView,
+    AttendanceCentreListView,
+    AttendanceDefaultingEmailView,
+    AttendanceDefaultingRecipientsView,
+    AttendanceIntelligenceSettingView,
+)
 
 from school.views.assessment import (
     AcademicYearListView,
@@ -50,6 +56,8 @@ from school.views.metadata import (
 urlpatterns = [
     path('attendance/centres/', AttendanceCentreListView.as_view(), name='attendance-centres'),
     path('attendance/intelligence/', AttendanceIntelligenceSettingView.as_view(), name='attendance-intelligence'),
+    path('attendance/alert-recipients/', AttendanceDefaultingRecipientsView.as_view(), name='attendance-alert-recipients'),
+    path('attendance/defaulting-email/', AttendanceDefaultingEmailView.as_view(), name='attendance-defaulting-email'),
     path('attendance/bulk/', AttendanceBulkView.as_view(), name='attendance-bulk'),
     path('academic-years/', AcademicYearListView.as_view(), name='academic-years'),
     path('classes/', SchoolClassListView.as_view(), name='classes'),
