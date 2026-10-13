@@ -19,6 +19,7 @@ class Student(models.Model):
     medium_of_instruction = models.CharField(max_length=50, blank=True, null=True)
     attendance_pattern = models.CharField(max_length=100, blank=True, null=True)
     previous_academic_performance = models.CharField(max_length=100, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     class Meta:
         db_table = 'student'

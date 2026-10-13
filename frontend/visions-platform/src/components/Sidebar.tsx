@@ -5,7 +5,6 @@ import {
   Users, 
   CalendarCheck, 
   GraduationCap, 
-  BarChart3, 
   Settings, 
   ShieldAlert,
   Menu,
@@ -46,7 +45,6 @@ const navItems = [
       { name: 'Entry', path: '/academics/entry' }
     ]
   },
-  { name: 'Reports', icon: BarChart3, path: '/reports' },
   { name: 'Users', icon: ShieldAlert, path: '/users' },
   { name: 'Settings', icon: Settings, path: '/settings' },
 ];
