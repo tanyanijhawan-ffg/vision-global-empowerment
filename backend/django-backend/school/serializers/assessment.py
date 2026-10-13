@@ -18,10 +18,10 @@ from school.models.assessment import (
 
 class AcademicYearSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='academic_year_id', read_only=True)
-    startDate = serializers.DateField(source='start_date', read_only=True)
-    endDate = serializers.DateField(source='end_date', read_only=True)
-    isCurrent = serializers.BooleanField(source='is_current', read_only=True)
-    isActive = serializers.BooleanField(source='is_active', read_only=True)
+    startDate = serializers.DateField(source='start_date', required=False)
+    endDate = serializers.DateField(source='end_date', required=False)
+    isCurrent = serializers.BooleanField(source='is_current', required=False, default=False)
+    isActive = serializers.BooleanField(source='is_active', required=False, default=True)
 
     class Meta:
         model = AcademicYear

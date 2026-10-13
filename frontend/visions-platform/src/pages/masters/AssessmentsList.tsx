@@ -15,6 +15,7 @@ import {
   createSubjectMetadata,
   createExamMetadata,
   createAssessmentSubjectMetadata,
+  createAcademicYearMetadata,
   type AcademicYear,
   type SchoolClass,
   type AssessmentType,
@@ -48,8 +49,8 @@ export default function AssessmentsList() {
 
   // Form fields
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<number | ''>('');
-  const [selectedClassId, setSelectedClassId] = useState<number | ''>('');
-  const [selectedExamId, setSelectedExamId] = useState<number | ''>('');
+  const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
+  const [selectedExamIds, setSelectedExamIds] = useState<number[]>([]);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<number[]>([]);
   const [maxMarks, setMaxMarks] = useState<number>(100);
   const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
@@ -57,8 +58,10 @@ export default function AssessmentsList() {
   // Sub-modals for inline creation
   const [addSubjectModalOpen, setAddSubjectModalOpen] = useState(false);
   const [addExamModalOpen, setAddExamModalOpen] = useState(false);
+  const [addYearModalOpen, setAddYearModalOpen] = useState(false);
   const [subjectForm, setSubjectForm] = useState({ name: '', code: '' });
   const [examForm, setExamForm] = useState({ name: '', code: '' });
+  const [yearForm, setYearForm] = useState({ name: '', startDate: '', endDate: '', isCurrent: false });
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -97,6 +100,15 @@ export default function AssessmentsList() {
       })
       .catch((err) => console.error('Failed to load exams for academic year:', err));
   }, [selectedAcademicYearId]);
+
+  // Auto-clear notice message after 5 seconds
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => {
+      setNotice('');
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const normalizeClass = useCallback((val?: string | number) => String(val || '').replace(/[^0-9]/g, ''), []);
 
@@ -145,20 +157,20 @@ export default function AssessmentsList() {
 
     const currentYear = academicYears.find((y) => y.isCurrent) || academicYears[0];
     const defaultYearId = currentYear ? currentYear.id : '';
-    const defaultClassId = classes.length > 0 ? classes[0].id : '';
+    const defaultClassIds = classes.length > 0 ? [classes[0].id] : [];
 
     setSelectedAcademicYearId(defaultYearId);
-    setSelectedClassId(defaultClassId);
+    setSelectedClassIds(defaultClassIds);
     setSelectedSubjectIds(availableSubjects.map((s) => s.id));
     setMaxMarks(100);
 
     if (defaultYearId) {
       fetchAssessmentTypes({ academicYearId: Number(defaultYearId) }).then((examList) => {
         setExams(examList);
-        setSelectedExamId(examList.length > 0 ? examList[0].id : '');
+        setSelectedExamIds(examList.length > 0 ? [examList[0].id] : []);
       });
     } else {
-      setSelectedExamId('');
+      setSelectedExamIds([]);
     }
 
     setIsFormOpen(true);
@@ -171,17 +183,18 @@ export default function AssessmentsList() {
     setIsFormOpen(true);
 
     const yearId = item.academicYearId || (academicYears.find((y) => y.name === item.academicYear)?.id || '');
-    const classId = item.classId || (classes.find((c) => c.name === item.class || `Grade ${c.id}` === item.class)?.id || '');
+    const matchedClass = classes.find((c) => c.name === item.class || `Grade ${c.id}` === item.class || c.id === item.classId);
+    const classId = item.classId || (matchedClass ? matchedClass.id : '');
 
     setSelectedAcademicYearId(yearId);
-    setSelectedClassId(classId);
+    setSelectedClassIds(classId ? [Number(classId)] : []);
     setMaxMarks(item.maxMarks || 100);
 
     if (yearId) {
       const examList = await fetchAssessmentTypes({ academicYearId: Number(yearId) }).catch(() => []);
       setExams(examList);
       const matchExam = examList.find((e) => e.name === item.assessmentType || e.id === item.assessmentTypeId);
-      setSelectedExamId(matchExam ? matchExam.id : (examList.length > 0 ? examList[0].id : ''));
+      setSelectedExamIds(matchExam ? [matchExam.id] : (item.assessmentTypeId ? [item.assessmentTypeId] : []));
     }
 
     // Try fetching detailed subject IDs and maxMarks if available
@@ -204,6 +217,7 @@ export default function AssessmentsList() {
     setIsFormOpen(false);
     setEditingId(null);
     setError('');
+    setSubjectDropdownOpen(false);
   };
 
   const handleDelete = async (id: number) => {
@@ -222,12 +236,12 @@ export default function AssessmentsList() {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClassId) {
-      setError('Please select a class.');
+    if (selectedClassIds.length === 0) {
+      setError('Please select at least one class.');
       return;
     }
-    if (!selectedExamId) {
-      setError('Please select an exam.');
+    if (selectedExamIds.length === 0) {
+      setError('Please select at least one exam.');
       return;
     }
 
@@ -241,32 +255,35 @@ export default function AssessmentsList() {
       if (editingId) {
         await updateAssessment(editingId, {
           academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
-          classId: Number(selectedClassId),
-          assessmentTypeId: Number(selectedExamId),
+          classId: Number(selectedClassIds[0]),
+          assessmentTypeId: Number(selectedExamIds[0]),
           subjectIds: selectedSubjectIds,
+          maxMarks: Number(maxMarks),
         });
         setNotice('Assessment updated successfully!');
       } else {
         await createAssessment({
           academicYearId: Number(selectedAcademicYearId),
-          classId: Number(selectedClassId),
-          assessmentTypeId: Number(selectedExamId),
+          classIds: selectedClassIds,
+          assessmentTypeIds: selectedExamIds,
           assessmentDate: defaultDate,
+          subjectIds: selectedSubjectIds,
+          maxMarks: Number(maxMarks),
         });
 
         // Also save subject metadata
         if (selectedSubjectIds.length > 0) {
           await createAssessmentSubjectMetadata({
             academicYearId: Number(selectedAcademicYearId),
-            classId: Number(selectedClassId),
-            examId: Number(selectedExamId),
+            classIds: selectedClassIds,
+            examIds: selectedExamIds,
             subjectIds: selectedSubjectIds,
             maxMarks: Number(maxMarks),
             isActive: true,
           }).catch(() => null);
         }
 
-        setNotice('New assessment created successfully!');
+        setNotice('Assessment created successfully');
       }
 
       setIsFormOpen(false);
@@ -314,12 +331,61 @@ export default function AssessmentsList() {
         academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
       });
       setExams((prev) => [...prev, newExam]);
-      setSelectedExamId(newExam.id);
+      setSelectedExamIds((prev) => [...prev, newExam.id]);
       setExamForm({ name: '', code: '' });
       setAddExamModalOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create exam');
     }
+  };
+
+  // Inline Academic Year Creation
+  const handleAddYearSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!yearForm.name.trim()) {
+      setError('Please provide an Academic Year name (e.g. 2026-2027).');
+      return;
+    }
+    try {
+      const newYear = await createAcademicYearMetadata({
+        name: yearForm.name.trim(),
+        startDate: yearForm.startDate ? yearForm.startDate : undefined,
+        endDate: yearForm.endDate ? yearForm.endDate : undefined,
+        isCurrent: yearForm.isCurrent,
+        isActive: true,
+      });
+
+      setAcademicYears((prev) => {
+        const updated = yearForm.isCurrent
+          ? prev.map((y) => ({ ...y, isCurrent: false }))
+          : [...prev];
+        const existingIdx = updated.findIndex((y) => y.id === newYear.id);
+        if (existingIdx >= 0) {
+          updated[existingIdx] = newYear;
+          return updated;
+        }
+        return [...updated, newYear];
+      });
+
+      setSelectedAcademicYearId(newYear.id);
+      setYearForm({ name: '', startDate: '', endDate: '', isCurrent: false });
+      setAddYearModalOpen(false);
+      setNotice(`Academic year "${newYear.name}" created successfully!`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create academic year');
+    }
+  };
+
+  const toggleClassSelect = (id: number) => {
+    setSelectedClassIds((prev) =>
+      prev.includes(id) ? prev.filter((cId) => cId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleExamSelect = (id: number) => {
+    setSelectedExamIds((prev) =>
+      prev.includes(id) ? prev.filter((eId) => eId !== id) : [...prev, id]
+    );
   };
 
   const toggleSubjectSelect = (id: number) => {
@@ -504,95 +570,258 @@ export default function AssessmentsList() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Academic Year */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Academic Year *
-                </label>
-                <select
-                  value={selectedAcademicYearId}
-                  onChange={(e) => setSelectedAcademicYearId(e.target.value ? Number(e.target.value) : '')}
-                  required
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                >
-                  <option value="">Select Academic Year</option>
-                  {academicYears.map((y) => (
-                    <option key={y.id} value={y.id}>
-                      {y.name} {y.isCurrent ? '(Current)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Class */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Class *
-                </label>
-                <select
-                  value={selectedClassId}
-                  onChange={(e) => setSelectedClassId(e.target.value ? Number(e.target.value) : '')}
-                  required
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                >
-                  <option value="">Select Class</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Exam / Assessment Type */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Exam *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setAddExamModalOpen(true)}
-                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus size={13} />
-                    New Exam
-                  </button>
-                </div>
-                <select
-                  value={selectedExamId}
-                  onChange={(e) => setSelectedExamId(e.target.value ? Number(e.target.value) : '')}
-                  required
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                >
-                  <option value="">Select Exam</option>
-                  {exams.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name} ({e.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Max Marks – only shown when creating */}
-              {!editingId && (
+            {/* When Editing: show single selects */}
+            {editingId ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Academic Year */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Max Marks (subject)*
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={1000}
-                    value={maxMarks}
-                    onChange={(e) => setMaxMarks(Number(e.target.value))}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Academic Year *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setAddYearModalOpen(true)}
+                      className="font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 text-xs cursor-pointer"
+                    >
+                      <Plus size={13} />
+                      New Year
+                    </button>
+                  </div>
+                  <select
+                    value={selectedAcademicYearId}
+                    onChange={(e) => setSelectedAcademicYearId(e.target.value ? Number(e.target.value) : '')}
                     required
                     className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  />
+                  >
+                    <option value="">Select Academic Year</option>
+                    {academicYears.map((y) => (
+                      <option key={y.id} value={y.id}>
+                        {y.name} {y.isCurrent ? '(Current)' : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              )}
-            </div>
+
+                {/* Class */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Class *
+                  </label>
+                  <select
+                    value={selectedClassIds[0] || ''}
+                    onChange={(e) => setSelectedClassIds(e.target.value ? [Number(e.target.value)] : [])}
+                    required
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  >
+                    <option value="">Select Class</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Exam */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Exam *
+                  </label>
+                  <select
+                    value={selectedExamIds[0] || ''}
+                    onChange={(e) => setSelectedExamIds(e.target.value ? [Number(e.target.value)] : [])}
+                    required
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  >
+                    <option value="">Select Exam</option>
+                    {exams.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} ({e.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              /* When Creating: show multi-select for Classes and Exams */
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Academic Year */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                        Academic Year *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setAddYearModalOpen(true)}
+                        className="font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 text-xs cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        New Year
+                      </button>
+                    </div>
+                    <select
+                      value={selectedAcademicYearId}
+                      onChange={(e) => setSelectedAcademicYearId(e.target.value ? Number(e.target.value) : '')}
+                      required
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    >
+                      <option value="">Select Academic Year</option>
+                      {academicYears.map((y) => (
+                        <option key={y.id} value={y.id}>
+                          {y.name} {y.isCurrent ? '(Current)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Max Marks */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Max Marks (subject)*
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={maxMarks}
+                      onChange={(e) => setMaxMarks(Number(e.target.value))}
+                      required
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+                {/* Class Multi-Select */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Classes * ({selectedClassIds.length} of {classes.length} selected)
+                    </label>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedClassIds(classes.map((c) => c.id))}
+                        className="font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedClassIds([])}
+                        className="font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                    <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
+                      {classes.map((cls) => {
+                        const isSelected = selectedClassIds.includes(cls.id);
+                        return (
+                          <button
+                            key={cls.id}
+                            type="button"
+                            onClick={() => toggleClassSelect(cls.id)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
+                                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
+                            }`}
+                          >
+                            <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                              isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
+                            }`}>
+                              {isSelected ? '✓' : ''}
+                            </span>
+                            {cls.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectedClassIds.length === 0 ? (
+                      <p className="text-xs text-rose-500 font-medium pt-1">Please select at least one class.</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Exam Multi-Select */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Exams / Assessment Types * ({selectedExamIds.length} of {exams.length} selected)
+                    </label>
+                    <div className="flex items-center gap-3 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedExamIds(exams.map((e) => e.id))}
+                        className="font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedExamIds([])}
+                        className="font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setAddExamModalOpen(true)}
+                        className="font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        New Exam
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                    {exams.length === 0 ? (
+                      <p className="text-xs text-slate-500 py-1">No exams configured for this academic year yet. Click &quot;+ New Exam&quot; to create one.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
+                        {exams.map((ex) => {
+                          const isSelected = selectedExamIds.includes(ex.id);
+                          return (
+                            <button
+                              key={ex.id}
+                              type="button"
+                              onClick={() => toggleExamSelect(ex.id)}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
+                                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
+                              }`}
+                            >
+                              <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                                isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
+                              }`}>
+                                {isSelected ? '✓' : ''}
+                              </span>
+                              {ex.name}
+                              <span className={isSelected ? 'text-indigo-200 text-[10px]' : 'text-slate-400 text-[10px]'}>
+                                ({ex.code})
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {selectedExamIds.length === 0 && exams.length > 0 ? (
+                      <p className="text-xs text-rose-500 font-medium pt-1">Please select at least one exam.</p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Subjects Selection */}
             <div>
@@ -682,10 +911,16 @@ export default function AssessmentsList() {
               </button>
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || (!editingId && (selectedClassIds.length === 0 || selectedExamIds.length === 0))}
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
               >
-                {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Assessment'}
+                {saving
+                  ? 'Saving...'
+                  : editingId
+                  ? 'Save Changes'
+                  : selectedClassIds.length * selectedExamIds.length > 1
+                  ? `Create ${selectedClassIds.length * selectedExamIds.length} Assessments`
+                  : 'Create Assessment'}
               </button>
             </div>
           </form>
@@ -810,6 +1045,92 @@ export default function AssessmentsList() {
                 className="px-4 py-2 bg-indigo-600 text-white font-semibold text-xs rounded-xl hover:bg-indigo-700 transition cursor-pointer"
               >
                 Create Exam
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {/* Add Academic Year Modal */}
+      {addYearModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <form
+            onSubmit={handleAddYearSubmit}
+            className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Add New Academic Year</h3>
+              <button
+                type="button"
+                onClick={() => setAddYearModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Academic Year Name *
+              </label>
+              <input
+                type="text"
+                required
+                value={yearForm.name}
+                onChange={(e) => setYearForm({ ...yearForm, name: e.target.value })}
+                placeholder="e.g. 2026-2027"
+                className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Start Date (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={yearForm.startDate}
+                  onChange={(e) => setYearForm({ ...yearForm, startDate: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  End Date (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={yearForm.endDate}
+                  onChange={(e) => setYearForm({ ...yearForm, endDate: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="is-current-year"
+                checked={yearForm.isCurrent}
+                onChange={(e) => setYearForm({ ...yearForm, isCurrent: e.target.checked })}
+                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+              />
+              <label htmlFor="is-current-year" className="text-xs font-medium text-slate-700 cursor-pointer">
+                Set as current academic year
+              </label>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setAddYearModalOpen(false)}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-indigo-600 text-white font-semibold text-xs rounded-xl hover:bg-indigo-700 transition cursor-pointer"
+              >
+                Create Academic Year
               </button>
             </div>
           </form>

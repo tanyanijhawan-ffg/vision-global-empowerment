@@ -8,6 +8,7 @@ import {
   createSubjectMetadata,
   createExamMetadata,
   createAssessmentSubjectMetadata,
+  createAcademicYearMetadata,
   type AcademicYear,
   type SchoolClass,
   type AssessmentType,
@@ -37,6 +38,7 @@ export default function CreateAssessmentMaster() {
   // Modals state
   const [addSubjectModalOpen, setAddSubjectModalOpen] = useState(false);
   const [addExamModalOpen, setAddExamModalOpen] = useState(false);
+  const [addYearModalOpen, setAddYearModalOpen] = useState(false);
 
   // Form state for Add Subject Modal
   const [subjectForm, setSubjectForm] = useState({
@@ -51,6 +53,15 @@ export default function CreateAssessmentMaster() {
     code: '',
   });
   const [savingExam, setSavingExam] = useState(false);
+
+  // Form state for Add Year Modal
+  const [yearForm, setYearForm] = useState({
+    name: '',
+    startDate: '',
+    endDate: '',
+    isCurrent: false,
+  });
+  const [savingYear, setSavingYear] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -208,6 +219,44 @@ export default function CreateAssessmentMaster() {
     }
   };
 
+  // Submit Add Academic Year modal
+  const handleAddYearSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!yearForm.name.trim()) {
+      setError('Please provide an Academic Year name (e.g. 2026-2027).');
+      return;
+    }
+
+    setSavingYear(true);
+    try {
+      const created = await createAcademicYearMetadata({
+        name: yearForm.name.trim(),
+        startDate: yearForm.startDate || undefined,
+        endDate: yearForm.endDate || undefined,
+        isCurrent: yearForm.isCurrent,
+        isActive: true,
+      });
+
+      const updatedYears = await fetchAcademicYears();
+      setAcademicYears(updatedYears);
+      if (created?.id) {
+        setSelectedAcademicYearId(created.id);
+      }
+      setAddYearModalOpen(false);
+      setYearForm({
+        name: '',
+        startDate: '',
+        endDate: '',
+        isCurrent: false,
+      });
+      setNotice(`Academic year "${created.name}" created successfully!`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create academic year.');
+    } finally {
+      setSavingYear(false);
+    }
+  };
+
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-4xl mx-auto">
       {/* Header */}
@@ -236,7 +285,17 @@ export default function CreateAssessmentMaster() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {/* Academic year */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">Academic year</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700">Academic year</label>
+              <button
+                type="button"
+                onClick={() => setAddYearModalOpen(true)}
+                className="font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 text-xs cursor-pointer"
+              >
+                <Plus size={13} />
+                New Year
+              </button>
+            </div>
             <div className="relative">
               <select
                 value={selectedAcademicYearId}
@@ -245,7 +304,7 @@ export default function CreateAssessmentMaster() {
               >
                 {academicYears.map((y) => (
                   <option key={y.id} value={y.id}>
-                    {y.name}
+                    {y.name} {y.isCurrent ? '(Current)' : ''}
                   </option>
                 ))}
               </select>
@@ -511,6 +570,83 @@ export default function CreateAssessmentMaster() {
                   className="w-full h-10 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition cursor-pointer shadow-sm"
                 >
                   {savingExam ? 'Adding...' : 'Add exam'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Academic Year Modal */}
+      {addYearModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">Add New Academic Year</h3>
+              <button
+                type="button"
+                onClick={() => setAddYearModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddYearSubmit} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700">Academic Year Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 2026-2027"
+                  value={yearForm.name}
+                  onChange={(e) => setYearForm((prev) => ({ ...prev, name: e.target.value }))}
+                  className="w-full h-10 px-3.5 bg-white border border-slate-200 text-slate-800 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700">Start Date (Optional)</label>
+                  <input
+                    type="date"
+                    value={yearForm.startDate}
+                    onChange={(e) => setYearForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                    className="w-full h-10 px-3.5 bg-white border border-slate-200 text-slate-800 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700">End Date (Optional)</label>
+                  <input
+                    type="date"
+                    value={yearForm.endDate}
+                    onChange={(e) => setYearForm((prev) => ({ ...prev, endDate: e.target.value }))}
+                    className="w-full h-10 px-3.5 bg-white border border-slate-200 text-slate-800 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="create-master-is-current-year"
+                  checked={yearForm.isCurrent}
+                  onChange={(e) => setYearForm((prev) => ({ ...prev, isCurrent: e.target.checked }))}
+                  className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                />
+                <label htmlFor="create-master-is-current-year" className="text-xs font-medium text-slate-700 cursor-pointer">
+                  Set as current academic year
+                </label>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={savingYear}
+                  className="w-full h-10 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition cursor-pointer shadow-sm"
+                >
+                  {savingYear ? 'Creating...' : 'Create Academic Year'}
                 </button>
               </div>
             </form>

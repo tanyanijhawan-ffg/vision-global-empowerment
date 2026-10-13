@@ -448,22 +448,28 @@ export const fetchSubjects = (classId?: number | string, examId?: number | strin
 };
 export const createAssessment = (payload: {
   academicYearId: number;
-  classId: number;
-  assessmentTypeId: number;
+  classId?: number;
+  classIds?: number[];
+  assessmentTypeId?: number;
+  assessmentTypeIds?: number[];
   assessmentDate: string;
   centreId?: number | string;
+  subjectIds?: number[];
+  maxMarks?: number;
 }) => apiRequest<Assessment>("/v1/assessments/", { method: "POST", body: JSON.stringify(payload) });
 export const fetchAssessments = (params?: {
   classId?: number;
   centreId?: number | string;
   assessmentTypeId?: number | '';
   status?: string;
+  academicYearId?: number | string;
 }) => {
   const query = new URLSearchParams();
   if (params?.classId) query.set('classId', String(params.classId));
   if (params?.centreId) query.set('centreId', String(params.centreId));
   if (params?.assessmentTypeId) query.set('assessmentTypeId', String(params.assessmentTypeId));
   if (params?.status) query.set('status', params.status);
+  if (params?.academicYearId) query.set('academicYearId', String(params.academicYearId));
   const qs = query.toString();
   return apiRequest<Assessment[]>(`/v1/assessments/${qs ? `?${qs}` : ''}`);
 };
@@ -526,6 +532,57 @@ export const fetchStudentDashboard = (studentId: number) => apiRequest<Record<st
 export const fetchStudentPerformanceTrends = (studentId: number, subjectId?: number) => apiRequest<unknown[]>(`/v1/students/${studentId}/performance/trends${subjectId ? `?subjectId=${subjectId}` : ""}`);
 export const fetchAssessmentDetails = (assessmentId: number) => apiRequest<Record<string, unknown>>(`/v1/assessments/${assessmentId}/details`);
 
+export interface CentrePerformanceReportItem {
+  id: number;
+  name: string;
+  region: string;
+  district: string;
+  studentsCount: number;
+  avgScore: number | null;
+  passRate: number | null;
+  topSubject: string;
+  status: string;
+  hasData: boolean;
+  rank: number;
+}
+
+export interface RegionComparisonReportItem {
+  name: string;
+  centresCount: number;
+  studentsCount: number;
+  avgScore: number | null;
+  passRate: number | null;
+  lowCount: number;
+  hasData: boolean;
+  level: string;
+}
+
+export const fetchCentrePerformanceReport = (
+  assessmentId?: number | null,
+  params?: {
+    classId?: number | string;
+    assessmentTypeId?: number | string;
+    academicYearId?: number | string;
+  }
+) => {
+  const query = new URLSearchParams();
+  if (params?.classId) query.set('classId', String(params.classId));
+  if (params?.assessmentTypeId) query.set('assessmentTypeId', String(params.assessmentTypeId));
+  if (params?.academicYearId) query.set('academicYearId', String(params.academicYearId));
+  const qs = query.toString();
+  const endpoint = assessmentId
+    ? `/v1/assessments/${assessmentId}/centre-performance/${qs ? `?${qs}` : ''}`
+    : `/v1/assessments/centre-performance/${qs ? `?${qs}` : ''}`;
+  return apiRequest<{
+    assessmentId: number | null;
+    classId: number;
+    assessmentTypeId: number | null;
+    academicYearId: number | null;
+    centres: CentrePerformanceReportItem[];
+    regions: RegionComparisonReportItem[];
+  }>(endpoint);
+};
+
 export interface SchoolClass {
   id: number;
   name: string;
@@ -539,5 +596,24 @@ export const createSubjectMetadata = (payload: { name: string; code: string }) =
   apiRequest<Subject>("/v1/metadata/subjects/", { method: "POST", body: JSON.stringify(payload) });
 export const createExamMetadata = (payload: { name: string; code: string; academicYearId?: number }) =>
   apiRequest<AssessmentType>("/v1/metadata/assessment-types/", { method: "POST", body: JSON.stringify(payload) });
-export const createAssessmentSubjectMetadata = (payload: { academicYearId?: number; classId: number; examId: number; subjectIds: number[]; maxMarks?: number; isActive?: boolean }) =>
-  apiRequest<any>("/v1/metadata/assessment-subjects/", { method: "POST", body: JSON.stringify(payload) });
+export const createAssessmentSubjectMetadata = (payload: {
+  academicYearId?: number;
+  classId?: number;
+  classIds?: number[];
+  examId?: number;
+  examIds?: number[];
+  subjectIds: number[];
+  maxMarks?: number;
+  isActive?: boolean;
+}) => apiRequest<any>("/v1/metadata/assessment-subjects/", { method: "POST", body: JSON.stringify(payload) });
+
+export const createAcademicYearMetadata = (payload: {
+  name: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  isActive?: boolean;
+}) => apiRequest<AcademicYear>("/v1/metadata/academic-years/", { method: "POST", body: JSON.stringify(payload) });
+
+export const createAcademicYear = createAcademicYearMetadata;
+

@@ -51,9 +51,8 @@ export const SubmittedPromptModal: React.FC<SubmittedPromptModalProps> = ({
           Data for this exam has already been submitted and published to the dashboard. Would you like to <strong>edit previously published marks</strong>? You can update scores, diagnostics, and observations, then re-publish.
         </p>
 
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-800 font-medium">
-          ⚠️ Reopening will allow you to update scores, diagnostics, and observations, then re-publish to the dashboard.
-        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-800 font-medium leading-relaxed">
+          ⚠️ Note: Opening to edit will immediately un-publish the marks from the dashboard. </div>
 
         <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
           <button

@@ -3,6 +3,7 @@ from .auth import LoginView
 from .assessment import (
     AcademicYearListView,
     AssessmentBehaviourView,
+    AssessmentCentrePerformanceView,
     AssessmentCreateView,
     AssessmentDetailView,
     AssessmentDetailsView,
@@ -57,6 +58,7 @@ __all__ = [
     'SchoolClassListView',
     'SubjectListView',
     'AssessmentCreateView',
+    'AssessmentCentrePerformanceView',
     'AssessmentDetailView',
     'AssessmentScoreBulkView',
     'AssessmentDiagnosticListView',

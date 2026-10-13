@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Trophy, BookOpen, TrendingUp, AlertTriangle,
-  MapPin, Globe, Award, UserCheck, Layers, RefreshCw
+  MapPin, Globe, Award, UserCheck, Layers,
+  Calendar, ChevronDown
 } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import StatCard from '../../components/StatCard';
@@ -9,9 +10,10 @@ import {
   fetchAssessments, fetchAssessmentStatistics, fetchAssessmentComparison,
   fetchSubjectComparison, fetchAssessmentScores, fetchAssessmentDiagnostics,
   fetchAssessmentBehaviours, fetchAssessmentObservations, fetchAttendanceCentres,
-  fetchStudents, fetchSubjects,
+  fetchStudents, fetchSubjects, fetchAcademicYears, fetchCentrePerformanceReport,
   type Assessment, type AttendanceCentre, type StudentListItem, type Subject,
-  type AssessmentStatistics
+  type AssessmentStatistics, type AcademicYear,
+  type CentrePerformanceReportItem, type RegionComparisonReportItem
 } from '../../lib/api';
 import { getCurrentUser } from '../../lib/auth';
 
@@ -49,6 +51,8 @@ export default function AcademicDashboard() {
   // Backend Metadata & Records
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<number | null>(null);
 
   // Selection Workflow State
   const [filterClass, setFilterClass] = useState('');
@@ -65,24 +69,38 @@ export default function AcademicDashboard() {
 
   // Assessment details & scores
   const [statistics, setStatistics] = useState<AssessmentStatistics | null>(null);
-  const [comparison, setComparison] = useState<{ current: { percentage: number }; previous: { percentage: number }; change: { percentagePoints: number; trend: string } } | null>(null);
-  const [subjectComparison, setSubjectComparison] = useState<Array<{ subject: string; previousPercentage: number; currentPercentage: number; change: number; trend: string }>>([]);
+  const [comparison, setComparison] = useState<{ current: { percentage: number }; previous: { percentage: number | null }; change: { percentagePoints: number; trend: string } } | null>(null);
+  const [subjectComparison, setSubjectComparison] = useState<Array<{ subject: string; previousPercentage: number | null; currentPercentage: number; change: number; trend: string }>>([]);
   const [scoresData, setScoresData] = useState<Array<{ studentId: number; studentName?: string; scores: Array<{ subjectId: number; subject?: string; obtainedMarks: number; maxMarks: number }>; percentage: number }>>([]);
   const [diagnosticsData, setDiagnosticsData] = useState<Array<{ studentId: number; subjectId: number; understandingLevel: string; applicationAbility: string; interestLevel: string }>>([]);
   const [observationsData, setObservationsData] = useState<Array<{ studentId: number; keyImprovements?: string; subjectsNeedingSupport?: string; interventionPlan?: string }>>([]);
+
+  // Centre-wise and regional reports fetched across all learning centres
+  const [centrePerformanceData, setCentrePerformanceData] = useState<CentrePerformanceReportItem[]>([]);
+  const [regionPerformanceData, setRegionPerformanceData] = useState<RegionComparisonReportItem[]>([]);
 
   const [lowPerformerThreshold, setLowPerformerThreshold] = useState<number>(30);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [, setError] = useState('');
 
-  // 1. Initial Load: Metadata ONLY (centres)
+  // 1. Initial Load: Metadata (centres & academic years)
   const loadInitialData = async () => {
     setLoading(true);
     setError('');
     try {
-      const centresRes = await fetchAttendanceCentres().catch(() => []);
+      const [centresRes, yearsRes] = await Promise.all([
+        fetchAttendanceCentres().catch(() => []),
+        fetchAcademicYears().catch(() => []),
+      ]);
       setCentres(centresRes);
+      setAcademicYears(yearsRes);
+      if (yearsRes && yearsRes.length > 0) {
+        const currentYear = yearsRes.find((y) => y.isCurrent) || yearsRes[0];
+        if (currentYear) {
+          setSelectedAcademicYearId((prev) => prev ?? currentYear.id);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard metadata');
     } finally {
@@ -120,12 +138,27 @@ export default function AcademicDashboard() {
     if (found) targetCentreId = found.id;
 
     setRefreshing(true);
-    fetchAssessments({ classId: classNum, centreId: targetCentreId, status: 'SUBMITTED' })
+    fetchAssessments({
+      classId: classNum,
+      centreId: targetCentreId,
+      status: 'SUBMITTED',
+      academicYearId: selectedAcademicYearId || undefined,
+    })
       .then((res) => {
         const submitted = res.filter(a => a.status === 'SUBMITTED' || a.status === 'submitted');
-        setAssessments(submitted);
-        if (submitted.length > 0) {
-          setSelectedAssessmentId(submitted[0].id);
+        // Deduplicate assessments by academicYearId, assessmentTypeId / assessmentType, and classId / class
+        const uniqueAssessments: Assessment[] = [];
+        const seenTypeKeys = new Set<string>();
+        for (const a of submitted) {
+          const typeKey = `${a.academicYearId || a.academicYear}_${a.assessmentTypeId || a.assessmentType}_${a.classId || a.class}`;
+          if (!seenTypeKeys.has(typeKey)) {
+            seenTypeKeys.add(typeKey);
+            uniqueAssessments.push(a);
+          }
+        }
+        setAssessments(uniqueAssessments);
+        if (uniqueAssessments.length > 0) {
+          setSelectedAssessmentId(prev => (prev && uniqueAssessments.some(a => a.id === prev)) ? prev : uniqueAssessments[0].id);
         } else {
           setSelectedAssessmentId(null);
         }
@@ -136,7 +169,7 @@ export default function AcademicDashboard() {
         setSelectedAssessmentId(null);
       })
       .finally(() => setRefreshing(false));
-  }, [filterClass, filterCentre, centres]);
+  }, [filterClass, filterCentre, centres, selectedAcademicYearId]);
 
   // 3. Fetch scores, statistics, etc. ONLY when selectedAssessmentId changes
   useEffect(() => {
@@ -188,8 +221,9 @@ export default function AcademicDashboard() {
       if (found) targetCentreId = found.id;
 
       const classNum = filterClass ? normalizeClass(filterClass) : undefined;
+      const selectedYearName = academicYears.find(y => y.id === selectedAcademicYearId)?.name;
       try {
-        const studentRes = await fetchStudents(classNum, targetCentreId);
+        const studentRes = await fetchStudents(classNum, targetCentreId, selectedYearName);
         if (isMounted) setStudents(studentRes);
       } catch (e) {
         console.error('Failed to fetch scoped students:', e);
@@ -199,7 +233,45 @@ export default function AcademicDashboard() {
 
     loadScopedStudents();
     return () => { isMounted = false; };
-  }, [filterClass, filterCentre, centres]);
+  }, [filterClass, filterCentre, centres, selectedAcademicYearId, academicYears]);
+
+  // 5. Fetch centre-wise and regional performance reports across all learning centres
+  useEffect(() => {
+    if (!filterClass) {
+      setCentrePerformanceData([]);
+      setRegionPerformanceData([]);
+      return;
+    }
+
+    let isMounted = true;
+    const classNum = normalizeClass(filterClass);
+    fetchCentrePerformanceReport(selectedAssessmentId, {
+      classId: classNum,
+      academicYearId: selectedAcademicYearId || undefined,
+    })
+      .then((res) => {
+        if (!isMounted) return;
+        if (res?.centres && Array.isArray(res.centres)) {
+          setCentrePerformanceData(res.centres);
+        } else {
+          setCentrePerformanceData([]);
+        }
+        if (res?.regions && Array.isArray(res.regions)) {
+          setRegionPerformanceData(res.regions);
+        } else {
+          setRegionPerformanceData([]);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch centre performance report:', err);
+        if (isMounted) {
+          setCentrePerformanceData([]);
+          setRegionPerformanceData([]);
+        }
+      });
+
+    return () => { isMounted = false; };
+  }, [filterClass, selectedAssessmentId, selectedAcademicYearId]);
 
   const availableCentres = useMemo(() => {
     return centres;
@@ -285,15 +357,31 @@ export default function AcademicDashboard() {
 
   const previousAvgScore = useMemo(() => {
     if (statistics?.previousAverage !== undefined && statistics?.previousAverage !== null) return Number(statistics.previousAverage.toFixed(1));
-    if (comparison?.previous?.percentage) return Number(comparison.previous.percentage.toFixed(1));
-    return 0;
+    if (comparison?.previous?.percentage !== undefined && comparison?.previous?.percentage !== null) return Number(comparison.previous.percentage.toFixed(1));
+    return null;
   }, [statistics, comparison]);
 
   const ppChange = useMemo(() => {
-    if (statistics?.improvement !== undefined) return Number(statistics.improvement.toFixed(1));
-    if (comparison?.change?.percentagePoints !== undefined) return Number(comparison.change.percentagePoints.toFixed(1));
-    return Number((currentAvgScore - previousAvgScore).toFixed(1));
+    if (statistics?.improvement !== undefined && statistics?.improvement !== null) return Number(statistics.improvement.toFixed(1));
+    if (comparison?.change?.percentagePoints !== undefined && comparison?.change?.percentagePoints !== null) return Number(comparison.change.percentagePoints.toFixed(1));
+    if (previousAvgScore !== null) return Number((currentAvgScore - previousAvgScore).toFixed(1));
+    return 0;
   }, [statistics, comparison, currentAvgScore, previousAvgScore]);
+
+  const currentAssessmentObj = useMemo(() => {
+    return assessments.find(a => a.id === selectedAssessmentId);
+  }, [assessments, selectedAssessmentId]);
+
+  const currentTermName = currentAssessmentObj?.assessmentType || comparison?.current?.assessment || null;
+
+  const previousTermName = useMemo(() => {
+    if (comparison?.previous?.assessment && comparison.previous.assessment !== 'N/A') {
+      return comparison.previous.assessment;
+    }
+    const foundOnSubj = (subjectComparison as any[]).find(s => s.previousAssessment)?.previousAssessment;
+    if (foundOnSubj) return foundOnSubj;
+    return null;
+  }, [comparison, subjectComparison]);
 
   const topPerformersCount = useMemo(() => {
     return filteredStudentsWithScores.filter(s => (s.academicScore || 0) >= 80).length;
@@ -345,19 +433,19 @@ export default function AcademicDashboard() {
       return subjectComparison.map(s => ({
         subject: s.subject,
         currentScore: Number(s.currentPercentage.toFixed(1)),
-        prevScore: Number(s.previousPercentage.toFixed(1)),
-        ppChange: Number(s.change.toFixed(1)),
+        prevScore: (s.previousPercentage !== undefined && s.previousPercentage !== null) ? Number(s.previousPercentage.toFixed(1)) : null,
+        ppChange: (s.change !== undefined && s.change !== null) ? Number(s.change.toFixed(1)) : 0,
         trend: s.trend,
       }));
     }
-    return [
-      { subject: 'Tamil', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
-      { subject: 'English', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
-      { subject: 'Mathematics', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
-      { subject: 'Science', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
-      { subject: 'Social Science', currentScore: currentAvgScore, prevScore: previousAvgScore, ppChange: ppChange, trend: ppChange >= 0 ? 'UP' : 'DOWN' },
-    ];
-  }, [subjectComparison, currentAvgScore, previousAvgScore, ppChange]);
+    return displaySubjects.map(s => ({
+      subject: s.name,
+      currentScore: currentAvgScore,
+      prevScore: previousAvgScore,
+      ppChange: ppChange,
+      trend: ppChange >= 0 ? 'UP' : 'DOWN',
+    }));
+  }, [subjectComparison, displaySubjects, currentAvgScore, previousAvgScore, ppChange]);
 
   // Diagnostic distribution summary
   const diagnosticSummary = useMemo(() => {
@@ -415,6 +503,17 @@ export default function AcademicDashboard() {
 
   // Centre performance report
   const centrePerformanceReport = useMemo(() => {
+    if (centrePerformanceData.length > 0) {
+      let list = centrePerformanceData;
+      if (filterRegion) {
+        list = list.filter(c => c.region === filterRegion);
+      }
+      if (filterDistrict) {
+        list = list.filter(c => c.district === filterDistrict);
+      }
+      return list;
+    }
+
     const reports = availableCentres.map((c) => {
       const centreStudents = filteredStudentsWithScores.filter(s => s.centre === c.name || String(s.centreId) === String(c.id));
       const scoredStudents = centreStudents.filter(s => s.academicScore !== undefined && s.academicScore !== null);
@@ -473,10 +572,14 @@ export default function AcademicDashboard() {
     });
 
     return reports.map((r, idx) => ({ ...r, rank: idx + 1 }));
-  }, [availableCentres, filteredStudentsWithScores, scoresData]);
+  }, [centrePerformanceData, filterRegion, filterDistrict, availableCentres, filteredStudentsWithScores, scoresData]);
 
   // Region comparison report
   const regionComparisonReport = useMemo(() => {
+    if (regionPerformanceData.length > 0) {
+      return regionPerformanceData;
+    }
+
     const regList = availableRegions.length > 0 ? availableRegions : [];
     const reports = regList.map(rName => {
       const regStudents = students.filter(s => s.region === rName);
@@ -512,7 +615,7 @@ export default function AcademicDashboard() {
     });
 
     return reports;
-  }, [availableRegions, students, centres, filteredStudentsWithScores]);
+  }, [regionPerformanceData, availableRegions, students, centres, filteredStudentsWithScores]);
 
   if (loading) {
     return (
@@ -530,14 +633,38 @@ export default function AcademicDashboard() {
           title="Academic Performance & Reports"
           subtitle="Live performance metrics, comparative trends, centre analytics, and diagnostic distribution."
         />
-        <button
-          onClick={loadInitialData}
-          disabled={refreshing}
-          className="self-start sm:self-auto px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl transition shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-        >
-          <RefreshCw size={13} className={refreshing ? 'animate-spin text-indigo-600' : 'text-slate-500'} />
-          Refresh Data
-        </button>
+        <div className="self-start sm:self-auto flex items-center gap-2">
+          <label htmlFor="assessment-year-select" className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 whitespace-nowrap">
+            <Calendar size={14} className="text-indigo-600" />
+            <span>Assessment Year:</span>
+          </label>
+          <div className="relative">
+            <select
+              id="assessment-year-select"
+              value={selectedAcademicYearId ?? ''}
+              onChange={(e) => {
+                const newYearId = e.target.value ? Number(e.target.value) : null;
+                setSelectedAcademicYearId(newYearId);
+                setSelectedAssessmentId(null);
+              }}
+              className="appearance-none pl-3 pr-8 py-2 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none cursor-pointer transition min-w-[140px]"
+            >
+              {academicYears.length === 0 ? (
+                <option value="">Loading years...</option>
+              ) : (
+                academicYears.map((ay) => (
+                  <option key={ay.id} value={ay.id}>
+                    {ay.name} {ay.isCurrent ? '(Current)' : ''}
+                  </option>
+                ))
+              )}
+            </select>
+            <ChevronDown
+              size={13}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Global Filter Bar */}
@@ -683,6 +810,8 @@ export default function AcademicDashboard() {
               filterClass={filterClass}
               displaySubjectTrends={displaySubjectTrends}
               diagnosticSummary={diagnosticSummary}
+              previousTermName={previousTermName}
+              currentTermName={currentTermName}
             />
           )}
 

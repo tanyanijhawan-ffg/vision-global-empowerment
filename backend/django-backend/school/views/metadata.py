@@ -33,14 +33,47 @@ class AcademicYearMetadataListCreateView(generics.ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         payload = request.data.copy()
-        if 'startDate' in payload:
-            payload['start_date'] = payload.pop('startDate')
-        if 'endDate' in payload:
-            payload['end_date'] = payload.pop('endDate')
-        if 'isCurrent' in payload:
-            payload['is_current'] = payload.pop('isCurrent')
-        if 'isActive' in payload:
-            payload['is_active'] = payload.pop('isActive')
+        name = str(payload.get('name', '')).strip()
+        if not name:
+            return Response({'error': 'Academic year name is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        existing = AcademicYear.objects.filter(name__iexact=name).first()
+        if existing:
+            if not existing.is_active:
+                existing.is_active = True
+                existing.save()
+            return Response(self.get_serializer(existing).data, status=status.HTTP_200_OK)
+
+        start_date = payload.get('startDate') or payload.get('start_date')
+        end_date = payload.get('endDate') or payload.get('end_date')
+
+        if not start_date or not end_date:
+            import re
+            from datetime import date
+            years = re.findall(r'\d{4}', name)
+            if len(years) >= 2:
+                y1, y2 = int(years[0]), int(years[1])
+                start_date = start_date or f"{y1}-06-01"
+                end_date = end_date or f"{y2}-05-31"
+            elif len(years) == 1:
+                y1 = int(years[0])
+                start_date = start_date or f"{y1}-06-01"
+                end_date = end_date or f"{y1+1}-05-31"
+            else:
+                today = date.today()
+                start_date = start_date or f"{today.year}-06-01"
+                end_date = end_date or f"{today.year+1}-05-31"
+
+        payload['startDate'] = start_date
+        payload['endDate'] = end_date
+
+        is_curr = payload.get('isCurrent') in (True, 'true', 'True', 1) or payload.get('is_current') in (True, 'true', 'True', 1)
+        payload['isCurrent'] = is_curr
+        payload['isActive'] = True
+
+        if is_curr:
+            AcademicYear.objects.filter(is_current=True).update(is_current=False)
+
         serializer = self.get_serializer(data=payload)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -174,27 +207,58 @@ class AssessmentSubjectMetadataListCreateView(generics.ListCreateAPIView):
             sid = payload.pop('subjectId')
             payload['subjectIds'] = [sid] if not isinstance(sid, list) else sid
 
-        # Resolve duplicate check using the camelCase keys directly
-        class_id = payload.get('classId')
-        exam_id = payload.get('examId')
-        centre_id = payload.get('centreId')
+        # Resolve classIds and examIds
+        raw_class_ids = payload.get('classIds')
+        if raw_class_ids is None and payload.get('classId') is not None:
+            raw_class_ids = [payload.get('classId')]
+        elif not isinstance(raw_class_ids, list) and raw_class_ids is not None:
+            raw_class_ids = [raw_class_ids]
 
-        if class_id and exam_id:
-            filter_kwargs = {'class_id': class_id, 'exam_id': exam_id}
-            if centre_id is not None:
-                filter_kwargs['centre_id'] = centre_id
-            existing = AssessmentSubject.objects.filter(**filter_kwargs).first()
-            if existing:
-                if 'maxMarks' in payload or 'max_marks' in payload:
-                    val = payload.get('maxMarks') or payload.get('max_marks')
-                    if val is not None:
-                        existing.max_marks = Decimal(str(val))
-                if 'subjectIds' in payload or 'subject_ids' in payload:
-                    sids = payload.get('subjectIds') or payload.get('subject_ids')
-                    if sids is not None:
-                        existing.subject_ids = sids
-                existing.save()
-                serializer = self.get_serializer(existing)
+        raw_exam_ids = payload.get('examIds') or payload.get('assessmentTypeIds')
+        if raw_exam_ids is None and payload.get('examId') is not None:
+            raw_exam_ids = [payload.get('examId')]
+        elif not isinstance(raw_exam_ids, list) and raw_exam_ids is not None:
+            raw_exam_ids = [raw_exam_ids]
+
+        cids = [int(c) for c in (raw_class_ids or []) if str(c).isdigit()]
+        eids = [int(e) for e in (raw_exam_ids or []) if str(e).isdigit()]
+
+        centre_id = payload.get('centreId')
+        ay_id = payload.get('academicYearId')
+        sids = payload.get('subjectIds') or []
+        max_m = payload.get('maxMarks') or payload.get('max_marks')
+        parsed_max = Decimal(str(max_m)) if max_m is not None else Decimal('100.00')
+
+        if cids and eids:
+            last_obj = None
+            for cid in cids:
+                for eid in eids:
+                    filter_kwargs = {'class_id': cid, 'exam_id': eid}
+                    if ay_id is not None:
+                        filter_kwargs['academic_year_id'] = ay_id
+                    if centre_id is not None:
+                        filter_kwargs['centre_id'] = centre_id
+                    existing = AssessmentSubject.objects.filter(**filter_kwargs).first()
+                    if existing:
+                        if max_m is not None:
+                            existing.max_marks = parsed_max
+                        if sids:
+                            existing.subject_ids = sids
+                        existing.is_active = True
+                        existing.save()
+                        last_obj = existing
+                    else:
+                        last_obj = AssessmentSubject.objects.create(
+                            class_id=cid,
+                            exam_id=eid,
+                            academic_year_id=ay_id,
+                            centre_id=centre_id,
+                            max_marks=parsed_max,
+                            subject_ids=sids,
+                            is_active=True,
+                        )
+            if last_obj:
+                serializer = self.get_serializer(last_obj)
                 return Response(serializer.data, status=status.HTTP_200_OK)
 
         serializer = self.get_serializer(data=payload)

@@ -5,6 +5,7 @@ from school.views.attendance import AttendanceBulkView, AttendanceCentreListView
 from school.views.assessment import (
     AcademicYearListView,
     AssessmentBehaviourView,
+    AssessmentCentrePerformanceView,
     AssessmentCreateView,
     AssessmentDetailView,
     AssessmentDetailsView,
@@ -92,4 +93,6 @@ urlpatterns = [
     path('assessments/<int:assessment_id>/statistics', AssessmentStatisticsView.as_view(), name='assessment-statistics'),
     path('students/<int:student_id>/dashboard', StudentDashboardView.as_view(), name='student-dashboard'),
     path('assessments/<int:assessment_id>/details', AssessmentDetailsView.as_view(), name='assessment-details'),
+    path('assessments/<int:assessment_id>/centre-performance/', AssessmentCentrePerformanceView.as_view(), name='assessment-centre-performance'),
+    path('assessments/centre-performance/', AssessmentCentrePerformanceView.as_view(), name='assessment-centre-performance-query'),
 ]
