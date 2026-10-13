@@ -131,25 +131,20 @@ API: `https://visionseducation.in/api/`.
 
 ## 9. Redeploying
 
-The script follows the branch in `DEPLOY_BRANCH` (default: `feature/hostinger-deployment`).
-
-**Initial deployment** (before these files are merged to main):
+Deployments follow `main`. From the VPS:
 
 ```bash
 cd /srv/visions
-git fetch origin
-git switch feature/hostinger-deployment
+git switch main
 bash deploy/deploy.sh
 ```
 
-**After merging this branch into main**, run future deploys against `main`:
+The script always fast-forward pulls `main` from origin before building, so it only deploys
+what has been merged and pushed. To deploy a different branch for testing:
 
 ```bash
-cd /srv/visions && DEPLOY_BRANCH=main bash deploy/deploy.sh
+DEPLOY_BRANCH=feature/some-branch bash deploy/deploy.sh
 ```
-
-The script always fast-forward pulls the chosen branch from origin, so it never deploys
-unpushed local changes.
 
 What it does (all verified in this repo):
 

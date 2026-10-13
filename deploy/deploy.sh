@@ -12,9 +12,8 @@ set -euo pipefail
 APP_DIR="/srv/visions"
 BACKEND_DIR="$APP_DIR/backend/django-backend"
 FRONTEND_DIR="$APP_DIR/frontend/visions-platform"
-# Override with: DEPLOY_BRANCH=main bash deploy/deploy.sh
-# Initial deployment uses this feature branch; after merging to main, run with DEPLOY_BRANCH=main.
-BRANCH="${DEPLOY_BRANCH:-feature/hostinger-deployment}"
+# Deploys main by default. Override with: DEPLOY_BRANCH=<branch> bash deploy/deploy.sh
+BRANCH="${DEPLOY_BRANCH:-main}"
 BACKUP_DIR="/srv/visions/backups"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 
