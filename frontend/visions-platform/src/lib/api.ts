@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './auth';
+
 export interface StudentListItem {
   id: string;
   name: string;
@@ -59,6 +61,8 @@ export interface AttendanceInput {
 export interface AttendanceCentre {
   id: number;
   name: string;
+  district?: string;
+  region?: string;
 }
 
 export interface AttendanceIntelligenceSetting {
@@ -74,6 +78,44 @@ export interface AttendanceIntelligenceSetting {
   engagement_alert_level: number;
   engagement_alert_recipients: string[];
   updated_at?: string;
+}
+
+export interface AttendanceAlertRecipient {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export interface AttendanceAlertRecipients {
+  community_educators: AttendanceAlertRecipient[];
+  admin: { name: string; email: string };
+}
+
+export async function fetchAttendanceAlertRecipients(centreId: number): Promise<AttendanceAlertRecipients> {
+  const response = await fetch(`${getApiBaseUrl()}/v1/attendance/alert-recipients/?centre_id=${centreId}`, {
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  });
+  if (!response.ok) throw new Error(`Failed to load attendance email recipients (${response.status})`);
+  return response.json() as Promise<AttendanceAlertRecipients>;
+}
+
+export async function sendAttendanceDefaultingEmail(input: {
+  centre_id: number;
+  attendance_date: string;
+  educator_id: number;
+  class_grade?: string;
+  student_ids: number[];
+}): Promise<{ sent: boolean; recipient: string; student_count: number; subject: string }> {
+  const response = await fetch(`${getApiBaseUrl()}/v1/attendance/defaulting-email/`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null) as { detail?: string; student_ids?: string[] } | null;
+    throw new Error(detail?.detail || detail?.student_ids?.[0] || `Failed to send attendance email (${response.status})`);
+  }
+  return response.json() as Promise<{ sent: boolean; recipient: string; student_count: number; subject: string }>;
 }
 
 export async function saveAttendanceBulk(date: string, centre: number, attendance: AttendanceInput[]): Promise<AttendanceRecord[]> {
@@ -126,6 +168,7 @@ interface StudentApiRecord {
     id?: number;
     name?: string;
   };
+  class_grade?: string;
 }
 
 function getApiBaseUrl(): string {
@@ -154,7 +197,7 @@ function mapStudentRecord(record: StudentApiRecord): StudentListItem {
     region: record.centre?.region || "Unknown region",
     centre: centerName,
     centreId: record.centre?.id,
-    class: roleName,
+    class: record.class_grade || roleName,
     gender: "Unknown",
     age: 0,
     attendancePercent: 0,

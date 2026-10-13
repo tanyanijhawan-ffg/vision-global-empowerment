@@ -37,7 +37,7 @@ class Attendance(models.Model):
 
 class AttendanceIntelligenceSetting(models.Model):
     NOTIFICATION_MODES = [('combined', 'Combined notification'), ('separate', 'Separate notifications')]
-    CHANNELS = ['email', 'sms', 'whatsapp']
+    CHANNELS = ['email']
     RECIPIENTS = ['facilitator', 'admin']
 
     setting_id = models.AutoField(primary_key=True)
