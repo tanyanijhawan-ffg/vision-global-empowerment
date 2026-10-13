@@ -1,13 +1,13 @@
 from datetime import timedelta
 
-from django.db.models import Avg, Count, F, Q
+from django.db.models import Count, Q
 from django.db.models.functions import TruncMonth, TruncWeek
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from school.models.assessment import AssessmentScore, Subject
+from school.models.assessment import AssessmentScore, AssessmentSubject
 from school.models.attendance import Attendance
 from school.models.center import Center, District, Region
 from school.models.student import Student
@@ -47,9 +47,8 @@ class DashboardSummaryView(APIView):
         high_risk = sum(1 for row in at_risk if row['present'] / row['total'] < 0.75)
 
         # Academics: average percentage across all scored assessments
-        score_rows = AssessmentScore.objects.select_related('subject', 'assessment').all()
-        total_scores = score_rows.count()
-        avg_academic = round(float(score_rows.aggregate(avg=Avg(F('obtained_marks') * 100.0 / F('assessment__assessment_type__max_marks')))['avg'] or 0)) if total_scores else 0
+        score_rows = AssessmentScore.objects.select_related('subject', 'assessment__assessment_type').all()
+        avg_academic = self._average_score(score_rows)
 
         data = {
             'stats': {
@@ -98,13 +97,31 @@ class DashboardSummaryView(APIView):
             for row in rows if row['total']
         ]
 
-    def _academics_by_subject(self, score_rows):
-        rows = (
-            score_rows.values('subject__name')
-            .annotate(avg=Avg(F('obtained_marks') * 100.0 / F('assessment__assessment_type__max_marks')))
-            .order_by('subject__name')
+    def _max_marks_for(self, score):
+        mapping = (
+            AssessmentSubject.objects
+            .filter(exam_id=score.assessment.assessment_type_id, is_active=True)
+            .order_by('-updated_at')
+            .first()
         )
-        return [{'name': row['subject__name'], 'score': round(float(row['avg'] or 0))} for row in rows]
+        return float(mapping.max_marks) if mapping else 100.0
+
+    def _average_score(self, score_rows):
+        percentages = [
+            float(row.obtained_marks) / self._max_marks_for(row) * 100
+            for row in score_rows
+        ]
+        return round(sum(percentages) / len(percentages)) if percentages else 0
+
+    def _academics_by_subject(self, score_rows):
+        by_subject = {}
+        for row in score_rows:
+            name = row.subject.name if row.subject else 'Unknown'
+            by_subject.setdefault(name, []).append(float(row.obtained_marks) / self._max_marks_for(row) * 100)
+        return [
+            {'name': name, 'score': round(sum(values) / len(values))}
+            for name, values in sorted(by_subject.items())
+        ]
 
     def _students_by_region(self, students):
         rows = (
@@ -151,4 +168,4 @@ class DashboardSummaryView(APIView):
             })
 
         activities.sort(key=lambda item: item['timestamp'], reverse=True)
-        return activities[:8]
+        return activities[:10]
