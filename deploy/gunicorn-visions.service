@@ -1,0 +1,26 @@
+[Unit]
+Description=Gunicorn service for Visions LEP Django backend
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=deploy
+Group=www-data
+WorkingDirectory=/srv/visions/backend/django-backend
+EnvironmentFile=/srv/visions/backend/django-backend/.env
+ExecStart=/srv/visions/backend/django-backend/.venv/bin/gunicorn \
+    --workers 3 \
+    --timeout 120 \
+    --bind 127.0.0.1:8000 \
+    --access-logfile - \
+    --error-logfile - \
+    vision_global_empowerment.wsgi:application
+Restart=always
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

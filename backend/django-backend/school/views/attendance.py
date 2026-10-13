@@ -1,6 +1,9 @@
 from django.db import transaction
+from django.db.models import Q
 from rest_framework import generics, serializers, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import AllowAny
 
@@ -99,3 +102,77 @@ class AttendanceListView(generics.ListAPIView):
         if center_id is not None:
             queryset = queryset.filter(student__centre__centre_id=center_id)
         return queryset
+
+
+class AbsenceAlertListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        setting, _ = AttendanceIntelligenceSetting.objects.get_or_create(setting_id=1)
+        if not setting.absence_alert_enabled:
+            return Response({
+                'enabled': False,
+                'threshold_days': setting.absence_alert_days,
+                'alerts': [],
+            })
+
+        profile = getattr(request.user, 'profile', None)
+        if profile is None:
+            return Response({
+                'enabled': True,
+                'threshold_days': setting.absence_alert_days,
+                'alerts': [],
+            })
+
+        queryset = Attendance.objects.select_related('student', 'student__centre')
+        role_name = getattr(getattr(profile, 'role', None), 'name', None)
+        if role_name != 'super_admin':
+            if profile.region_id is None:
+                return Response({
+                    'enabled': True,
+                    'threshold_days': setting.absence_alert_days,
+                    'alerts': [],
+                })
+            queryset = queryset.filter(
+                Q(student__centre__region_id=profile.region_id)
+                | Q(student__centre__district__region_id=profile.region_id)
+            )
+
+        rows = queryset.order_by('student_id', '-attendance_date').values(
+            'student_id',
+            'student__full_name',
+            'student__centre__centre_name',
+            'attendance_date',
+            'status',
+        )
+        streaks = {}
+        for row in rows:
+            student_id = row['student_id']
+            streak = streaks.setdefault(student_id, {
+                'student_id': student_id,
+                'student_name': row['student__full_name'],
+                'centre_name': row['student__centre__centre_name'],
+                'consecutive_absent_days': 0,
+                'last_absent_date': None,
+                'streak_ended': False,
+            })
+            if streak['streak_ended']:
+                continue
+            if row['status'] != 'Absent':
+                streak['streak_ended'] = True
+                continue
+            streak['consecutive_absent_days'] += 1
+            if streak['last_absent_date'] is None:
+                streak['last_absent_date'] = row['attendance_date'].isoformat()
+
+        alerts = [
+            {key: value for key, value in streak.items() if key != 'streak_ended'}
+            for streak in streaks.values()
+            if streak['consecutive_absent_days'] > setting.absence_alert_days
+        ]
+        alerts.sort(key=lambda alert: (-alert['consecutive_absent_days'], alert['student_name']))
+        return Response({
+            'enabled': True,
+            'threshold_days': setting.absence_alert_days,
+            'alerts': alerts,
+        })

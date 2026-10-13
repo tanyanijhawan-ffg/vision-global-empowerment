@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, ShieldAlert } from 'lucide-react';
+import { Search, Plus, Edit2, ShieldAlert, Trash2 } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import StatusChip from '../../components/StatusChip';
 import UserCreateDialog from '../../components/UserCreateDialog';
 import UserEditDialog from '../../components/UserEditDialog';
-import { getAuthHeaders, getCurrentUser, normalizeRole } from '../../lib/auth';
+import { getAuthHeaders, getCurrentUser, getRoleLabel, normalizeRole } from '../../lib/auth';
 
 interface UserRow {
   id: number | string;
   username: string;
   email: string;
   full_name: string;
+  mobile_number?: string | null;
   role: string;
   region_id?: number | null;
   region_name?: string | null;
@@ -54,14 +55,56 @@ export default function UsersList() {
     fetchUsers();
   }, []);
 
-  const filteredUsers = users.filter((user) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
+  const filteredUsers = [...users]
+    .filter((user) => {
+      const q = search.trim().toLowerCase();
+      if (!q) return true;
 
-    return [user.full_name, user.username, user.email, user.role].join(' ').toLowerCase().includes(q);
-  });
+      return [user.full_name, user.username, user.email, user.mobile_number, user.role].join(' ').toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      const roleOrder: Record<string, number> = {
+        SUPER_ADMIN: 0,
+        REGIONAL_ADMIN: 1,
+        FACILITATOR: 2,
+      };
+      const roleA = roleOrder[normalizeRole(a.role)] ?? 99;
+      const roleB = roleOrder[normalizeRole(b.role)] ?? 99;
+      return roleA - roleB || String(a.full_name || a.username).localeCompare(String(b.full_name || b.username));
+    });
 
   const canCreateUser = activeRole === 'SUPER_ADMIN' || activeRole === 'REGIONAL_ADMIN';
+
+  const handleDeleteUser = async (userId: number | string) => {
+    const userToDelete = users.find((user) => user.id === userId);
+    if (!userToDelete) return;
+    if (userToDelete.role === 'super_admin') {
+      window.alert('Super admin users cannot be deleted.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete user ${userToDelete.full_name || userToDelete.username}?`);
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/users/${userId}/`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to delete user.');
+      }
+
+      await fetchUsers();
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+      window.alert('Unable to delete user.');
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -106,13 +149,14 @@ export default function UsersList() {
                   <th className="px-6 py-3">Role</th>
                   <th className="px-6 py-3">Region</th>
                   <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Mobile</th>
                   <th className="px-6 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
+                    <td colSpan={6} className="px-6 py-10 text-center text-slate-500">
                       No users found.
                     </td>
                   </tr>
@@ -139,7 +183,7 @@ export default function UsersList() {
                             'bg-slate-50 text-slate-700 border-slate-200'
                           }`}>
                             {roleLabel === 'SUPER_ADMIN' && <ShieldAlert size={12} />}
-                            {roleLabel === 'SUPER_ADMIN' ? 'Super Admin' : roleLabel === 'REGIONAL_ADMIN' ? 'Regional Admin' : 'Facilitator'}
+                            {getRoleLabel(user.role)}
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -148,10 +192,20 @@ export default function UsersList() {
                         <td className="px-6 py-4">
                           <StatusChip status="Active" />
                         </td>
+                        <td className="px-6 py-4">
+                          <div className="text-slate-900">{user.mobile_number || '—'}</div>
+                        </td>
                         <td className="px-6 py-4 text-right">
-                          <button onClick={() => setEditingUser(user)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md hover:bg-indigo-50 transition-colors" title="Edit user">
-                            <Edit2 size={16} />
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={() => setEditingUser(user)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md hover:bg-indigo-50 transition-colors" title="Edit user">
+                              <Edit2 size={16} />
+                            </button>
+                            {user.role !== 'super_admin' ? (
+                              <button onClick={() => handleDeleteUser(user.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors" title="Delete user">
+                                <Trash2 size={16} />
+                              </button>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     );

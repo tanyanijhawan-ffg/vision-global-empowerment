@@ -29,6 +29,8 @@ class IsRegionalAdmin(BasePermission):
 
 
 class CanManageUsers(BasePermission):
+    message = 'Your role does not have permission to create or manage users.'
+
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
@@ -46,7 +48,5 @@ class CanManageUsersOrSelf(BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         if str(getattr(view, 'kwargs', {}).get('pk')) == str(request.user.pk):
-            return True
-        if request.method in SAFE_METHODS:
-            return CanManageUsers().has_permission(request, view)
+            return request.method in SAFE_METHODS or request.method in {'PUT', 'PATCH'}
         return CanManageUsers().has_permission(request, view)
