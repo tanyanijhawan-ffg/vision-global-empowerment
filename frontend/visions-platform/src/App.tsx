@@ -14,6 +14,7 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import RegionsList from './pages/masters/RegionsList';
 import CentresList from './pages/masters/CentresList';
+import AssessmentsList from './pages/masters/AssessmentsList';
 import StudentsList from './pages/students/StudentsList';
 import StudentRegistration from './pages/students/StudentRegistration';
 import StudentProfile from './pages/students/StudentProfile';
@@ -21,7 +22,6 @@ import AttendanceDashboard from './pages/attendance/AttendanceDashboard';
 import AttendanceEntry from './pages/attendance/AttendanceEntry';
 import AcademicDashboard from './pages/academics/AcademicDashboard';
 import AssessmentEntry from './pages/academics/AssessmentEntry';
-import AcademicTracking from './pages/academics/AcademicTracking';
 import AcademicProfile from './pages/academics/AcademicProfile';
 import LeadershipDashboard from './pages/leadership/LeadershipDashboard';
 import LeadershipTrainingEntry from './pages/leadership/LeadershipTrainingEntry';
@@ -35,7 +35,6 @@ import SettingsLayout from './pages/settings/SettingsLayout';
 import ProfileSettings from './pages/settings/ProfileSettings';
 import OrgSettings from './pages/settings/OrgSettings';
 import NotificationSettings from './pages/settings/NotificationSettings';
-import ThemeSettings from './pages/settings/ThemeSettings';
 
 const queryClient = new QueryClient();
 
@@ -54,17 +53,18 @@ function App() {
             
             <Route path="/masters/regions" element={<ProtectedRoute><RegionsList /></ProtectedRoute>} />
             <Route path="/masters/centres" element={<ProtectedRoute><CentresList /></ProtectedRoute>} />
+            <Route path="/masters/assessments" element={<ProtectedRoute><AssessmentsList /></ProtectedRoute>} />
             
             <Route path="/students" element={<ProtectedRoute><StudentsList /></ProtectedRoute>} />
             <Route path="/students/new" element={<ProtectedRoute><StudentRegistration /></ProtectedRoute>} />
             <Route path="/students/:id" element={<ProtectedRoute><StudentProfile /></ProtectedRoute>} />
+            <Route path="/students/:id/edit" element={<ProtectedRoute><StudentRegistration /></ProtectedRoute>} />
             
             <Route path="/attendance" element={<ProtectedRoute><AttendanceDashboard /></ProtectedRoute>} />
             <Route path="/attendance/entry" element={<ProtectedRoute><AttendanceEntry /></ProtectedRoute>} />
             
             <Route path="/academics" element={<ProtectedRoute><AcademicDashboard /></ProtectedRoute>} />
             <Route path="/academics/entry" element={<ProtectedRoute><AssessmentEntry /></ProtectedRoute>} />
-            <Route path="/academics/tracking" element={<ProtectedRoute><AcademicTracking /></ProtectedRoute>} />
             <Route path="/academics/:studentId" element={<ProtectedRoute><AcademicProfile /></ProtectedRoute>} />
 
             <Route path="/leadership" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><LeadershipDashboard /></ProtectedRoute>} />
@@ -83,7 +83,6 @@ function App() {
               <Route path="profile" element={<ProfileSettings />} />
               <Route path="organization" element={<ProtectedRoute minimumRole="SUPER_ADMIN"><OrgSettings /></ProtectedRoute>} />
               <Route path="notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
-              <Route path="theme" element={<ProtectedRoute><ThemeSettings /></ProtectedRoute>} />
             </Route>
           </Route>
 

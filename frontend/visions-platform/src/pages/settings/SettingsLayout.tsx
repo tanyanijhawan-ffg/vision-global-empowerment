@@ -1,12 +1,11 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
-import { User, Building, Bell, Palette } from 'lucide-react';
+import { User, Building, Bell } from 'lucide-react';
 
 const tabs = [
   { id: 'profile', name: 'Profile Settings', icon: User, path: '/settings/profile' },
   { id: 'organization', name: 'Organization', icon: Building, path: '/settings/organization' },
   { id: 'notifications', name: 'Notifications', icon: Bell, path: '/settings/notifications' },
-  { id: 'theme', name: 'Appearance', icon: Palette, path: '/settings/theme' },
 ];
 
 export default function SettingsLayout() {

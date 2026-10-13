@@ -29,3 +29,6 @@ build/
 
 # Database
 *.sqlite3
+
+# User-uploaded media
+media/

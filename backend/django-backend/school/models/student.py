@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from .center import Center
 
@@ -11,7 +12,7 @@ class Student(models.Model):
     gender = models.CharField(max_length=20, blank=True, null=True)
     dob = models.DateField(blank=True, null=True)
     age = models.IntegerField(blank=True, null=True)
-    photo = models.CharField(max_length=255, blank=True, null=True)
+    photo = models.FileField(upload_to='student_photos/', max_length=255, blank=True, null=True)
     school_name = models.CharField(max_length=150, blank=True, null=True)
     school_type = models.CharField(max_length=50, blank=True, null=True)
     class_grade = models.CharField(max_length=30, blank=True, null=True)
@@ -22,5 +23,30 @@ class Student(models.Model):
     class Meta:
         db_table = 'student'
 
+    def save(self, *args, **kwargs):
+        if self.dob:
+            if isinstance(self.dob, str):
+                from datetime import date
+                self.dob = date.fromisoformat(self.dob)
+            today = timezone.localdate()
+            self.age = today.year - self.dob.year - ((today.month, today.day) < (self.dob.month, self.dob.day))
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.full_name or f'Student {self.student_id}'
+
+
+class StudentYearRecord(models.Model):
+    student_year_record_id = models.AutoField(primary_key=True)
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='year_records')
+    academic_year = models.ForeignKey('school.AcademicYear', on_delete=models.CASCADE, related_name='student_year_records')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'student_year_record'
+        unique_together = ('student', 'academic_year')
+
+    def __str__(self):
+        return f"{self.student.full_name} - {self.academic_year.name}"

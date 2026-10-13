@@ -38,20 +38,73 @@ postgresql://postgres:your_password@localhost:5432/vision_global_empowerment
 
 ## 3. Database Structure Overview
 
+The assessment module follows a master/configuration + actual assessment model. The current design is:
+
+```text
+academic_year
+  |
+  +---- assessment_subject
+  |
+  +---- assessment
+         |
+         +---- assessment_score
+         |
+         +---- assessment_diagnostic
+         |
+         +---- student_learning_behaviour
+         |
+         +---- student_observation
+         |
+         +---- assessment_submission
+
+class
+  |
+  +---- subject
+  |
+  +---- assessment_subject
+
+assessment_type
+  |
+  +---- assessment_subject
+  |
+  +---- assessment
+
+learning_behaviour_option
+  |
+  +---- student_learning_behaviour
+
+diagnostic_option
+  |
+  +---- assessment_diagnostic
+```
+
 Core tables relevant to the assessment module:
 
 ```text
+academic_year
+class
 assessment_type
 subject
+assessment_subject
+diagnostic_option
+learning_behaviour_option
 assessment
 assessment_score
 assessment_diagnostic
 student_learning_behaviour
 student_observation
-learning_behaviour_option
-diagnostic_option
 assessment_submission
 ```
+
+Key relationships:
+
+- `academic_year` defines the academic cycle and is linked to `assessment_subject` and `assessment`.
+- `class` defines the student grouping context for assessments.
+- `assessment_type` is reusable master data for quarterly/half-yearly/annual cycles.
+- `subject` belongs to a class and is mapped into `assessment_subject` for a given year + class + type.
+- `assessment` represents one actual assessment event and is unique per academic year, class, and assessment type.
+- `assessment_score`, `assessment_diagnostic`, `student_learning_behaviour`, `student_observation`, and `assessment_submission` are child records tied to that assessment.
+- Uniqueness constraints are enforced for one score, one diagnostic, one behaviour, and one observation per assessment + student + subject or assessment + student context.
 
 ## 4. Schema Naming Conventions
 

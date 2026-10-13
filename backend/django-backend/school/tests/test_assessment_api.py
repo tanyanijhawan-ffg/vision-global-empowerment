@@ -65,3 +65,60 @@ class AssessmentMetadataApiTests(TestCase):
 
         deleted = client.delete(f"/api/v1/metadata/subjects/{payload['id']}/")
         self.assertEqual(deleted.status_code, 204)
+
+    def test_diagnostic_option_metadata_crud_flow(self):
+        client = APIClient()
+        response = client.post('/api/v1/metadata/diagnostic-options/', {
+            'category': 'understanding_level',
+            'code': 'STILL_LEARNING',
+            'name': 'Still learning',
+            'sortOrder': 4,
+            'isActive': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload['code'], 'STILL_LEARNING')
+        self.assertEqual(payload['sortOrder'], 4)
+
+        retrieve = client.get(f"/api/v1/metadata/diagnostic-options/{payload['id']}/")
+        self.assertEqual(retrieve.status_code, 200)
+        self.assertEqual(retrieve.json()['category'], 'understanding_level')
+
+        update = client.put(f"/api/v1/metadata/diagnostic-options/{payload['id']}/", {
+            'category': 'understanding_level',
+            'code': 'STILL_LEARNING',
+            'name': 'Needs more practice',
+            'sortOrder': 5,
+            'isActive': True,
+        }, format='json')
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(update.json()['name'], 'Needs more practice')
+
+        delete = client.delete(f"/api/v1/metadata/diagnostic-options/{payload['id']}/")
+        self.assertEqual(delete.status_code, 204)
+
+    def test_learning_behaviour_metadata_crud_flow(self):
+        client = APIClient()
+        response = client.post('/api/v1/metadata/learning-behaviours/', {
+            'code': 'HIGHLY_MOTIVATED',
+            'name': 'Highly motivated',
+            'isActive': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload['name'], 'Highly motivated')
+
+        retrieve = client.get(f"/api/v1/metadata/learning-behaviours/{payload['id']}/")
+        self.assertEqual(retrieve.status_code, 200)
+        self.assertEqual(retrieve.json()['code'], 'HIGHLY_MOTIVATED')
+
+        update = client.put(f"/api/v1/metadata/learning-behaviours/{payload['id']}/", {
+            'code': 'HIGHLY_MOTIVATED',
+            'name': 'Very motivated',
+            'isActive': True,
+        }, format='json')
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(update.json()['name'], 'Very motivated')
+
+        delete = client.delete(f"/api/v1/metadata/learning-behaviours/{payload['id']}/")
+        self.assertEqual(delete.status_code, 204)

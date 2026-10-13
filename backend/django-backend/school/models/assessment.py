@@ -1,17 +1,99 @@
 from django.db import models
 
+from .center import Center
 from .student import Student
+
+
+class AcademicYear(models.Model):
+    academic_year_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=20, unique=True)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    is_current = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'academic_year'
+
+    def __str__(self):
+        return self.name
 
 
 class AssessmentType(models.Model):
     assessment_type_id = models.AutoField(primary_key=True)
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(max_length=50)
     name = models.CharField(max_length=100)
-    duration_months = models.PositiveIntegerField(default=0)
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name='assessment_types',
+        db_column='academic_year_id',
+        null=True,
+        blank=True
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
         db_table = 'assessment_type'
+        verbose_name = 'Exam'
+        verbose_name_plural = 'Exams'
+
+    def __str__(self):
+        year_str = f" ({self.academic_year.name})" if self.academic_year else ""
+        return f"{self.name}{year_str}"
+
+
+class AssessmentSubject(models.Model):
+    assessment_subject_id = models.AutoField(primary_key=True)
+    academic_year_id = models.IntegerField(null=True, blank=True)
+    centre_id = models.IntegerField(null=True, blank=True)
+    class_id = models.IntegerField(null=True, blank=True)
+    exam_id = models.IntegerField(null=True, blank=True)
+    subject_ids = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+    max_marks = models.DecimalField(max_digits=6, decimal_places=2, default=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'assessment_subject'
+        unique_together = [['class_id', 'exam_id', 'subject_ids', 'academic_year_id']]
+
+    def __str__(self):
+        return f'Class:{self.class_id} Exam:{self.exam_id} Centre:{self.centre_id} Subjects:{self.subject_ids}'
+
+    @property
+    def assessment_type_id(self):
+        return self.exam_id
+
+    @assessment_type_id.setter
+    def assessment_type_id(self, value):
+        self.exam_id = value
+
+    @property
+    def subject_id(self):
+        return self.subject_ids
+
+    @subject_id.setter
+    def subject_id(self, value):
+        if isinstance(value, list):
+            self.subject_ids = value
+        elif value is not None:
+            self.subject_ids = [value]
+
+
+class SchoolClass(models.Model):
+    class_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=50, blank=True, null=True, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'class'
 
     def __str__(self):
         return self.name
@@ -20,9 +102,7 @@ class AssessmentType(models.Model):
 class Subject(models.Model):
     subject_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
-    code = models.CharField(max_length=50, blank=True, null=True)
-    class_id = models.IntegerField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
+    code = models.CharField(max_length=50, unique=True, default='')
 
     class Meta:
         db_table = 'subject'
@@ -40,11 +120,10 @@ class Assessment(models.Model):
     ]
 
     assessment_id = models.AutoField(primary_key=True)
+    centre = models.ForeignKey(Center, on_delete=models.CASCADE, related_name='assessments', db_column='centre_id', null=True, blank=True)
     academic_year_id = models.IntegerField()
     class_id = models.IntegerField()
-    section_id = models.IntegerField(default=1)
     assessment_type = models.ForeignKey(AssessmentType, on_delete=models.CASCADE, related_name='assessments')
-    term = models.CharField(max_length=20)
     assessment_date = models.DateField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -54,7 +133,7 @@ class Assessment(models.Model):
         db_table = 'assessment'
 
     def __str__(self):
-        return f'{self.assessment_type.name} {self.term}'
+        return f'{self.assessment_type.name}'
 
 
 class AssessmentScore(models.Model):
@@ -63,7 +142,6 @@ class AssessmentScore(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='assessment_scores')
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='assessment_scores')
     obtained_marks = models.DecimalField(max_digits=6, decimal_places=2, default=0)
-    max_marks = models.DecimalField(max_digits=6, decimal_places=2, default=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -86,6 +164,7 @@ class DiagnosticOption(models.Model):
     code = models.CharField(max_length=50)
     name = models.CharField(max_length=100)
     sort_order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         db_table = 'diagnostic_option'

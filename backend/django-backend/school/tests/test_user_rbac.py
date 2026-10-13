@@ -1,10 +1,17 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
+from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from rest_framework.test import APIClient
 
 from school.models.center import Program, Region
+from school.models.center import Center, District
 from school.models.role import Role
 from school.models.user_profile import UserProfile
+from school.services.xlsx import build_workbook
 
 User = get_user_model()
 
@@ -55,11 +62,81 @@ class UserRBACAPITests(TestCase):
             'role': 'regional_admin',
             'region': self.region_south.region_id,
             'full_name': 'Regional Two',
+            'mobile_number': '+91 99999 11111',
         }, format='json')
 
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data['role'], 'regional_admin')
         self.assertEqual(response.data['region_id'], self.region_south.region_id)
+
+    def test_duplicate_username_returns_specific_field_error(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.post('/api/users/', {
+            'username': self.regional_user.username,
+            'email': 'different@vision.org',
+            'password': 'TestPass123!',
+            'role': 'community_educator',
+            'region': self.region_north.region_id,
+            'full_name': 'Duplicate Username',
+            'mobile_number': '9999911111',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('username', response.data)
+        self.assertIn('already exists', str(response.data['username']).lower())
+
+    def test_duplicate_email_returns_specific_field_error(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.post('/api/users/', {
+            'username': 'email_duplicate',
+            'email': self.regional_user.email,
+            'password': 'TestPass123!',
+            'role': 'community_educator',
+            'region': self.region_north.region_id,
+            'full_name': 'Duplicate Email',
+            'mobile_number': '9999922222',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('email', response.data)
+        self.assertIn('already exists', str(response.data['email']).lower())
+
+    def test_weak_password_returns_password_validation_message(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.post('/api/users/', {
+            'username': 'weak_password_user',
+            'email': 'weakpassword@vision.org',
+            'password': '123',
+            'role': 'community_educator',
+            'region': self.region_north.region_id,
+            'full_name': 'Weak Password',
+            'mobile_number': '9999933333',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('password', response.data)
+
+    def test_missing_email_returns_specific_field_error(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.post('/api/users/', {
+            'username': 'missing_email',
+            'password': 'TestPass123!',
+            'role': 'community_educator',
+            'region': self.region_north.region_id,
+            'full_name': 'Missing Email',
+            'mobile_number': '9999944444',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('email', response.data)
 
     def test_regional_admin_can_only_create_facilitators_in_same_region(self):
         client = APIClient()
@@ -72,6 +149,7 @@ class UserRBACAPITests(TestCase):
             'role': 'facilitator',
             'region': self.region_north.region_id,
             'full_name': 'Facilitator Same',
+            'mobile_number': '+91 98888 22222',
         }, format='json')
 
         self.assertEqual(same_region_response.status_code, 201, same_region_response.data)
@@ -83,6 +161,7 @@ class UserRBACAPITests(TestCase):
             'role': 'facilitator',
             'region': self.region_south.region_id,
             'full_name': 'Facilitator Other',
+            'mobile_number': '+91 97777 33333',
         }, format='json')
 
         self.assertEqual(other_region_response.status_code, 403)
@@ -98,7 +177,127 @@ class UserRBACAPITests(TestCase):
             'role': 'regional_admin',
             'region': self.region_north.region_id,
             'full_name': 'Regional Try',
+            'mobile_number': '+91 96666 44444',
         }, format='json')
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_super_admin_can_create_community_educator_in_any_region(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.post('/api/users/', {
+            'username': 'community_educator',
+            'email': 'community@vision.org',
+            'password': 'TestPass123!',
+            'role': 'community_educator',
+            'region': self.region_south.region_id,
+            'full_name': 'Community Educator',
+            'mobile_number': '+91 95555 66666',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['role'], 'community_educator')
+        self.assertEqual(response.data['region_id'], self.region_south.region_id)
+
+    def test_super_admin_can_delete_non_super_admin_user(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.delete(f'/api/users/{self.facilitator_user.id}/')
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(User.objects.filter(id=self.facilitator_user.id).exists())
+
+    def test_community_educator_can_view_and_update_own_profile(self):
+        client = APIClient()
+        client.force_authenticate(user=self.facilitator_user)
+
+        response = client.get(f'/api/users/{self.facilitator_user.id}/')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['role'], 'community_educator')
+        self.assertIn('mobile_number', response.data)
+
+        patch_response = client.patch(f'/api/users/{self.facilitator_user.id}/', {
+            'mobile_number': '9876543210',
+            'full_name': 'Facilitator Updated'
+        }, format='json')
+
+        self.assertEqual(patch_response.status_code, 200, patch_response.data)
+        self.assertEqual(patch_response.data['mobile_number'], '9876543210')
+
+    def test_community_educator_cannot_change_own_role_or_region(self):
+        client = APIClient()
+        client.force_authenticate(user=self.facilitator_user)
+
+        response = client.patch(f'/api/users/{self.facilitator_user.id}/', {
+            'role': 'super_admin',
+            'region_id': self.region_south.region_id,
+        }, format='json')
+
+        self.assertEqual(response.status_code, 403, response.data)
+        self.facilitator_user.profile.refresh_from_db()
+        self.assertEqual(self.facilitator_user.profile.role.name, 'facilitator')
+        self.assertEqual(self.facilitator_user.profile.region_id, self.region_north.region_id)
+
+    def test_regional_admin_cannot_change_user_role_or_region(self):
+        client = APIClient()
+        client.force_authenticate(user=self.regional_user)
+
+        response = client.patch(f'/api/users/{self.facilitator_user.id}/', {
+            'role': 'super_admin',
+            'region_id': self.region_south.region_id,
+        }, format='json')
+
+        self.assertEqual(response.status_code, 403, response.data)
+        self.facilitator_user.profile.refresh_from_db()
+        self.assertEqual(self.facilitator_user.profile.role.name, 'facilitator')
+        self.assertEqual(self.facilitator_user.profile.region_id, self.region_north.region_id)
+
+    def test_super_admin_can_change_another_users_role_and_region(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.patch(f'/api/users/{self.facilitator_user.id}/', {
+            'role': 'regional_admin',
+            'region_id': self.region_south.region_id,
+        }, format='json')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['role'], 'regional_admin')
+        self.assertEqual(response.data['region_id'], self.region_south.region_id)
+
+    def test_user_cannot_delete_own_account(self):
+        client = APIClient()
+        client.force_authenticate(user=self.facilitator_user)
+
+        response = client.delete(f'/api/users/{self.facilitator_user.id}/')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(User.objects.filter(id=self.facilitator_user.id).exists())
+
+    def test_users_reject_invalid_mobile_numbers(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.post('/api/users/', {
+            'username': 'invalid_mobile_user',
+            'email': 'invalidmobile@vision.org',
+            'password': 'TestPass123!',
+            'role': 'community_educator',
+            'region': self.region_north.region_id,
+            'full_name': 'Invalid Mobile User',
+            'mobile_number': '12345',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('mobile_number', response.data)
+
+    def test_super_admin_cannot_delete_super_admin(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+
+        response = client.delete(f'/api/users/{self.super_user.id}/')
 
         self.assertEqual(response.status_code, 403)
 
@@ -113,6 +312,7 @@ class UserRBACAPITests(TestCase):
             'role': 'facilitator',
             'region': self.region_north.region_id,
             'full_name': 'Facilitator Attempt',
+            'mobile_number': '+91 94444 77777',
         }, format='json')
 
         self.assertEqual(response.status_code, 403)
@@ -128,3 +328,44 @@ class UserRBACAPITests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['user']['role'], 'regional_admin')
         self.assertEqual(response.data['user']['region_id'], self.region_north.region_id)
+
+    def test_password_reset_email_and_confirmation(self):
+        client = APIClient()
+
+        response = client.post('/api/auth/password-reset/', {'email': self.regional_user.email}, format='json')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('/reset-password?uid=', mail.outbox[0].body)
+
+        uid = urlsafe_base64_encode(force_bytes(self.regional_user.pk))
+        token = default_token_generator.make_token(self.regional_user)
+        response = client.post('/api/auth/password-reset/confirm/', {
+            'uid': uid,
+            'token': token,
+            'password': 'NewSecurePass123!',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.regional_user.refresh_from_db()
+        self.assertTrue(self.regional_user.check_password('NewSecurePass123!'))
+
+    def test_super_admin_bulk_uploads_master_data_idempotently(self):
+        client = APIClient()
+        client.force_authenticate(user=self.super_user)
+        workbook = build_workbook('Centres', [
+            'region_name', 'district_name', 'centre_name', 'centre_type', 'block', 'village',
+            'gps_location', 'facilitator_name', 'start_date', 'status',
+        ], [['Central Region', 'Central District', 'Central Centre', 'Learning', 'Block A', 'Village A', '12.1,77.1', 'Asha', '2026-01-15', 'active']])
+
+        response = client.post('/api/masters/centres/bulk-upload/', {'file': SimpleUploadedFile('centres.xlsx', workbook)}, format='multipart')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data, {'created': 1, 'updated': 0, 'skipped': 0})
+        self.assertTrue(Region.objects.filter(region_name='Central Region').exists())
+        self.assertTrue(District.objects.filter(district_name='Central District').exists())
+        self.assertTrue(Center.objects.filter(centre_name='Central Centre').exists())
+
+        response = client.post('/api/masters/centres/bulk-upload/', {'file': SimpleUploadedFile('centres.xlsx', workbook)}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data, {'created': 0, 'updated': 0, 'skipped': 1})

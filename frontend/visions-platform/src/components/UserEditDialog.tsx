@@ -7,6 +7,7 @@ interface EditableUser {
   username: string;
   email: string;
   full_name: string;
+  mobile_number?: string | null;
   role: string;
   region_id?: number | null;
 }
@@ -26,7 +27,8 @@ export default function UserEditDialog({ user, onClose, onSaved }: UserEditDialo
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState('facilitator');
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [role, setRole] = useState('community_educator');
   const [regionId, setRegionId] = useState('');
   const [regions, setRegions] = useState<RegionOption[]>([]);
   const [error, setError] = useState('');
@@ -37,7 +39,8 @@ export default function UserEditDialog({ user, onClose, onSaved }: UserEditDialo
       setUsername(user.username);
       setEmail(user.email);
       setFullName(user.full_name);
-      setRole(user.role);
+      setMobileNumber(user.mobile_number || '');
+      setRole(user.role === 'facilitator' ? 'community_educator' : user.role || 'community_educator');
       setRegionId(user.region_id ? String(user.region_id) : '');
       setError('');
       fetch('/api/regions/', { headers: { Accept: 'application/json', ...getAuthHeaders() } })
@@ -53,10 +56,16 @@ export default function UserEditDialog({ user, onClose, onSaved }: UserEditDialo
     setSaving(true);
     setError('');
     try {
+      const digits = mobileNumber.replace(/\D/g, '');
+      const normalizedMobile = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+      if (!/^\d{10}$/.test(normalizedMobile)) {
+        throw new Error('Mobile number must be a valid 10-digit number.');
+      }
+
       const response = await fetch(`/api/users/${user.id}/`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ username, email, full_name: fullName, role, region_id: regionId ? Number(regionId) : null }),
+        body: JSON.stringify({ username, email, full_name: fullName, mobile_number: mobileNumber, role: role === 'facilitator' ? 'community_educator' : role, region_id: regionId ? Number(regionId) : null }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.detail || 'Unable to update user.');
@@ -80,7 +89,8 @@ export default function UserEditDialog({ user, onClose, onSaved }: UserEditDialo
           <label className="text-sm text-slate-700">Username<input value={username} onChange={e => setUsername(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm text-slate-700">Email<input value={email} onChange={e => setEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm text-slate-700 sm:col-span-2">Full name<input value={fullName} onChange={e => setFullName(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
-          <label className="text-sm text-slate-700">Role<select value={role} onChange={e => setRole(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"><option value="super_admin">Super Admin</option><option value="regional_admin">Regional Admin</option><option value="facilitator">Facilitator</option></select></label>
+          <label className="text-sm text-slate-700 sm:col-span-2">Mobile number<input value={mobileNumber} onChange={e => setMobileNumber(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" inputMode="numeric" pattern="[0-9]{10}" /></label>
+          <label className="text-sm text-slate-700">Role<select value={role} onChange={e => setRole(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"><option value="super_admin">Super Admin</option><option value="regional_admin">Regional Admin</option><option value="community_educator">Community Educator</option></select></label>
           <label className="text-sm text-slate-700">Region<select value={regionId} onChange={e => setRegionId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">No region</option>{regions.map(region => <option key={region.id} value={region.id}>{region.name}</option>)}</select></label>
         </div>
         {error && <p className="px-6 text-sm text-red-600">{error}</p>}

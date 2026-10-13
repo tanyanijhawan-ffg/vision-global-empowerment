@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCurrentUser, getRouteAccess, getUserInitials } from '../lib/auth';
+import { getCurrentUser, getRoleLabel, getRouteAccess, getUserInitials } from '../lib/auth';
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(' ');
 
@@ -26,6 +26,7 @@ const navItems = [
     children: [
       { name: 'Regions', path: '/masters/regions' },
       { name: 'Centres', path: '/masters/centres' },
+      { name: 'Assessments', path: '/masters/assessments' },
     ]
   },
   { name: 'Students', icon: Users, path: '/students' },
@@ -42,16 +43,7 @@ const navItems = [
     icon: GraduationCap, 
     children: [
       { name: 'Dashboard', path: '/academics' },
-      { name: 'Entry', path: '/academics/entry' },
-      { name: 'Tracking', path: '/academics/tracking' },
-    ]
-  },
-  {
-    name: 'Leadership',
-    icon: ShieldAlert,
-    children: [
-      { name: 'Dashboard', path: '/leadership' },
-      { name: 'Training', path: '/leadership/training' },
+      { name: 'Entry', path: '/academics/entry' }
     ]
   },
   { name: 'Reports', icon: BarChart3, path: '/reports' },
@@ -63,6 +55,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
   const location = useLocation();
   const [currentUser, setCurrentUser] = useState(getCurrentUser);
   const userRole = currentUser?.role ?? 'FACILITATOR';
+  const displayRole = getRoleLabel(currentUser?.role);
 
   useEffect(() => {
     const refreshUser = () => setCurrentUser(getCurrentUser());
@@ -93,7 +86,6 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
     Masters: location.pathname.startsWith('/masters'),
     Attendance: location.pathname.startsWith('/attendance'),
     Academics: location.pathname.startsWith('/academics'),
-    Leadership: location.pathname.startsWith('/leadership'),
   });
 
   const toggleGroup = (name: string) => {
@@ -204,7 +196,7 @@ export default function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsO
           {isOpen && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">{currentUser?.name || 'User'}</p>
-              <p className="text-xs text-slate-400 truncate">{currentUser?.role === 'SUPER_ADMIN' ? 'Super Admin' : currentUser?.role === 'REGIONAL_ADMIN' ? 'Regional Admin' : 'Facilitator'}</p>
+              <p className="text-xs text-slate-400 truncate">{displayRole}</p>
             </div>
           )}
         </div>

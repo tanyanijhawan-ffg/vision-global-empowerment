@@ -4,7 +4,8 @@ from django.db import models
 ROLE_CHOICES = (
     ('super_admin', 'Super Admin'),
     ('regional_admin', 'Regional Admin'),
-    ('facilitator', 'Facilitator'),
+    ('community_educator', 'Community Educator'),
+    ('facilitator', 'Community Educator'),
 )
 
 

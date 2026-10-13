@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Filter, ChevronRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
+import MasterDataActions from '../../components/MasterDataActions';
 import StatusChip from '../../components/StatusChip';
 import { fetchStudents, type StudentListItem } from '../../lib/api';
 import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
@@ -11,9 +12,22 @@ export default function StudentsList() {
   const [data, setData] = useState<StudentListItem[]>([]);
   const [filterRegion, setFilterRegion] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.region : 'All');
   const [filterCentre, setFilterCentre] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.centre : 'All');
+  const [filterClass, setFilterClass] = useState('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const loadStudents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setData(await fetchStudents());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load students');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -56,9 +70,17 @@ export default function StudentsList() {
     return ['All', ...Array.from(set).filter(Boolean)].sort();
   }, [scopedData, filterRegion]);
 
+  const availableClasses = useMemo(() => {
+    const set = new Set(scopedData
+      .filter(student => (filterRegion === 'All' || student.region === filterRegion) && (filterCentre === 'All' || student.centre === filterCentre))
+      .map(student => student.class));
+    return ['All', ...Array.from(set).filter(Boolean)].sort();
+  }, [scopedData, filterRegion, filterCentre]);
+
   const filteredData = scopedData.filter(s => 
     (filterRegion === 'All' || s.region === filterRegion) &&
-    (filterCentre === 'All' || s.centre === filterCentre)
+    (filterCentre === 'All' || s.centre === filterCentre) &&
+    (filterClass === 'All' || s.class === filterClass)
   );
 
   return (
@@ -66,7 +88,8 @@ export default function StudentsList() {
       <PageHeader 
         title="Students" 
         subtitle="Manage student profiles, academic records, and attendance."
-        action={
+        action={<div className="flex flex-wrap items-center justify-end gap-2">
+          {currentUser?.role === 'SUPER_ADMIN' ? <MasterDataActions resource="students" onAdd={() => navigate('/students/new')} onUploaded={loadStudents} showAdd={false} /> : null}
           <Link 
             to="/students/new"
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
@@ -74,7 +97,7 @@ export default function StudentsList() {
             <Plus size={16} />
             Register Student
           </Link>
-        }
+        </div>}
       />
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
@@ -94,7 +117,7 @@ export default function StudentsList() {
               <Filter size={16} className="text-slate-400" />
               <select 
                 value={filterRegion}
-                onChange={(e) => { setFilterRegion(e.target.value); setFilterCentre('All'); }}
+                onChange={(e) => { setFilterRegion(e.target.value); setFilterCentre('All'); setFilterClass('All'); }}
                 className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
               >
                 <option value="All">All Regions</option>
@@ -104,13 +127,23 @@ export default function StudentsList() {
             
             <select 
               value={filterCentre}
-              onChange={(e) => setFilterCentre(e.target.value)}
+              onChange={(e) => { setFilterCentre(e.target.value); setFilterClass('All'); }}
               className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
-              disabled={filterRegion === 'All'}
             >
               <option value="All">All Centres</option>
               {availableCentres.map(centre => (
                 <option key={centre} value={centre}>{centre}</option>
+              ))}
+            </select>
+
+            <select
+              value={filterClass}
+              onChange={(e) => setFilterClass(e.target.value)}
+              className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
+            >
+              <option value="All">All Classes</option>
+              {availableClasses.map(classGrade => (
+                <option key={classGrade} value={classGrade}>{classGrade}</option>
               ))}
             </select>
           </div>
@@ -158,17 +191,11 @@ export default function StudentsList() {
                               <div className="font-medium text-slate-900 group-hover:text-indigo-600 transition-colors">
                                 {student.name}
                               </div>
-                              <div className="text-xs text-slate-500 mt-0.5">{student.id}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-slate-900">{student.gender}, {student.age} yrs</div>
-                          {student.vulnerabilities.length > 0 && (
-                            <div className="text-[10px] text-amber-600 font-medium mt-1 max-w-[150px] truncate" title={student.vulnerabilities.join(', ')}>
-                              {student.vulnerabilities[0]} {student.vulnerabilities.length > 1 && `+${student.vulnerabilities.length - 1}`}
-                            </div>
-                          )}
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-slate-900">{student.centre}</div>
