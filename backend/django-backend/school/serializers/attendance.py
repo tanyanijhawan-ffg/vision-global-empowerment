@@ -8,7 +8,7 @@ from school.serializers.student import StudentSerializer
 class AttendanceSerializer(serializers.ModelSerializer):
     student = StudentSerializer(read_only=True)
     student_id = serializers.PrimaryKeyRelatedField(
-        queryset=Student.objects.all(), write_only=True, source='student'
+        queryset=Student.objects.all(), source='student'
     )
     learning_behaviour = serializers.ListField(
         child=serializers.ChoiceField(choices={
@@ -21,13 +21,6 @@ class AttendanceSerializer(serializers.ModelSerializer):
         default=list,
         write_only=True,
     )
-
-    def validate(self, attrs):
-        if attrs.get('status') == 'Absent' and not attrs.get('absence_reason'):
-            raise serializers.ValidationError({'absence_reason': 'This field is required when status is Absent.'})
-        if attrs.get('status') == 'Late' and not attrs.get('late_reason'):
-            raise serializers.ValidationError({'late_reason': 'This field is required when status is Late.'})
-        return attrs
 
     def create(self, validated_data):
         values = validated_data.pop('learning_behaviour', [])
@@ -106,7 +99,7 @@ class AttendanceIntelligenceSettingSerializer(serializers.ModelSerializer):
     def validate_notification_channels(self, value):
         invalid = set(value) - set(AttendanceIntelligenceSetting.CHANNELS)
         if invalid:
-            raise serializers.ValidationError(f'Unsupported notification channels: {", ".join(sorted(invalid))}.')
+            raise serializers.ValidationError('Only email notifications are currently supported.')
         return value
 
     def validate_alert_student_ids(self, value):

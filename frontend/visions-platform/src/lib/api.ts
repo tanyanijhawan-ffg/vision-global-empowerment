@@ -129,6 +129,44 @@ export interface AttendanceIntelligenceSetting {
   updated_at?: string;
 }
 
+export interface AttendanceAlertRecipient {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export interface AttendanceAlertRecipients {
+  community_educators: AttendanceAlertRecipient[];
+  admin: { name: string; email: string };
+}
+
+export async function fetchAttendanceAlertRecipients(centreId: number): Promise<AttendanceAlertRecipients> {
+  const response = await fetch(`${getApiBaseUrl()}/v1/attendance/alert-recipients/?centre_id=${centreId}`, {
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  });
+  if (!response.ok) throw new Error(`Failed to load attendance email recipients (${response.status})`);
+  return response.json() as Promise<AttendanceAlertRecipients>;
+}
+
+export async function sendAttendanceDefaultingEmail(input: {
+  centre_id: number;
+  attendance_date: string;
+  educator_id: number;
+  class_grade?: string | null;
+  student_ids: number[];
+}): Promise<{ sent: boolean; recipient: string; student_count: number; subject: string }> {
+  const response = await fetch(`${getApiBaseUrl()}/v1/attendance/defaulting-email/`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null) as { detail?: string; student_ids?: string[] } | null;
+    throw new Error(detail?.detail || detail?.student_ids?.[0] || `Failed to send attendance email (${response.status})`);
+  }
+  return response.json() as Promise<{ sent: boolean; recipient: string; student_count: number; subject: string }>;
+}
+
 export async function saveAttendanceBulk(date: string, centre: number, attendance: AttendanceInput[]): Promise<AttendanceRecord[]> {
   const response = await fetch(`${getApiBaseUrl()}/v1/attendance/bulk/`, {
     method: 'POST',
@@ -246,12 +284,14 @@ export interface AssessmentType {
   academicYearId?: number | null;
   academicYearName?: string | null;
   isActive?: boolean;
+  maxMarks?: number;
 }
 
 export interface Subject {
   id: number;
   name: string;
   code?: string;
+  maxMarks?: number;
 }
 
 export interface Assessment {

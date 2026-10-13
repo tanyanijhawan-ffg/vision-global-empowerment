@@ -69,7 +69,7 @@ export default function AcademicDashboard() {
 
   // Assessment details & scores
   const [statistics, setStatistics] = useState<AssessmentStatistics | null>(null);
-  const [comparison, setComparison] = useState<{ current: { percentage: number }; previous: { percentage: number | null }; change: { percentagePoints: number; trend: string } } | null>(null);
+  const [comparison, setComparison] = useState<{ current: { percentage: number; assessment?: string }; previous: { percentage: number | null; assessment?: string }; change: { percentagePoints: number; trend: string } } | null>(null);
   const [subjectComparison, setSubjectComparison] = useState<Array<{ subject: string; previousPercentage: number | null; currentPercentage: number; change: number; trend: string }>>([]);
   const [scoresData, setScoresData] = useState<Array<{ studentId: number; studentName?: string; scores: Array<{ subjectId: number; subject?: string; obtainedMarks: number; maxMarks: number }>; percentage: number }>>([]);
   const [diagnosticsData, setDiagnosticsData] = useState<Array<{ studentId: number; subjectId: number; understandingLevel: string; applicationAbility: string; interestLevel: string }>>([]);
