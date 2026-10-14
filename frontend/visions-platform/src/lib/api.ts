@@ -258,7 +258,7 @@ export interface StudentSummary {
 }
 
 export async function fetchStudentSummary(id: string): Promise<StudentSummary> {
-  const response = await fetch(`${getApiBaseUrl()}/students/${id}/summary/`, { headers: { Accept: 'application/json' } });
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/summary/`, { headers: { Accept: 'application/json', ...getAuthHeaders() } });
   if (!response.ok) throw new Error(`Failed to load student summary (${response.status})`);
   return response.json() as Promise<StudentSummary>;
 }
