@@ -27,7 +27,11 @@ class StudentListView(generics.ListCreateAPIView):
         if gender is not None:
             queryset = queryset.filter(gender__iexact=gender)
         if class_grade is not None:
-            queryset = queryset.filter(class_grade__iexact=class_grade)
+            clean_grade = class_grade.strip()
+            if clean_grade.isdigit():
+                queryset = queryset.filter(models.Q(class_grade__iexact=clean_grade) | models.Q(class_grade__iexact=f'Class {clean_grade}'))
+            else:
+                queryset = queryset.filter(class_grade__iexact=clean_grade)
 
         if academic_year_id:
             queryset = queryset.filter(year_records__academic_year_id=academic_year_id, year_records__is_active=True).distinct()
