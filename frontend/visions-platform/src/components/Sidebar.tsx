@@ -24,6 +24,7 @@ const navItems = [
     icon: Map, 
     children: [
       { name: 'Regions', path: '/masters/regions' },
+      { name: 'Districts', path: '/masters/districts' },
       { name: 'Centres', path: '/masters/centres' },
       { name: 'Assessments', path: '/masters/assessments' },
     ]

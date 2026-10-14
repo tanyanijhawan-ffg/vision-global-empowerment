@@ -2,17 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Calendar, BookOpen, FileText, Pencil, Trash2 } from 'lucide-react';
 import StatusChip from '../../components/StatusChip';
-import { deleteStudent, fetchStudent, type StudentRecord } from '../../lib/api';
+import { deleteStudent, fetchStudent, fetchStudentSummary, type StudentRecord, type StudentSummary } from '../../lib/api';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-
-const attendanceData = [
-  { month: 'Jan', percent: 95 }, { month: 'Feb', percent: 92 }, { month: 'Mar', percent: 88 },
-  { month: 'Apr', percent: 96 }, { month: 'May', percent: 90 },
-];
-const academicData = [
-  { subject: 'Tamil', score: 85 }, { subject: 'English', score: 72 }, { subject: 'Math', score: 90 },
-  { subject: 'Science', score: 88 }, { subject: 'Social', score: 82 },
-];
 
 function Detail({ label, value }: { label: string; value: unknown }) {
   const displayValue = value === null || value === undefined || value === '' ? 'Not provided' : typeof value === 'boolean' ? value ? 'Yes' : 'No' : String(value);
@@ -29,8 +20,12 @@ export default function StudentProfile() {
   const [activeTab, setActiveTab] = useState('overview');
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [summary, setSummary] = useState<StudentSummary | null>(null);
 
-  useEffect(() => { fetchStudent(id).then(setStudent).catch(err => setError(err instanceof Error ? err.message : 'Unable to load student.')); }, [id]);
+  useEffect(() => {
+    fetchStudent(id).then(setStudent).catch(err => setError(err instanceof Error ? err.message : 'Unable to load student.'));
+    fetchStudentSummary(id).then(setSummary).catch(() => setSummary(null));
+  }, [id]);
   const handleDelete = async () => {
     if (!student || !window.confirm(`Delete ${student.full_name}? This cannot be undone.`)) return;
     setDeleting(true);
@@ -66,8 +61,8 @@ export default function StudentProfile() {
           <DetailSection title="Motivation for Joining"><div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{motivationReasons.map(item => <div key={`${item.category}-${item.reason}`} className="rounded-lg border border-slate-200 px-4 py-3"><p className="text-xs font-semibold text-slate-500">{item.category}</p><p className="mt-1 text-sm font-medium text-slate-900">{item.reason}</p></div>)}</div><div><h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">Facilitator Narratives</h4><div className="grid gap-3">{motivationNarratives.map(item => <div key={item.reason} className="rounded-lg bg-slate-50 px-4 py-3"><p className="text-sm font-semibold text-slate-800">{item.reason}</p><p className="mt-1 text-sm leading-6 text-slate-600">{item.narrative || 'Not provided'}</p></div>)}</div></div></div></DetailSection>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8"><DetailSection title="Aspirations & Interests"><dl className="space-y-3"><Detail label="What do you want to become?" value={aspiration?.career_goal} /><Detail label="Interests" value={aspiration?.interests} /><Detail label="Strengths Observed" value={aspiration?.strengths} /></dl></DetailSection><DetailSection title="Location Tagging"><dl className="space-y-3"><Detail label="Region" value={student.centre.region} /><Detail label="District" value={student.centre.district} /><Detail label="Centre" value={student.centre.name} /></dl></DetailSection></div>
         </div>}
-        {activeTab === 'attendance' && <div><div className="mb-6"><h3 className="text-lg font-bold text-slate-900">Attendance History</h3><p className="text-sm text-slate-500">Current average: <span className="font-bold text-indigo-600">{student.attendancePercent ?? 0}%</span></p></div><div className="h-72 w-full"><ResponsiveContainer width="100%" height="100%"><AreaChart data={attendanceData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" /><XAxis dataKey="month" axisLine={false} tickLine={false} /><YAxis axisLine={false} tickLine={false} /><Tooltip /><Area type="monotone" dataKey="percent" stroke="#4F46E5" strokeWidth={3} fill="#E0E7FF" /></AreaChart></ResponsiveContainer></div></div>}
-        {activeTab === 'academics' && <div><div className="mb-6"><h3 className="text-lg font-bold text-slate-900">Latest Assessment</h3><p className="text-sm text-slate-500">Overall Score: <span className="font-bold text-indigo-600">{student.academicScore ?? 0}%</span></p></div><div className="h-72 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={academicData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" /><XAxis dataKey="subject" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} /><Tooltip /><Bar dataKey="score" fill="#4F46E5" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div></div>}
+        {activeTab === 'attendance' && <div><div className="mb-6"><h3 className="text-lg font-bold text-slate-900">Attendance History</h3><p className="text-sm text-slate-500">Current average: <span className="font-bold text-indigo-600">{summary?.attendance_percent ?? 0}%</span></p></div>{summary?.attendance.length ? <div className="h-72 w-full"><ResponsiveContainer width="100%" height="100%"><AreaChart data={summary.attendance}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" /><XAxis dataKey="month" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} /><Tooltip /><Area type="monotone" dataKey="percent" stroke="#4F46E5" strokeWidth={3} fill="#E0E7FF" /></AreaChart></ResponsiveContainer></div> : <p className="py-16 text-center text-sm text-slate-400">No attendance records available yet.</p>}</div>}
+        {activeTab === 'academics' && <div><div className="mb-6"><h3 className="text-lg font-bold text-slate-900">Latest Assessment</h3><p className="text-sm text-slate-500">Overall Score: <span className="font-bold text-indigo-600">{summary?.academic_score ?? 0}%</span></p></div>{summary?.academics.length ? <div className="h-72 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={summary.academics}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" /><XAxis dataKey="subject" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} /><Tooltip /><Bar dataKey="score" fill="#4F46E5" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div> : <p className="py-16 text-center text-sm text-slate-400">No assessment scores recorded yet.</p>}</div>}
         {activeTab === 'notes' && <div className="text-center py-12"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400"><FileText size={24} /></div><h3 className="text-slate-900 font-medium mb-1">No notes yet</h3><p className="text-slate-500 text-sm mb-4">Add qualitative observations about the student.</p><button className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium shadow-sm hover:bg-slate-50">Add Note</button></div>}
       </div>
     </div>

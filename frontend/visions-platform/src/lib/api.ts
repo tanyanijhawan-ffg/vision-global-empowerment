@@ -250,6 +250,19 @@ export async function deleteStudent(id: string): Promise<void> {
   if (!response.ok) throw new Error(`Failed to delete student (${response.status})`);
 }
 
+export interface StudentSummary {
+  attendance: { month: string; percent: number }[];
+  academics: { subject: string; score: number }[];
+  attendance_percent: number;
+  academic_score: number;
+}
+
+export async function fetchStudentSummary(id: string): Promise<StudentSummary> {
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/summary/`, { headers: { Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`Failed to load student summary (${response.status})`);
+  return response.json() as Promise<StudentSummary>;
+}
+
 export async function createStudent(input: StudentCreateInput): Promise<StudentApiRecord> {
   const body = new FormData();
   Object.entries(input).forEach(([key, value]) => {

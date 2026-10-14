@@ -14,6 +14,7 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import RegionsList from './pages/masters/RegionsList';
 import CentresList from './pages/masters/CentresList';
+import DistrictsList from './pages/masters/DistrictsList';
 import AssessmentsList from './pages/masters/AssessmentsList';
 import StudentsList from './pages/students/StudentsList';
 import StudentRegistration from './pages/students/StudentRegistration';
@@ -46,6 +47,7 @@ function App() {
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             
+            <Route path="/masters/districts" element={<ProtectedRoute><DistrictsList /></ProtectedRoute>} />
             <Route path="/masters/regions" element={<ProtectedRoute><RegionsList /></ProtectedRoute>} />
             <Route path="/masters/centres" element={<ProtectedRoute><CentresList /></ProtectedRoute>} />
             <Route path="/masters/assessments" element={<ProtectedRoute><AssessmentsList /></ProtectedRoute>} />
