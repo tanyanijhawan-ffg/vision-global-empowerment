@@ -5,6 +5,7 @@ from school.models.assessment import (
     AssessmentType,
     DiagnosticOption,
     LearningBehaviourOption,
+    SchoolClass,
     Subject,
 )
 from school.models.student import Student, StudentYearRecord
@@ -25,6 +26,12 @@ class Command(BaseCommand):
                 defaults={'start_date': year['start_date'], 'end_date': year['end_date'], 'is_current': year['is_current'], 'is_active': True},
             )
             ay_instances.append(ay_obj)
+
+        for grade in range(1, 13):
+            SchoolClass.objects.update_or_create(
+                name=f'Class {grade}',
+                defaults={'code': f'CLASS_{grade}', 'is_active': True},
+            )
 
         # Seed student year records for existing students for 2026 - 2027 (and 2025 - 2026)
         all_students = Student.objects.all()
