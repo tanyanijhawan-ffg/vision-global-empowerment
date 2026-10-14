@@ -37,12 +37,12 @@ class Command(BaseCommand):
                 )
 
         assessment_types = [
-            {'code': 'FIRST_EXAM', 'name': 'First Exam', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
-            {'code': 'MID_TERM', 'name': 'Mid-Term', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
-            {'code': 'SECOND_EXAM', 'name': 'Second Exam', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
-            {'code': 'QUARTERLY', 'name': 'Quarterly', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
-            {'code': 'HALF_YEARLY', 'name': 'Half-Yearly', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
-            {'code': 'ANNUAL', 'name': 'Annual', 'max_marks': 600, 'classes': [1, 2, 3, 4, 5]},
+            {'code': 'FIRST_EXAM', 'name': 'First Exam'},
+            {'code': 'MID_TERM', 'name': 'Mid-Term'},
+            {'code': 'SECOND_EXAM', 'name': 'Second Exam'},
+            {'code': 'QUARTERLY', 'name': 'Quarterly'},
+            {'code': 'HALF_YEARLY', 'name': 'Half-Yearly'},
+            {'code': 'ANNUAL', 'name': 'Annual'},
         ]
 
         for ay in ay_instances:
@@ -53,8 +53,6 @@ class Command(BaseCommand):
                     defaults={
                         'name': item['name'],
                         'academic_year': ay,
-                        'max_marks': item['max_marks'],
-                        'classes': item['classes'],
                         'is_active': True,
                     },
                 )
@@ -96,29 +94,18 @@ class Command(BaseCommand):
                 defaults={'name': item['name'], 'is_active': True},
             )
 
-        subject_map = {
-            5: [
-                {'name': 'Tamil', 'code': 'TAMIL'},
-                {'name': 'English', 'code': 'ENGLISH'},
-                {'name': 'Mathematics', 'code': 'MATHEMATICS'},
-                {'name': 'Science', 'code': 'SCIENCE'},
-                {'name': 'Social Science', 'code': 'SOCIAL_SCIENCE'},
-            ],
-            6: [
-                {'name': 'Tamil', 'code': 'TAMIL'},
-                {'name': 'English', 'code': 'ENGLISH'},
-                {'name': 'Mathematics', 'code': 'MATHEMATICS'},
-                {'name': 'Science', 'code': 'SCIENCE'},
-                {'name': 'Social Science', 'code': 'SOCIAL_SCIENCE'},
-            ],
-        }
+        subjects = [
+            {'name': 'Tamil', 'code': 'TAMIL'},
+            {'name': 'English', 'code': 'ENGLISH'},
+            {'name': 'Mathematics', 'code': 'MATHEMATICS'},
+            {'name': 'Science', 'code': 'SCIENCE'},
+            {'name': 'Social Science', 'code': 'SOCIAL_SCIENCE'},
+        ]
 
-        for class_id, subjects in subject_map.items():
-            for item in subjects:
-                Subject.objects.update_or_create(
-                    class_id=class_id,
-                    name=item['name'],
-                    defaults={'code': item['code'], 'is_active': True},
-                )
+        for item in subjects:
+            Subject.objects.update_or_create(
+                name=item['name'],
+                defaults={'code': item['code']},
+            )
 
         self.stdout.write(self.style.SUCCESS('Assessment metadata seeded successfully.'))
