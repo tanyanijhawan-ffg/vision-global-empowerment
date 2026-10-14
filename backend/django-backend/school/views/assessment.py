@@ -36,6 +36,8 @@ from school.serializers.assessment import (
 
 
 def _format_year(value):
+    if value is None:
+        return ''
     return f'{value}-{str(value + 1)[-2:]}'
 
 
