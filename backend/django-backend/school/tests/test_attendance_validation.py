@@ -42,6 +42,15 @@ class AttendanceValidationTests(TestCase):
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
+    def test_attendance_status_is_required(self):
+        serializer = AttendanceSerializer(data={
+            'student_id': self.student.student_id,
+            'attendance_date': date.today(),
+        })
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('status', serializer.errors)
+
     def test_only_email_notification_channel_is_accepted(self):
         email_serializer = AttendanceIntelligenceSettingSerializer(data={'notification_channels': ['email']})
         sms_serializer = AttendanceIntelligenceSettingSerializer(data={'notification_channels': ['sms']})

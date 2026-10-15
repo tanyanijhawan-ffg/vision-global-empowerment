@@ -16,7 +16,7 @@ const participationLabels: Record<string, string> = {
 type AttendanceDraft = Omit<AttendanceInput, 'student_id' | 'attendance_date'>;
 const emptyDraft = (): AttendanceDraft => ({
   status: 'Present', absence_reason: '', late_reason: '', participation_level: '3', attention_level: 'Focused',
-  learning_behaviour: [], behaviour: 'Cooperative', tutor_observation: '', what_was_different: '', any_concern: '', any_positive_change: '',
+  learning_behaviour: [], tutor_observation: '', what_was_different: '', any_concern: '', any_positive_change: '',
 });
 
 export default function AttendanceEntry() {
@@ -41,20 +41,26 @@ export default function AttendanceEntry() {
 
   useEffect(() => {
     if (!date || !students.length) return;
-    fetchAttendance({ date }).then(records => setDrafts(previous => {
-      const next = { ...previous };
-      records.forEach(record => {
-        next[String(record.student_id)] = {
-          status: record.status || 'Present', absence_reason: record.absence_reason || '', late_reason: record.late_reason || '',
-          participation_level: record.participation_level || '3', attention_level: record.attention_level || 'Focused',
-          learning_behaviour: record.learning_behaviour || [], behaviour: record.behaviour || 'Cooperative',
-          tutor_observation: record.tutor_observation || '', what_was_different: record.what_was_different || '',
-          any_concern: record.any_concern || '', any_positive_change: record.any_positive_change || '',
-        };
+    setDrafts(Object.fromEntries(students.map(student => [student.id, emptyDraft()])));
+    let active = true;
+    fetchAttendance({ date }).then(records => {
+      if (!active) return;
+      setDrafts(() => {
+        const next = Object.fromEntries(students.map(student => [student.id, emptyDraft()]));
+        records.forEach(record => {
+          next[String(record.student_id)] = {
+            status: record.status || 'Present', absence_reason: record.absence_reason || '', late_reason: record.late_reason || '',
+            participation_level: record.participation_level || '3', attention_level: record.attention_level || 'Focused',
+            learning_behaviour: record.learning_behaviour || [], ...(record.behaviour ? { behaviour: record.behaviour } : {}),
+            tutor_observation: record.tutor_observation || '', what_was_different: record.what_was_different || '',
+            any_concern: record.any_concern || '', any_positive_change: record.any_positive_change || '',
+          };
+        });
+        return next;
       });
-      return next;
-    })).catch(error => setMessage(error.message));
-  }, [date, students.length]);
+    }).catch(error => { if (active) setMessage(error.message); });
+    return () => { active = false; };
+  }, [date, students]);
 
   const filteredStudents = students.filter(student => student.centreId === Number(selectedCentre) && student.name.toLowerCase().includes(search.toLowerCase()));
   const updateDraft = (id: string, changes: Partial<AttendanceDraft>) => {
@@ -93,7 +99,7 @@ export default function AttendanceEntry() {
               <div className="space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Student Name</span><p className="font-semibold text-slate-900">{student.name}</p></div><div><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Student ID</span><p className="font-semibold text-slate-900">{student.id}</p></div></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Status</span><select value={draft.status} onChange={event => updateDraft(student.id, { status: event.target.value as AttendanceInput['status'] })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="Present">Present</option><option value="Absent">Absent</option><option value="Late">Late</option></select></label>
+                  <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Status <b className="text-red-500">*</b></span><select required value={draft.status} onChange={event => updateDraft(student.id, { status: event.target.value as AttendanceInput['status'] })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="Present">Present</option><option value="Absent">Absent</option><option value="Late">Late</option></select></label>
                   {draft.status === 'Present' && <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"><Info size={16} aria-label="Information" /><span>No Remarks required for Present.</span></div>}
                   {draft.status === 'Absent' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Absence <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.absence_reason} onChange={event => updateDraft(student.id, { absence_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}
                   {draft.status === 'Late' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Late <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.late_reason} onChange={event => updateDraft(student.id, { late_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}
