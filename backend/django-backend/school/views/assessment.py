@@ -2,6 +2,7 @@ import re
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import Avg, Max, Min, Q, Sum
+from django.http import Http404
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -36,6 +37,8 @@ from school.serializers.assessment import (
 
 
 def _format_year(value):
+    if value is None:
+        return ''
     return f'{value}-{str(value + 1)[-2:]}'
 
 
@@ -46,7 +49,19 @@ def _percentage(total, maximum):
 
 
 def _get_assessment_or_404(assessment_id):
-    return Assessment.objects.select_related('assessment_type').get(assessment_id=assessment_id)
+    assessment = Assessment.objects.select_related('assessment_type').filter(assessment_id=assessment_id).first()
+    if assessment:
+        return assessment
+    # The list can emit AssessmentSubject config IDs; resolve those to their assessment batch.
+    config = AssessmentSubject.objects.filter(assessment_subject_id=assessment_id).first()
+    if config:
+        resolved = Assessment.objects.select_related('assessment_type').filter(
+            class_id=config.class_id,
+            assessment_type_id=config.exam_id,
+        ).order_by('-assessment_id').first()
+        if resolved:
+            return resolved
+    raise Http404('Assessment not found')
 
 
 def _subject_max_marks(assessment, subject_id):

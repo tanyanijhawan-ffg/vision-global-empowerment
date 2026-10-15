@@ -14,6 +14,7 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import RegionsList from './pages/masters/RegionsList';
 import CentresList from './pages/masters/CentresList';
+import DistrictsList from './pages/masters/DistrictsList';
 import AssessmentsList from './pages/masters/AssessmentsList';
 import StudentsList from './pages/students/StudentsList';
 import StudentRegistration from './pages/students/StudentRegistration';
@@ -25,11 +26,6 @@ import AssessmentEntry from './pages/academics/AssessmentEntry';
 import AcademicProfile from './pages/academics/AcademicProfile';
 import LeadershipDashboard from './pages/leadership/LeadershipDashboard';
 import LeadershipTrainingEntry from './pages/leadership/LeadershipTrainingEntry';
-import ReportsHub from './pages/reports/ReportsHub';
-import StudentReport from './pages/reports/StudentReport';
-import CentreReport from './pages/reports/CentreReport';
-import DistrictReport from './pages/reports/DistrictReport';
-import RegionReport from './pages/reports/RegionReport';
 import UsersList from './pages/users/UsersList';
 import SettingsLayout from './pages/settings/SettingsLayout';
 import ProfileSettings from './pages/settings/ProfileSettings';
@@ -51,6 +47,7 @@ function App() {
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             
+            <Route path="/masters/districts" element={<ProtectedRoute><DistrictsList /></ProtectedRoute>} />
             <Route path="/masters/regions" element={<ProtectedRoute><RegionsList /></ProtectedRoute>} />
             <Route path="/masters/centres" element={<ProtectedRoute><CentresList /></ProtectedRoute>} />
             <Route path="/masters/assessments" element={<ProtectedRoute><AssessmentsList /></ProtectedRoute>} />
@@ -69,12 +66,6 @@ function App() {
 
             <Route path="/leadership" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><LeadershipDashboard /></ProtectedRoute>} />
             <Route path="/leadership/training" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><LeadershipTrainingEntry /></ProtectedRoute>} />
-            
-            <Route path="/reports" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><ReportsHub /></ProtectedRoute>} />
-            <Route path="/reports/students" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><StudentReport /></ProtectedRoute>} />
-            <Route path="/reports/centres" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><CentreReport /></ProtectedRoute>} />
-            <Route path="/reports/districts" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><DistrictReport /></ProtectedRoute>} />
-            <Route path="/reports/regions" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><RegionReport /></ProtectedRoute>} />
             
             <Route path="/users" element={<ProtectedRoute minimumRole="SUPER_ADMIN"><UsersList /></ProtectedRoute>} />
             

@@ -5,7 +5,6 @@ import {
   Users, 
   CalendarCheck, 
   GraduationCap, 
-  BarChart3, 
   Settings, 
   ShieldAlert,
   Menu,
@@ -25,6 +24,7 @@ const navItems = [
     icon: Map, 
     children: [
       { name: 'Regions', path: '/masters/regions' },
+      { name: 'Districts', path: '/masters/districts' },
       { name: 'Centres', path: '/masters/centres' },
       { name: 'Assessments', path: '/masters/assessments' },
     ]
@@ -46,7 +46,6 @@ const navItems = [
       { name: 'Entry', path: '/academics/entry' }
     ]
   },
-  { name: 'Reports', icon: BarChart3, path: '/reports' },
   { name: 'Users', icon: ShieldAlert, path: '/users' },
   { name: 'Settings', icon: Settings, path: '/settings' },
 ];

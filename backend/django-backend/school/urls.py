@@ -1,10 +1,12 @@
 from django.urls import include, path
 
 from school.views.auth import LoginView, PasswordResetConfirmView, PasswordResetRequestView, RegionListView
-from school.views.master import MasterBulkUploadView, MasterCentreListCreateView, MasterExportView, MasterRegionListCreateView
+from school.views.master import MasterBulkUploadView, MasterCentreListCreateView, MasterDistrictListCreateView, MasterExportView, MasterRegionListCreateView
 from school.views.student_bulk import StudentBulkUploadView, StudentWorkbookExportView
 from school.views.user import UserDetailView, UserListCreateView
 from school.views.attendance import AbsenceAlertListView
+from school.views.dashboard import DashboardSummaryView
+from school.views.student_summary import StudentSummaryView
 from .views import (
     AttendanceCreateView,
     AttendanceListView,
@@ -16,9 +18,12 @@ urlpatterns = [
     path('v1/', include('school.api_urls')),
     path('auth/login/', LoginView.as_view(), name='login'),
     path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('dashboard/summary/', DashboardSummaryView.as_view(), name='dashboard-summary'),
     path('auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     path('masters/regions/', MasterRegionListCreateView.as_view(), name='master-regions'),
     path('masters/regions/<int:pk>/', MasterRegionListCreateView.as_view(), name='master-region-detail'),
+    path('masters/districts/', MasterDistrictListCreateView.as_view(), name='master-districts'),
+    path('masters/districts/<int:pk>/', MasterDistrictListCreateView.as_view(), name='master-district-detail'),
     path('masters/centres/', MasterCentreListCreateView.as_view(), name='master-centres'),
     path('masters/centres/<int:pk>/', MasterCentreListCreateView.as_view(), name='master-centre-detail'),
     path('masters/<str:resource>/export/', MasterExportView.as_view(), name='master-export'),
@@ -33,4 +38,5 @@ urlpatterns = [
     path('attendance/record/', AttendanceCreateView.as_view(), name='attendance-create'),
     path('students/', StudentListView.as_view(), name='student-list'),
     path('students/<int:pk>/', StudentRetrieveUpdateDestroyView.as_view(), name='student-detail'),
+    path('students/<int:pk>/summary/', StudentSummaryView.as_view(), name='student-summary'),
 ]

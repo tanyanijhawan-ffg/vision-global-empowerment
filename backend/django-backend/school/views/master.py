@@ -22,8 +22,6 @@ class MasterDataView(APIView):
         if self.request.method != 'GET':
             permissions.append(IsSuperAdmin)
         return [permission() for permission in permissions]
-
-
 class MasterRegionListCreateView(MasterDataView):
 
     def get(self, request, *args, **kwargs):
@@ -50,6 +48,38 @@ class MasterRegionListCreateView(MasterDataView):
 
     def delete(self, request, pk, *args, **kwargs):
         deleted, _ = Region.objects.filter(pk=pk).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT if deleted else status.HTTP_404_NOT_FOUND)
+
+
+class MasterDistrictListCreateView(MasterDataView):
+
+    def get(self, request, *args, **kwargs):
+        return Response([serialize_district(district) for district in District.objects.select_related('region').order_by('district_name')])
+
+    def post(self, request, *args, **kwargs):
+        name = clean(request.data.get('district_name'))
+        region_name = clean(request.data.get('region_name'))
+        if not name or not region_name:
+            return Response({'detail': 'district_name and region_name are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        region, _ = Region.objects.get_or_create(region_name=region_name)
+        district, created = District.objects.get_or_create(region=region, district_name=name)
+        return Response(serialize_district(district), status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    def patch(self, request, pk, *args, **kwargs):
+        district = District.objects.select_related('region').filter(pk=pk).first()
+        if district is None:
+            return Response({'detail': 'District not found.'}, status=status.HTTP_404_NOT_FOUND)
+        name = clean(request.data.get('district_name'))
+        region_name = clean(request.data.get('region_name'))
+        if name:
+            district.district_name = name
+        if region_name:
+            district.region, _ = Region.objects.get_or_create(region_name=region_name)
+        district.save()
+        return Response(serialize_district(district))
+
+    def delete(self, request, pk, *args, **kwargs):
+        deleted, _ = District.objects.filter(pk=pk).delete()
         return Response(status=status.HTTP_204_NO_CONTENT if deleted else status.HTTP_404_NOT_FOUND)
 
 
@@ -211,6 +241,14 @@ def clean(value):
 
 def serialize_region(region):
     return {'id': region.region_id, 'region_name': region.region_name, 'state': region.state, 'status': region.status}
+
+
+def serialize_district(district):
+    return {
+        'id': district.district_id,
+        'district_name': district.district_name,
+        'region_name': district.region.region_name if district.region else '',
+    }
 
 
 def serialize_centre(centre):
