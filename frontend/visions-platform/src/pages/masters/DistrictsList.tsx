@@ -37,6 +37,7 @@ export default function DistrictsList() {
     (filterRegion === 'All' || district.region_name === filterRegion) &&
     district.district_name.toLowerCase().includes(search.toLowerCase()),
   );
+  const regionsWithDistricts = [...new Set(data.map(district => district.region_name).filter(Boolean))].sort();
 
   const closeForm = () => { setIsFormOpen(false); setEditingId(null); setForm(blankDistrict); };
   const openAddForm = () => { setEditingId(null); setForm(blankDistrict); setIsFormOpen(true); };
@@ -82,7 +83,7 @@ export default function DistrictsList() {
             <Filter size={16} className="text-slate-400" />
             <select value={filterRegion} onChange={event => setFilterRegion(event.target.value)} className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm">
               <option value="All">All Regions</option>
-              {regions.map(region => <option key={region.id} value={region.region_name}>{region.region_name}</option>)}
+              {regionsWithDistricts.map(region => <option key={region} value={region}>{region}</option>)}
             </select>
           </div>
         </div>
@@ -103,8 +104,10 @@ export default function DistrictsList() {
                   <td className="px-6 py-4">{district.region_name}</td>
                   {canManage && (
                     <td className="px-6 py-4 text-right">
-                      <button onClick={() => { setEditingId(district.id); setForm({ district_name: district.district_name, region_name: district.region_name }); setIsFormOpen(true); }} title="Edit district" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button>
-                      <button onClick={() => deleteDistrict(district.id)} title="Delete district" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                      <div className="inline-flex items-center gap-1">
+                        <button onClick={() => { setEditingId(district.id); setForm({ district_name: district.district_name, region_name: district.region_name }); setIsFormOpen(true); }} title="Edit district" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button>
+                        <button onClick={() => deleteDistrict(district.id)} title="Delete district" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                      </div>
                     </td>
                   )}
                 </tr>
