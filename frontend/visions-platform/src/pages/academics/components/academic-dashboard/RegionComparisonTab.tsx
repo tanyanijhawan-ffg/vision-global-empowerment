@@ -38,7 +38,28 @@ export const RegionComparisonTab: React.FC<RegionComparisonTabProps> = ({
           Comparative evaluation of all operating states and regions for Class {filterClass}
         </p>
 
-        <div className="overflow-x-auto">
+        {/* Cards on small screens */}
+        <div className="xl:hidden space-y-3">
+          {regionComparisonReport.map((r) => (
+            <div key={r.name} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+              <div className="flex items-start justify-between gap-3">
+                <div className="font-bold text-slate-900 min-w-0 truncate">{r.name}</div>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 ${!r.hasData ? 'bg-slate-100 text-slate-500' : r.avgScore! >= 60 ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {r.level}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                <div><span className="text-xs text-slate-400 block">Centres</span><span className="font-medium text-slate-600">{r.centresCount}</span></div>
+                <div><span className="text-xs text-slate-400 block">Students</span><span className="font-semibold text-slate-700">{r.studentsCount}</span></div>
+                <div><span className="text-xs text-slate-400 block">Avg Score</span><span className="font-bold text-indigo-700">{r.avgScore !== null ? `${r.avgScore}%` : 'N/A'}</span></div>
+                <div><span className="text-xs text-slate-400 block">Pass Rate</span><span className="font-semibold text-slate-700">{r.passRate !== null ? `${r.passRate}%` : 'N/A'}</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Table on xl+ screens */}
+        <div className="overflow-x-auto hidden xl:block">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">

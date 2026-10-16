@@ -437,7 +437,7 @@ export default function AssessmentsList() {
         </div>
       ) : null}
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
+      <div className="xl:bg-white xl:border xl:border-slate-200 xl:rounded-xl xl:shadow-xs overflow-hidden flex flex-col">
         {/* Toolbar */}
         <div className="p-4 border-b border-slate-200 flex flex-wrap items-center gap-4 bg-slate-50/50">
           <div className="relative flex-1 min-w-[240px] max-w-sm">
@@ -488,7 +488,50 @@ export default function AssessmentsList() {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Cards on small screens */}
+        <div className="xl:hidden space-y-3 p-3">
+          {loading ? (
+            <p className="p-12 text-center text-slate-400">Loading assessments...</p>
+          ) : filteredData.length === 0 ? (
+            <p className="p-12 text-center text-slate-400">No assessments found.</p>
+          ) : (
+            filteredData.map((item) => (
+              <div key={item.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-900 truncate">{item.assessmentType || 'Assessment'}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{item.academicYear || '-'}</div>
+                  </div>
+                  {canManage ? (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => openEditForm(item)}
+                        title="Edit Assessment"
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition-all cursor-pointer"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        title="Delete Assessment"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition-all cursor-pointer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <div className="text-slate-600"><span className="text-xs text-slate-400 block">Class</span><span className="font-semibold text-slate-800">{item.class || '-'}</span></div>
+                  <div className="text-slate-600"><span className="text-xs text-slate-400 block">Max Marks</span><span className="font-semibold text-slate-700">{item.maxMarks || 100} Marks</span></div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Table on lg+ screens */}
+        <div className="overflow-x-auto hidden xl:block">
           <table className="w-full text-left text-sm text-slate-600 whitespace-nowrap">
             <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase tracking-wider text-xs">
               <tr>

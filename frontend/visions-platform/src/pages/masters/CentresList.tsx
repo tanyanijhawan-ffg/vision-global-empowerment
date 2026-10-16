@@ -82,12 +82,40 @@ export default function CentresList() {
   return (
     <div className="max-w-7xl mx-auto">
       <PageHeader title="Learning Centres" subtitle="Manage individual learning and empowerment centres." action={canManage ? <MasterDataActions resource="centres" onAdd={openAddForm} onUploaded={() => loadCentres().catch(loadError => setError(loadError.message))} /> : undefined} />
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+      <div className="xl:bg-white xl:border xl:border-slate-200 xl:rounded-xl xl:shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 border-b border-slate-200 flex flex-wrap items-center gap-4 bg-slate-50/50">
           <div className="relative flex-1 min-w-[240px] max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search centres, villages, facilitators..." className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm" /></div>
           <div className="flex items-center gap-2"><Filter size={16} className="text-slate-400" /><select value={filterRegion} onChange={event => setFilterRegion(event.target.value)} className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm"><option value="All">All Regions</option>{regions.map(region => <option key={region}>{region}</option>)}</select></div>
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600 whitespace-nowrap"><thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200"><tr><th className="px-6 py-3">Centre Name</th><th className="px-6 py-3">Region</th><th className="px-6 py-3">District</th><th className="px-6 py-3">Centre Type</th><th className="px-6 py-3">Block</th><th className="px-6 py-3">Village</th><th className="px-6 py-3">Facilitator</th><th className="px-6 py-3">Status</th>{canManage ? <th className="px-6 py-3 text-right">Actions</th> : null}</tr></thead><tbody className="divide-y divide-slate-100">{filteredData.map(centre => <tr key={centre.id} className="hover:bg-slate-50/80"><td className="px-6 py-4 font-medium text-slate-900">{centre.centre_name}</td><td className="px-6 py-4">{centre.region_name}</td><td className="px-6 py-4">{centre.district_name}</td><td className="px-6 py-4">{centre.centre_type || '-'}</td><td className="px-6 py-4">{centre.block || '-'}</td><td className="px-6 py-4">{centre.village || '-'}</td><td className="px-6 py-4 text-slate-900">{centre.facilitator_name || '-'}</td><td className="px-6 py-4"><StatusChip status={centre.status || 'Active'} /></td>{canManage ? <td className="px-6 py-4 text-right"><button onClick={() => { setEditingId(centre.id); setForm({ region_name: centre.region_name, district_name: centre.district_name, centre_name: centre.centre_name, centre_type: centre.centre_type || '', block: centre.block || '', village: centre.village || '', facilitator_name: centre.facilitator_name || '', status: centre.status || 'active' }); setIsFormOpen(true); }} title="Edit centre" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button><button onClick={() => deleteCentre(centre.id)} title="Delete centre" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button></td> : null}</tr>)}</tbody></table></div>
+        {/* Cards on small screens */}
+        <div className="xl:hidden space-y-3 p-3">
+          {filteredData.map(centre => (
+            <div key={centre.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium text-slate-900 truncate">{centre.centre_name}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{centre.district_name}, {centre.region_name}</div>
+                </div>
+                <StatusChip status={centre.status || 'Active'} />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <div className="text-slate-600"><span className="text-xs text-slate-400 block">Type</span>{centre.centre_type || '-'}</div>
+                <div className="text-slate-600"><span className="text-xs text-slate-400 block">Facilitator</span>{centre.facilitator_name || '-'}</div>
+                <div className="text-slate-600"><span className="text-xs text-slate-400 block">Block</span>{centre.block || '-'}</div>
+                <div className="text-slate-600"><span className="text-xs text-slate-400 block">Village</span>{centre.village || '-'}</div>
+              </div>
+              {canManage ? (
+                <div className="mt-3 flex items-center gap-1">
+                  <button onClick={() => { setEditingId(centre.id); setForm({ region_name: centre.region_name, district_name: centre.district_name, centre_name: centre.centre_name, centre_type: centre.centre_type || '', block: centre.block || '', village: centre.village || '', facilitator_name: centre.facilitator_name || '', status: centre.status || 'active' }); setIsFormOpen(true); }} title="Edit centre" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button>
+                  <button onClick={() => deleteCentre(centre.id)} title="Delete centre" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        {/* Table on lg+ screens */}
+        <div className="overflow-x-auto hidden xl:block"><table className="w-full text-left text-sm text-slate-600 whitespace-nowrap"><thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200"><tr><th className="px-6 py-3">Centre Name</th><th className="px-6 py-3">Region</th><th className="px-6 py-3">District</th><th className="px-6 py-3">Centre Type</th><th className="px-6 py-3">Block</th><th className="px-6 py-3">Village</th><th className="px-6 py-3">Facilitator</th><th className="px-6 py-3">Status</th>{canManage ? <th className="px-6 py-3 text-right">Actions</th> : null}</tr></thead><tbody className="divide-y divide-slate-100">{filteredData.map(centre => <tr key={centre.id} className="hover:bg-slate-50/80"><td className="px-6 py-4 font-medium text-slate-900">{centre.centre_name}</td><td className="px-6 py-4">{centre.region_name}</td><td className="px-6 py-4">{centre.district_name}</td><td className="px-6 py-4">{centre.centre_type || '-'}</td><td className="px-6 py-4">{centre.block || '-'}</td><td className="px-6 py-4">{centre.village || '-'}</td><td className="px-6 py-4 text-slate-900">{centre.facilitator_name || '-'}</td><td className="px-6 py-4"><StatusChip status={centre.status || 'Active'} /></td>{canManage ? <td className="px-6 py-4 text-right"><button onClick={() => { setEditingId(centre.id); setForm({ region_name: centre.region_name, district_name: centre.district_name, centre_name: centre.centre_name, centre_type: centre.centre_type || '', block: centre.block || '', village: centre.village || '', facilitator_name: centre.facilitator_name || '', status: centre.status || 'active' }); setIsFormOpen(true); }} title="Edit centre" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button><button onClick={() => deleteCentre(centre.id)} title="Delete centre" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button></td> : null}</tr>)}</tbody></table></div>
         {!error && filteredData.length === 0 ? <p className="p-12 text-center text-slate-400">No centres found.</p> : null}
       </div>
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}

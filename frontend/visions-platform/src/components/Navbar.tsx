@@ -1,4 +1,4 @@
-import { Search, Bell, LogOut } from 'lucide-react';
+import { Search, Bell, LogOut, Menu } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -69,7 +69,15 @@ export default function Navbar({ toggleSidebar }: { toggleSidebar: () => void })
 
   return (
     <header className="relative h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-30 shrink-0">
-      <div className="flex-1 flex items-center">
+      <div className="flex-1 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="Open navigation"
+          className="md:hidden p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+        >
+          <Menu size={22} />
+        </button>
         <div className="relative w-full max-w-md hidden sm:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 

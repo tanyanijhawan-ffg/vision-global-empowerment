@@ -143,7 +143,37 @@ export const ComparativeAnalyticsTab: React.FC<ComparativeAnalyticsTabProps> = (
           Auto-generated comparative analysis across all mandatory subjects for Class {filterClass}
         </p>
 
-        <div className="overflow-x-auto">
+        {/* Cards on small screens */}
+        <div className="xl:hidden space-y-3">
+          {displaySubjectTrends.map((row) => (
+            <div key={row.subject} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-bold text-slate-800">{row.subject}</div>
+                <div className="text-sm font-bold text-slate-900">{row.currentScore}%</div>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-xs">
+                <span className="text-slate-500">Previous: {row.prevScore != null ? `${row.prevScore}%` : '—'}</span>
+                {row.prevScore != null ? (
+                  <span className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-lg ${row.ppChange >= 0 ? 'bg-indigo-50 text-indigo-700' : 'bg-rose-50 text-rose-700'}`}>
+                    {row.ppChange >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                    {row.ppChange >= 0 ? `+${row.ppChange}` : row.ppChange} pp
+                  </span>
+                ) : (
+                  <span className="text-slate-400 font-medium">—</span>
+                )}
+              </div>
+              <div className="mt-2 w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${row.currentScore >= 75 ? 'bg-indigo-500' : 'bg-amber-400'}`}
+                  style={{ width: `${Math.min(100, row.currentScore)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Table on xl+ screens */}
+        <div className="overflow-x-auto hidden xl:block">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">

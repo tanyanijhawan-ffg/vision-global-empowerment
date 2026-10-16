@@ -100,7 +100,7 @@ export default function StudentsList() {
         </div>}
       />
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+      <div className="xl:bg-white xl:border xl:border-slate-200 xl:rounded-xl xl:shadow-sm overflow-hidden flex flex-col">
         {/* Toolbar */}
         <div className="p-4 border-b border-slate-200 flex flex-wrap items-center gap-4 bg-slate-50/50">
           <div className="relative flex-1 min-w-[240px] max-w-sm">
@@ -160,7 +160,70 @@ export default function StudentsList() {
 
         {!loading && !error && (
           <>
-            <div className="overflow-x-auto">
+            {/* Cards on small screens */}
+            <div className="xl:hidden space-y-3 p-3">
+              {filteredData.map((student) => {
+                const isRisk = student.status === 'Warning' || student.attendancePercent < 75;
+                return (
+                  <button
+                    key={student.id}
+                    type="button"
+                    onClick={() => navigate(`/students/${student.id}`)}
+                    className="w-full text-left p-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:border-indigo-300 hover:shadow transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm border border-slate-200 shrink-0">
+                          {student.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-900 truncate">{student.name}</div>
+                          <div className="text-xs text-slate-500">{student.gender}, {student.age} yrs</div>
+                        </div>
+                      </div>
+                      <StatusChip status={isRisk ? 'At Risk' : 'Active'} />
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <div className="min-w-0">
+                        <div className="text-xs text-slate-400">Centre</div>
+                        <div className="text-slate-700 truncate">{student.centre}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-400">Class</div>
+                        <div className="text-slate-700">{/^class\b/i.test(student.class) ? student.class : `Class ${student.class}`}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-400">Attendance</div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-14 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${student.attendancePercent >= 90 ? 'bg-emerald-500' : student.attendancePercent >= 75 ? 'bg-amber-500' : 'bg-red-500'}`}
+                              style={{ width: `${student.attendancePercent}%` }}
+                            ></div>
+                          </div>
+                          <span className={`text-xs font-medium ${student.attendancePercent < 75 ? 'text-red-600' : 'text-slate-600'}`}>
+                            {student.attendancePercent}%
+                          </span>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-400">Avg Score</div>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          student.academicScore >= 80 ? 'bg-emerald-50 text-emerald-700' :
+                          student.academicScore >= 60 ? 'bg-indigo-50 text-indigo-700' :
+                          'bg-red-50 text-red-700'
+                        }`}>
+                          {student.academicScore}%
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Table on lg+ screens */}
+            <div className="overflow-x-auto hidden xl:block">
               <table className="w-full text-left text-sm text-slate-600 whitespace-nowrap">
                 <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200">
                   <tr>
@@ -199,7 +262,7 @@ export default function StudentsList() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-slate-900">{student.centre}</div>
-                          <div className="text-xs text-slate-500 mt-0.5">Class {student.class}</div>
+                          <div className="text-xs text-slate-500 mt-0.5">{/^class\b/i.test(student.class) ? student.class : `Class ${student.class}`}</div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
