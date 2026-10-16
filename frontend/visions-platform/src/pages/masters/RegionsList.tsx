@@ -93,7 +93,7 @@ export default function RegionsList() {
                   <td className="px-6 py-4 font-medium text-slate-900">{region.region_name}</td>
                   <td className="px-6 py-4">{region.state || '-'}</td>
                   <td className="px-6 py-4">{region.status ? <StatusChip status={region.status} /> : '-'}</td>
-                  {canManage ? <td className="px-6 py-4 text-right"><button onClick={() => { setEditingId(region.id); setForm({ region_name: region.region_name, state: region.state || '', status: region.status || 'active' }); setIsFormOpen(true); }} title="Edit region" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button><button onClick={() => deleteRegion(region.id)} title="Delete region" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button></td> : null}
+                  {canManage ? <td className="px-6 py-4 text-right"><div className="inline-flex items-center gap-1"><button onClick={() => { setEditingId(region.id); setForm({ region_name: region.region_name, state: region.state || '', status: region.status || 'active' }); setIsFormOpen(true); }} title="Edit region" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button><button onClick={() => deleteRegion(region.id)} title="Delete region" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button></div></td> : null}
                 </tr>
               ))}
             </tbody>

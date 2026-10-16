@@ -62,19 +62,19 @@ export default function StudentsList() {
 
   const availableRegions = useMemo(() => {
     const set = new Set(scopedData.map(student => student.region));
-    return ['All', ...Array.from(set).filter(Boolean)].sort();
+    return Array.from(set).filter(value => Boolean(value) && value !== 'All').sort();
   }, [scopedData]);
 
   const availableCentres = useMemo(() => {
     const set = new Set(scopedData.filter(student => filterRegion === 'All' || student.region === filterRegion).map(student => student.centre));
-    return ['All', ...Array.from(set).filter(Boolean)].sort();
+    return Array.from(set).filter(value => Boolean(value) && value !== 'All').sort();
   }, [scopedData, filterRegion]);
 
   const availableClasses = useMemo(() => {
     const set = new Set(scopedData
       .filter(student => (filterRegion === 'All' || student.region === filterRegion) && (filterCentre === 'All' || student.centre === filterCentre))
       .map(student => student.class));
-    return ['All', ...Array.from(set).filter(Boolean)].sort();
+    return Array.from(set).filter(value => Boolean(value) && value !== 'All').sort();
   }, [scopedData, filterRegion, filterCentre]);
 
   const filteredData = scopedData.filter(s => 
