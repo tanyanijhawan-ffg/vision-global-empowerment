@@ -90,7 +90,7 @@ class StudentBulkUploadView(APIView):
         summary = {'created': 0, 'updated': 0, 'skipped': 0}
         try:
             for index, record in enumerate(records, start=2):
-                outcome = upsert_student(record, images.get((index - 1, photo_column)))
+                outcome = upsert_student(record, images.get((index - 1, photo_column)), row_number=index)
                 summary[outcome] += 1
         except ValueError as error:
             transaction.set_rollback(True)
@@ -98,19 +98,20 @@ class StudentBulkUploadView(APIView):
         return Response(summary)
 
 
-def upsert_student(record, image):
+def upsert_student(record, image, row_number=None):
+    where = f'Row {row_number}: ' if row_number is not None else ''
     required = ('full_name', 'gender', 'dob', 'class_grade', 'region_name', 'district_name', 'centre_name', *NARRATIVES.keys())
     if any(not text(record.get(field)) for field in required):
-        raise ValueError(f'Every student row needs: {", ".join(required)}.')
+        raise ValueError(f'{where}every student row needs: {", ".join(required)}.')
     centre = Center.objects.select_related('region', 'district').filter(
         region__region_name=text(record['region_name']), district__district_name=text(record['district_name']), centre_name=text(record['centre_name']),
     ).first()
     if centre is None:
-        raise ValueError(f'Centre not found for {record["full_name"]}: create its Region, District, and Centre first.')
+        raise ValueError(f'{where}centre not found for {record["full_name"]}: create its Region, District, and Centre first.')
     try:
         dob = date.fromisoformat(text(record['dob']))
     except ValueError as error:
-        raise ValueError(f'Invalid date of birth for {record["full_name"]}; use YYYY-MM-DD.') from error
+        raise ValueError(f'{where}invalid date of birth for {record["full_name"]}; use YYYY-MM-DD.') from error
     student, created = Student.objects.get_or_create(centre=centre, full_name=text(record['full_name']), dob=dob, defaults={'gender': text(record['gender'])})
     image_filename = image[0] if image else ''
     expected_photo_name = text(record.get('photo_filename')) or image_filename
@@ -125,10 +126,10 @@ def upsert_student(record, image):
             student.photo.save(desired_name, ContentFile(image_bytes), save=False)
             changed = True
     elif created:
-        raise ValueError(f'Photo is required for new student {record["full_name"]}; insert it in the photo_filename cell.')
+        raise ValueError(f'{where}photo is required for new student {record["full_name"]}; insert it in the photo_filename cell.')
     if changed or created:
         student.save()
-    update_related(student, record)
+    update_related(student, record, row_number)
     return 'created' if created else 'updated'
 
 
@@ -146,7 +147,8 @@ def set_student_fields(student, record, dob):
     return changed
 
 
-def update_related(student, record):
+def update_related(student, record, row_number=None):
+    where = f'Row {row_number}: ' if row_number is not None else ''
     family_fields = ('father_name', 'mother_name', 'guardian', 'parent_phone', 'father_occupation', 'mother_occupation', 'father_education', 'mother_education')
     family_data = {field: text(record.get(field)) or None for field in family_fields}
     family_data.update({field: integer(record.get(field)) for field in ('family_members', 'school_going_children', 'birth_order')})
@@ -170,7 +172,7 @@ def update_related(student, record):
     for key, (category, options) in MOTIVATION_GROUPS.items():
         for reason in split_values(record.get(key)):
             if reason not in options:
-                raise ValueError(f'Invalid option "{reason}" in {category}.')
+                raise ValueError(f'{where}invalid option "{reason}" in {category}.')
             Motivation.objects.create(student=student, category=category, reason=reason)
     for column, reason in NARRATIVES.items():
         narrative = text(record.get(column))

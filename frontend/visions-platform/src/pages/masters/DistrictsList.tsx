@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Edit2, Filter, Search, Trash2, X } from 'lucide-react';
+import MasterDataActions from '../../components/MasterDataActions';
 import PageHeader from '../../components/PageHeader';
 import { getAuthHeaders, getCurrentUser } from '../../lib/auth';
 
@@ -67,13 +68,11 @@ export default function DistrictsList() {
         title="Districts"
         subtitle="Manage operating districts within each region."
         action={canManage ? (
-          <button onClick={openAddForm} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-            Add District
-          </button>
+          <MasterDataActions resource="districts" onAdd={openAddForm} onUploaded={() => loadData().catch(loadError => setError(loadError.message))} />
         ) : undefined}
       />
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+      <div className="xl:bg-white xl:border xl:border-slate-200 xl:rounded-xl xl:shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 border-b border-slate-200 flex flex-wrap items-center gap-4 bg-slate-50/50">
           <div className="relative flex-1 min-w-[240px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -88,7 +87,26 @@ export default function DistrictsList() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Cards on small screens */}
+        <div className="xl:hidden space-y-3 p-3">
+          {filteredData.map(district => (
+            <div key={district.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium text-slate-900 truncate">{district.district_name}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{district.region_name}</div>
+              </div>
+              {canManage && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => { setEditingId(district.id); setForm({ district_name: district.district_name, region_name: district.region_name }); setIsFormOpen(true); }} title="Edit district" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button>
+                  <button onClick={() => deleteDistrict(district.id)} title="Delete district" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Table on lg+ screens */}
+        <div className="overflow-x-auto hidden xl:block">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200">
               <tr>

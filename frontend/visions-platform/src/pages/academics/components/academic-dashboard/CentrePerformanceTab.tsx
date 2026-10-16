@@ -48,7 +48,31 @@ export const CentrePerformanceTab: React.FC<CentrePerformanceTabProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Cards on small screens */}
+        <div className="xl:hidden space-y-3">
+          {centrePerformanceReport.map((c) => (
+            <div key={c.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-bold text-slate-900 truncate">#{c.rank} {c.name}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{c.district}, {c.region}</div>
+                </div>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 ${!c.hasData ? 'bg-slate-100 text-slate-500' : c.avgScore! >= 60 ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {c.status}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                <div><span className="text-xs text-slate-400 block">Students</span><span className="font-semibold text-slate-700">{c.studentsCount}</span></div>
+                <div><span className="text-xs text-slate-400 block">Avg Score</span><span className="font-bold text-indigo-700">{c.avgScore !== null ? `${c.avgScore}%` : 'N/A'}</span></div>
+                <div><span className="text-xs text-slate-400 block">Pass Rate</span><span className="font-medium text-slate-700">{c.passRate !== null ? `${c.passRate}%` : 'N/A'}</span></div>
+                <div><span className="text-xs text-slate-400 block">Top Subject</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${c.hasData ? 'bg-slate-100 text-slate-700' : 'bg-slate-50 text-slate-400'}`}>{c.topSubject}</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Table on xl+ screens */}
+        <div className="overflow-x-auto hidden xl:block">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">

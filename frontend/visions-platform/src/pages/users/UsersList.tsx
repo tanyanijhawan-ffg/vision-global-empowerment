@@ -124,7 +124,7 @@ export default function UsersList() {
         }
       />
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+      <div className="xl:bg-white xl:border xl:border-slate-200 xl:rounded-xl xl:shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -138,7 +138,71 @@ export default function UsersList() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Cards on small screens */}
+        <div className="xl:hidden space-y-3 p-3">
+          {loading ? (
+            <p className="p-10 text-center text-sm text-slate-500">Loading users...</p>
+          ) : filteredUsers.length === 0 ? (
+            <p className="p-10 text-center text-sm text-slate-500">No users found.</p>
+          ) : (
+            filteredUsers.map((user) => {
+              const roleLabel = normalizeRole(user.role);
+              return (
+                <div key={String(user.id)} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-10 w-10 rounded-full bg-indigo-50 flex items-center justify-center font-bold text-indigo-600 text-sm border border-indigo-100 shrink-0">
+                        {(user.full_name || user.username || 'U').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-900 truncate">{user.full_name || user.username}</div>
+                        <div className="text-xs text-slate-500 truncate">{user.email}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => setEditingUser(user)} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md hover:bg-indigo-50 transition-colors" title="Edit user">
+                        <Edit2 size={16} />
+                      </button>
+                      {user.role !== 'super_admin' ? (
+                        <button onClick={() => handleDeleteUser(user.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors" title="Delete user">
+                          <Trash2 size={16} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div>
+                      <div className="text-xs text-slate-400">Role</div>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
+                        roleLabel === 'SUPER_ADMIN' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                        roleLabel === 'REGIONAL_ADMIN' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                        'bg-slate-50 text-slate-700 border-slate-200'
+                      }`}>
+                        {roleLabel === 'SUPER_ADMIN' && <ShieldAlert size={12} />}
+                        {getRoleLabel(user.role)}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400">Status</div>
+                      <StatusChip status="Active" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400">Region</div>
+                      <div className="text-slate-700">{user.region_name ?? '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400">Mobile</div>
+                      <div className="text-slate-700">{user.mobile_number || '—'}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Table on lg+ screens */}
+        <div className="overflow-x-auto hidden xl:block">
           {loading ? (
             <div className="px-6 py-10 text-sm text-slate-500">Loading users...</div>
           ) : (

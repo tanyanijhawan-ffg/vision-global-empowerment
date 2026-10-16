@@ -141,8 +141,46 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
             No students found in Class {filterClass} with score below {lowPerformerThreshold}%.
           </div>
         ) : (
-          <div className="max-h-[500px] overflow-y-auto border border-slate-200/90 rounded-xl shadow-2xs">
-            <table className="w-full text-left text-xs border-collapse">
+          <>
+            {/* Cards on small screens */}
+            <div className="xl:hidden space-y-3">
+              {lowPerformersList.map((s) => {
+                const observation = getDiagnosticObservation(s.id, s.academicScore);
+                const action = getRecommendedAction(s.id, s.academicScore);
+                const isPositiveObs =
+                  /^(no|none|n\/a|on track|good|excellent)/i.test(observation) ||
+                  observation.toLowerCase().includes('no specific support');
+                return (
+                  <div key={s.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 truncate">{s.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{s.centre} · {s.region} · Class {s.class}</div>
+                      </div>
+                      <div className="text-lg font-extrabold text-rose-600 shrink-0">{s.academicScore}%</div>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <div>
+                        <div className="text-xs text-slate-400 mb-1">Diagnostic Observation</div>
+                        <span className={`px-2 py-0.5 rounded-md text-xs font-medium inline-block ${isPositiveObs ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-rose-50 text-rose-700'}`}>
+                          {observation}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-400 mb-1">Recommended Action</div>
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200/60 inline-block">
+                          {action}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Table on xl+ screens */}
+            <div className="max-h-[500px] overflow-auto border border-slate-200/90 rounded-xl shadow-2xs hidden xl:block">
+            <table className="w-full min-w-[640px] text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 shadow-2xs">
                 <tr className="text-slate-500 font-semibold uppercase tracking-wider">
                   <th className="py-3 px-4 bg-slate-50">Student</th>
@@ -196,6 +234,7 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>

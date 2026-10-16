@@ -13,6 +13,7 @@ from school.services.xlsx import build_workbook, read_first_sheet
 
 
 REGION_COLUMNS = ['region_name', 'state', 'status']
+DISTRICT_COLUMNS = ['region_name', 'district_name']
 CENTRE_COLUMNS = ['region_name', 'district_name', 'centre_name', 'centre_type', 'block', 'village', 'gps_location', 'facilitator_name', 'start_date', 'status']
 
 
@@ -135,6 +136,13 @@ class MasterExportView(MasterDataView):
             headers = REGION_COLUMNS
             rows = [[getattr(region, field) or '' for field in headers] for region in Region.objects.order_by('region_name')]
             filename = 'regions.xlsx'
+        elif resource == 'districts':
+            headers = DISTRICT_COLUMNS
+            rows = [[
+                district.region.region_name if district.region else '',
+                district.district_name,
+            ] for district in District.objects.select_related('region').order_by('district_name')]
+            filename = 'districts.xlsx'
         elif resource == 'centres':
             headers = CENTRE_COLUMNS
             rows = [[
@@ -168,7 +176,7 @@ class MasterBulkUploadView(MasterDataView):
         except Exception:
             return Response({'file': ['The uploaded file is not a valid Excel workbook.']}, status=status.HTTP_400_BAD_REQUEST)
 
-        columns = REGION_COLUMNS if resource == 'regions' else CENTRE_COLUMNS if resource == 'centres' else None
+        columns = REGION_COLUMNS if resource == 'regions' else DISTRICT_COLUMNS if resource == 'districts' else CENTRE_COLUMNS if resource == 'centres' else None
         if columns is None:
             return Response({'detail': 'Unknown master-data resource.'}, status=status.HTTP_404_NOT_FOUND)
         missing_columns = [column for column in columns if column not in headers]
@@ -177,12 +185,17 @@ class MasterBulkUploadView(MasterDataView):
 
         summary = {'created': 0, 'updated': 0, 'skipped': 0}
         try:
-            for record in records:
-                outcome = upsert_region(record) if resource == 'regions' else upsert_centre(record)[1]
+            for index, record in enumerate(records, start=2):
+                if resource == 'regions':
+                    outcome = upsert_region(record)
+                elif resource == 'districts':
+                    outcome = upsert_district(record)
+                else:
+                    outcome = upsert_centre(record)[1]
                 summary[outcome] += 1
         except ValueError as error:
             transaction.set_rollback(True)
-            return Response({'file': [str(error)]}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'file': [f'Row {index}: {error}']}, status=status.HTTP_400_BAD_REQUEST)
         return Response(summary)
 
 
@@ -195,6 +208,16 @@ def upsert_region(record):
     if changed:
         region.save(update_fields=changed)
     return 'created' if created else 'updated' if changed else 'skipped'
+
+
+def upsert_district(record):
+    region_name = clean(record.get('region_name'))
+    district_name = clean(record.get('district_name'))
+    if not region_name or not district_name:
+        raise ValueError('Every row needs region_name and district_name.')
+    region, _ = Region.objects.get_or_create(region_name=region_name)
+    _, created = District.objects.get_or_create(region=region, district_name=district_name)
+    return 'created' if created else 'skipped'
 
 
 def upsert_centre(record):

@@ -15,7 +15,7 @@ const STEPS = [
 ];
 
 const inputCls = 'w-full min-w-0 h-10 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm';
-const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
+const labelBaseCls = 'block text-sm font-medium mb-1';
 const sectionTitle = 'text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6 first:mt-0';
 
 type RegistrationData = Omit<StudentCreateInput, 'photo' | 'centre_id'> & {
@@ -40,9 +40,13 @@ const initialRegistrationData: RegistrationData = {
 type FieldChange = (field: keyof RegistrationData, value: RegistrationData[keyof RegistrationData]) => void;
 
 function Field({ label, children, invalid = false }: { label: string; children: React.ReactNode; invalid?: boolean }) {
+  const required = label.endsWith(' *');
+  const text = required ? label.slice(0, -2) : label;
   return (
     <div className="min-w-0">
-      <label className={`${labelCls} ${invalid ? 'text-red-600' : ''}`}>{label}</label>
+      <label className={`${labelBaseCls} ${invalid || required ? 'text-red-600' : 'text-slate-700'}`}>
+        {text}{required && <span className="text-red-500"> *</span>}
+      </label>
       {children}
     </div>
   );
