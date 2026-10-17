@@ -10,6 +10,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
     student_id = serializers.PrimaryKeyRelatedField(
         queryset=Student.objects.all(), source='student'
     )
+    status = serializers.ChoiceField(choices=Attendance.STATUS_CHOICES, required=True, allow_null=False)
     learning_behaviour = serializers.ListField(
         child=serializers.ChoiceField(choices={
             'Completed homework': 'Completed homework',
