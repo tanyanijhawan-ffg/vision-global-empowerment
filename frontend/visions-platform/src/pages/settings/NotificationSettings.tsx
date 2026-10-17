@@ -1,9 +1,15 @@
 import { AlertTriangle, Bell, CalendarDays } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
 import useAbsenceAlerts from '../../hooks/useAbsenceAlerts';
+import { markAbsenceAlertsRead } from '../../lib/absenceAlertReadState';
 
 export default function NotificationSettings() {
 	const { summary, alerts, loading, error } = useAbsenceAlerts();
+
+	useEffect(() => {
+		if (!loading && alerts.length > 0) markAbsenceAlertsRead(alerts);
+	}, [alerts, loading]);
 
 	return (
 		<section className="p-6 sm:p-8">
@@ -24,9 +30,6 @@ export default function NotificationSettings() {
 							: `A notification appears after more than ${summary?.threshold_days ?? 3} consecutive recorded attendance sessions are marked absent. A Present or Late record resets the streak.`}
 					</p>
 				</div>
-				<Link to="/attendance/entry" className="mt-3 inline-block font-semibold text-amber-950 underline underline-offset-2">
-					Manage attendance alert settings
-				</Link>
 			</div>
 
 			{loading && <p className="py-8 text-center text-sm text-slate-500">Loading notifications…</p>}
@@ -47,7 +50,7 @@ export default function NotificationSettings() {
 								<p className="font-semibold text-slate-900">{alert.student_name} has been absent for {alert.consecutive_absent_days} consecutive attendance days</p>
 								<p className="mt-1 text-sm text-slate-500">{alert.centre_name} · Last absent {alert.last_absent_date}</p>
 							</div>
-							<Link to="/attendance" className="shrink-0 text-sm font-medium text-indigo-600 hover:text-indigo-700">View attendance</Link>
+							<Link to="/attendance" className="shrink-0 text-sm font-medium text-indigo-600 hover:text-indigo-700">View attendance dashboard</Link>
 						</li>
 					))}
 				</ul>

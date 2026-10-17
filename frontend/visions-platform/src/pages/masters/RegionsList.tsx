@@ -63,7 +63,7 @@ export default function RegionsList() {
         }
       />
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+      <div className="xl:bg-white xl:border xl:border-slate-200 xl:rounded-xl xl:shadow-sm overflow-hidden flex flex-col">
         {/* Toolbar */}
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
           <div className="relative w-full max-w-sm">
@@ -76,8 +76,27 @@ export default function RegionsList() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Cards on small screens */}
+        <div className="xl:hidden space-y-3 p-3">
+          {data.map((region) => (
+            <div key={region.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium text-slate-900 truncate">{region.region_name}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{region.state || '-'}</div>
+                <div className="mt-2">{region.status ? <StatusChip status={region.status} /> : '-'}</div>
+              </div>
+              {canManage ? (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => { setEditingId(region.id); setForm({ region_name: region.region_name, state: region.state || '', status: region.status || 'active' }); setIsFormOpen(true); }} title="Edit region" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button>
+                  <button onClick={() => deleteRegion(region.id)} title="Delete region" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        {/* Table on lg+ screens */}
+        <div className="overflow-x-auto hidden xl:block">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200">
               <tr>
@@ -93,7 +112,7 @@ export default function RegionsList() {
                   <td className="px-6 py-4 font-medium text-slate-900">{region.region_name}</td>
                   <td className="px-6 py-4">{region.state || '-'}</td>
                   <td className="px-6 py-4">{region.status ? <StatusChip status={region.status} /> : '-'}</td>
-                  {canManage ? <td className="px-6 py-4 text-right"><button onClick={() => { setEditingId(region.id); setForm({ region_name: region.region_name, state: region.state || '', status: region.status || 'active' }); setIsFormOpen(true); }} title="Edit region" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button><button onClick={() => deleteRegion(region.id)} title="Delete region" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button></td> : null}
+                  {canManage ? <td className="px-6 py-4 text-right"><div className="inline-flex items-center gap-1"><button onClick={() => { setEditingId(region.id); setForm({ region_name: region.region_name, state: region.state || '', status: region.status || 'active' }); setIsFormOpen(true); }} title="Edit region" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button><button onClick={() => deleteRegion(region.id)} title="Delete region" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button></div></td> : null}
                 </tr>
               ))}
             </tbody>

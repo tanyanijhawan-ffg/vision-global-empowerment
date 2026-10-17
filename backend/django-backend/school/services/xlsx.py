@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from io import BytesIO
 from posixpath import normpath
 from pathlib import PurePosixPath
@@ -135,6 +136,20 @@ def read_shared_strings(archive):
     return [''.join(node.itertext()) for node in root.findall(f'{{{MAIN_NS}}}si')]
 
 
+EXCEL_EPOCH = date(1899, 12, 30)  # Excel's day-zero (1900 date system)
+
+
+def serial_to_iso(raw):
+    """Convert an Excel date serial number to an ISO date string; return raw if out of range."""
+    try:
+        serial = float(raw)
+    except (TypeError, ValueError):
+        return raw
+    if not 1 <= serial <= 60000:
+        return raw
+    return (EXCEL_EPOCH + timedelta(days=int(serial))).isoformat()
+
+
 def read_cell(cell, shared_strings):
     cell_type = cell.attrib.get('t')
     if cell_type == 'inlineStr':
@@ -145,6 +160,12 @@ def read_cell(cell, shared_strings):
         return ''
     if cell_type == 's':
         return shared_strings[int(value.text)]
+    if cell_type == 'd':
+        # ISO 8601 date cell
+        return value.text[:10]
+    if cell.attrib.get('s') is not None:
+        # Styled numeric cell: may be a date serial (style info is not parsed, so accept plausible serials)
+        return serial_to_iso(value.text)
     return value.text
 
 

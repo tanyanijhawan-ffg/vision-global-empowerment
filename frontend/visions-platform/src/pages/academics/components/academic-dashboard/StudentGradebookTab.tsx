@@ -96,8 +96,46 @@ export const StudentGradebookTab: React.FC<StudentGradebookTabProps> = ({
             {searchQuery ? `No students found matching "${searchQuery}"` : `No students found in Class ${filterClass}`}
           </div>
         ) : (
-          <div className="max-h-[500px] overflow-y-auto border border-slate-200/90 rounded-xl shadow-2xs">
-            <table className="w-full text-left text-xs border-collapse">
+          <>
+            {/* Cards on small screens */}
+            <div className="xl:hidden space-y-3">
+              {filteredStudents.map((s) => {
+                const scoreRecord = studentScoresMap.get(Number(s.id));
+                const percentage = scoreRecord?.percentage ?? s.academicScore ?? '-';
+                return (
+                  <div key={s.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 truncate">{s.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{s.centre}</div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${typeof percentage === 'number' && percentage >= 75 ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'}`}>
+                        {typeof percentage === 'number' && percentage >= 75 ? 'Understands' : 'Needs Support'}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                      {displaySubjects.map((sub) => {
+                        const mark = scoreRecord?.scores[sub.id];
+                        return (
+                          <div key={sub.id}>
+                            <span className="text-xs text-slate-400 block">{sub.name}</span>
+                            <span className="font-medium text-slate-700">{mark !== undefined && mark !== null ? mark : '-'}</span>
+                          </div>
+                        );
+                      })}
+                      <div>
+                        <span className="text-xs text-slate-400 block">Total</span>
+                        <span className="font-extrabold text-indigo-700">{typeof percentage === 'number' ? `${percentage}%` : '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Table on xl+ screens */}
+            <div className="max-h-[500px] overflow-auto border border-slate-200/90 rounded-xl shadow-2xs hidden xl:block">
+            <table className="w-full min-w-[640px] text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 shadow-2xs">
                 <tr className="text-slate-500 font-semibold uppercase tracking-wider">
                   <th className="py-3 px-4 bg-slate-50">Student</th>
@@ -150,6 +188,7 @@ export const StudentGradebookTab: React.FC<StudentGradebookTabProps> = ({
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Download, Plus, Upload } from 'lucide-react';
 import { getAuthHeaders } from '../lib/auth';
 
-type Resource = 'regions' | 'centres' | 'students';
+type Resource = 'regions' | 'districts' | 'centres' | 'students';
 
 export default function MasterDataActions({ resource, onAdd, onUploaded, showAdd = true }: { resource: Resource; onAdd: () => void; onUploaded: () => void; showAdd?: boolean }) {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -50,7 +50,7 @@ export default function MasterDataActions({ resource, onAdd, onUploaded, showAdd
       <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60">
         <Upload size={16} /> {uploading ? 'Uploading...' : 'Bulk Upload'}
       </button>
-      {showAdd ? <button type="button" onClick={onAdd} title={`Add ${resource === 'regions' ? 'Region' : resource === 'centres' ? 'Centre' : 'Student'}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
+      {showAdd ? <button type="button" onClick={onAdd} title={`Add ${resource === 'regions' ? 'Region' : resource === 'districts' ? 'District' : resource === 'centres' ? 'Centre' : 'Student'}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
         <Plus size={18} />
       </button> : null}
       <input ref={fileInput} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(event) => uploadExcel(event.target.files?.[0])} />
