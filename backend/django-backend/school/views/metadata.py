@@ -444,10 +444,10 @@ class DiagnosticOptionMetadataListCreateView(generics.ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         payload = request.data.copy()
-        if 'sortOrder' in payload:
-            payload['sort_order'] = payload.pop('sortOrder')
-        if 'isActive' in payload:
-            payload['is_active'] = payload.pop('isActive')
+        if 'sort_order' in payload and 'sortOrder' not in payload:
+            payload['sortOrder'] = payload['sort_order']
+        if 'is_active' in payload and 'isActive' not in payload:
+            payload['isActive'] = payload['is_active']
         serializer = self.get_serializer(data=payload)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -461,10 +461,10 @@ class DiagnosticOptionMetadataDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def update(self, request, *args, **kwargs):
         payload = request.data.copy()
-        if 'sortOrder' in payload:
-            payload['sort_order'] = payload.pop('sortOrder')
-        if 'isActive' in payload:
-            payload['is_active'] = payload.pop('isActive')
+        if 'sort_order' in payload and 'sortOrder' not in payload:
+            payload['sortOrder'] = payload['sort_order']
+        if 'is_active' in payload and 'isActive' not in payload:
+            payload['isActive'] = payload['is_active']
         serializer = self.get_serializer(self.get_object(), data=payload, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
@@ -484,8 +484,8 @@ class LearningBehaviourOptionMetadataListCreateView(generics.ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         payload = request.data.copy()
-        if 'isActive' in payload:
-            payload['is_active'] = payload.pop('isActive')
+        if 'is_active' in payload and 'isActive' not in payload:
+            payload['isActive'] = payload['is_active']
         serializer = self.get_serializer(data=payload)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -499,12 +499,13 @@ class LearningBehaviourOptionMetadataDetailView(generics.RetrieveUpdateDestroyAP
 
     def update(self, request, *args, **kwargs):
         payload = request.data.copy()
-        if 'isActive' in payload:
-            payload['is_active'] = payload.pop('isActive')
+        if 'is_active' in payload and 'isActive' not in payload:
+            payload['isActive'] = payload['is_active']
         serializer = self.get_serializer(self.get_object(), data=payload, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
+
 
     def delete(self, request, *args, **kwargs):
         instance = self.get_object()

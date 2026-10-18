@@ -145,8 +145,8 @@ class AssessmentDiagnosticSerializer(serializers.ModelSerializer):
 
 class DiagnosticOptionSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='diagnostic_option_id', read_only=True)
-    sortOrder = serializers.IntegerField(source='sort_order')
-    isActive = serializers.BooleanField(source='is_active')
+    sortOrder = serializers.IntegerField(source='sort_order', required=False)
+    isActive = serializers.BooleanField(source='is_active', required=False)
 
     class Meta:
         model = DiagnosticOption
@@ -155,11 +155,12 @@ class DiagnosticOptionSerializer(serializers.ModelSerializer):
 
 class LearningBehaviourOptionSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='behaviour_option_id', read_only=True)
-    isActive = serializers.BooleanField(source='is_active')
+    isActive = serializers.BooleanField(source='is_active', required=False)
 
     class Meta:
         model = LearningBehaviourOption
         fields = ['id', 'code', 'name', 'isActive']
+
 
 
 class StudentLearningBehaviourSerializer(serializers.ModelSerializer):

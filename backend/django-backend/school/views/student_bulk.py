@@ -135,7 +135,7 @@ def upsert_student(record, image, row_number=None):
 
 def set_student_fields(student, record, dob):
     changed = False
-    fields = ('nick_name', 'gender', 'school_name', 'school_type', 'class_grade', 'medium_of_instruction', 'attendance_pattern', 'previous_academic_performance')
+    fields = ('nick_name', 'gender', 'school_name', 'school_type', 'medium_of_instruction', 'attendance_pattern', 'previous_academic_performance')
     for field in fields:
         value = text(record.get(field)) or None
         if getattr(student, field) != value:
@@ -149,6 +149,20 @@ def set_student_fields(student, record, dob):
 
 def update_related(student, record, row_number=None):
     where = f'Row {row_number}: ' if row_number is not None else ''
+    class_val = text(record.get('class_grade'))
+    if class_val:
+        from school.models.assessment import AcademicYear
+        from school.models.student import StudentClassRecord
+        current_ay = AcademicYear.objects.filter(is_current=True).first()
+        if not current_ay:
+            current_ay = AcademicYear.objects.order_by('-start_date').first()
+        if current_ay:
+            StudentClassRecord.objects.update_or_create(
+                student=student,
+                academic_year=current_ay,
+                defaults={'class_grade': class_val, 'is_active': True}
+            )
+
     family_fields = ('father_name', 'mother_name', 'guardian', 'parent_phone', 'father_occupation', 'mother_occupation', 'father_education', 'mother_education')
     family_data = {field: text(record.get(field)) or None for field in family_fields}
     family_data.update({field: integer(record.get(field)) for field in ('family_members', 'school_going_children', 'birth_order')})
@@ -191,7 +205,7 @@ def student_row(student):
     aspirations = student.aspirations.first()
     values = {
         'full_name': student.full_name, 'nick_name': student.nick_name, 'gender': student.gender, 'dob': student.dob.isoformat() if student.dob else '',
-        'photo_filename': student.photo.name.rsplit('/', 1)[-1] if student.photo else '', 'school_name': student.school_name, 'school_type': student.school_type, 'class_grade': student.class_grade,
+        'photo_filename': student.photo.name.rsplit('/', 1)[-1] if student.photo else '', 'school_name': student.school_name, 'school_type': student.school_type, 'class_grade': student.current_class_grade or '',
         'medium_of_instruction': student.medium_of_instruction, 'attendance_pattern': student.attendance_pattern, 'previous_academic_performance': student.previous_academic_performance,
         'region_name': student.centre.region.region_name, 'district_name': student.centre.district.district_name, 'centre_name': student.centre.centre_name,
         **{field: getattr(family, field, '') if family else '' for field in ('father_name', 'mother_name', 'guardian', 'parent_phone', 'father_occupation', 'mother_occupation', 'father_education', 'mother_education', 'family_members', 'school_going_children', 'birth_order')},
