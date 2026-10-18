@@ -119,14 +119,55 @@ class StudentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('All five facilitator narratives are required.')
         return value
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        target_ay = None
+        if request:
+            from school.models.assessment import AcademicYear
+            ay_id = request.query_params.get('academicYearId') or request.query_params.get('academic_year_id')
+            ay_name = request.query_params.get('academicYear') or request.query_params.get('academic_year')
+            if ay_id:
+                target_ay = AcademicYear.objects.filter(academic_year_id=ay_id).first()
+            elif ay_name:
+                clean = ay_name.strip()
+                target_ay = (
+                    AcademicYear.objects.filter(name__iexact=clean).first() or
+                    AcademicYear.objects.filter(name__icontains=clean).first()
+                )
+
+        if target_ay:
+            rec = instance.class_records.filter(academic_year=target_ay, is_active=True).first()
+            if rec:
+                ret['class_grade'] = rec.class_grade
+                return ret
+
+        ret['class_grade'] = instance.current_class_grade
+        return ret
+
     @transaction.atomic
     def create(self, validated_data):
+        class_grade = validated_data.pop('class_grade', None)
         family_data = validated_data.pop('family_data', None)
         socio_data = validated_data.pop('socio_economic_data', None)
         vulnerabilities_data = validated_data.pop('vulnerabilities_data', [])
         motivation_data = validated_data.pop('motivation_data', [])
         aspirations_data = validated_data.pop('aspirations_data', None)
         student = super().create(validated_data)
+
+        if class_grade:
+            from school.models.assessment import AcademicYear
+            from school.models.student import StudentClassRecord
+            current_ay = AcademicYear.objects.filter(is_current=True).first()
+            if not current_ay:
+                current_ay = AcademicYear.objects.order_by('-start_date').first()
+            if current_ay:
+                StudentClassRecord.objects.create(
+                    student=student,
+                    academic_year=current_ay,
+                    class_grade=str(class_grade).strip(),
+                    is_active=True,
+                )
 
         if family_data:
             Family.objects.create(student=student, **family_data)
@@ -154,12 +195,30 @@ class StudentSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        class_grade = validated_data.pop('class_grade', None)
         family_data = validated_data.pop('family_data', None)
         socio_data = validated_data.pop('socio_economic_data', None)
         vulnerabilities_data = validated_data.pop('vulnerabilities_data', None)
         motivation_data = validated_data.pop('motivation_data', None)
         aspirations_data = validated_data.pop('aspirations_data', None)
         student = super().update(instance, validated_data)
+
+        if class_grade is not None:
+            from school.models.assessment import AcademicYear
+            from school.models.student import StudentClassRecord
+            current_ay = AcademicYear.objects.filter(is_current=True).first()
+            if not current_ay:
+                current_ay = AcademicYear.objects.order_by('-start_date').first()
+            if current_ay:
+                StudentClassRecord.objects.update_or_create(
+                    student=student,
+                    academic_year=current_ay,
+                    defaults={
+                        'class_grade': str(class_grade).strip(),
+                        'is_active': True,
+                    }
+                )
+
         if family_data is not None:
             Family.objects.update_or_create(student=student, defaults=family_data)
         if socio_data is not None:

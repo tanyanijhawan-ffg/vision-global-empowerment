@@ -31,3 +31,9 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             'centre',
             'centre_id',
         ]
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['class_grade'] = instance.current_class_grade
+        return ret
+

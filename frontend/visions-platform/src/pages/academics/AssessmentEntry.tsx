@@ -739,6 +739,39 @@ export default function AssessmentEntry() {
   const submitDraft = async () => {
     setError('');
     setNotice('');
+
+    // Check if at least one student has marks
+    const studentsWithMarks = centreStudents.filter((s) => {
+      const sData = studentData[s.id];
+      return sData && Object.values(sData.scores).some((v) => typeof v === 'number' && v >= 0);
+    });
+
+    if (studentsWithMarks.length === 0) {
+      setError('Please enter marks for students before publishing to dashboard.');
+      return;
+    }
+
+    // Check narrative observation is specified for each student with marks
+    const missingNarrativeStudents = studentsWithMarks.filter((s) => {
+      const sData = studentData[s.id];
+      const text = (
+        sData?.keyImprovements ||
+        sData?.comments ||
+        sData?.interventionPlan ||
+        sData?.subjectsNeedingSupport ||
+        ''
+      ).trim();
+      return !text;
+    });
+
+    if (missingNarrativeStudents.length > 0) {
+      const missingNames = missingNarrativeStudents.map((s) => s.name).join(', ');
+      setError(
+        `Cannot publish to dashboard: Narrative observation is mandatory for each student. Missing observation for: ${missingNames}.`
+      );
+      return;
+    }
+
     setSaving(true);
 
     try {
