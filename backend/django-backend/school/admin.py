@@ -26,7 +26,7 @@ from .models import (
     StudentLearningBehaviour,
     StudentObservation,
     StudentVulnerability,
-    StudentYearRecord,
+    StudentClassRecord,
     Subject,
     SubjectScore,
     UserProfile,
@@ -152,11 +152,12 @@ class AssessmentSubmissionAdmin(admin.ModelAdmin):
     search_fields = ('submitted_by',)
 
 
-@admin.register(StudentYearRecord)
-class StudentYearRecordAdmin(admin.ModelAdmin):
-    list_display = ('student_year_record_id', 'student', 'academic_year', 'is_active')
-    list_filter = ('academic_year', 'is_active')
-    search_fields = ('student__full_name',)
+
+@admin.register(StudentClassRecord)
+class StudentClassRecordAdmin(admin.ModelAdmin):
+    list_display = ('student_class_record_id', 'student', 'academic_year', 'class_grade', 'is_active', 'promoted')
+    list_filter = ('academic_year', 'class_grade', 'is_active', 'promoted')
+    search_fields = ('student__full_name', 'class_grade')
 
 
 admin.site.register(Program)

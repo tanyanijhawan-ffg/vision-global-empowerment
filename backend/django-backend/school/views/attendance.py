@@ -110,7 +110,7 @@ class AttendanceDefaultingEmailView(APIView):
         if len(students) != len(requested_ids):
             raise serializers.ValidationError({'student_ids': 'One or more students do not belong to this centre.'})
         class_grade = values['class_grade'].strip()
-        if class_grade and any(student.class_grade != class_grade for student in students):
+        if class_grade and any(student.current_class_grade != class_grade for student in students):
             raise serializers.ValidationError({'student_ids': 'Students do not match the selected class.'})
 
         records = Attendance.objects.filter(
@@ -136,7 +136,7 @@ class AttendanceDefaultingEmailView(APIView):
                 raise serializers.ValidationError({'student_ids': f'{student.full_name} is no longer below the 75% attendance threshold.'})
             rows.append({
                 'name': student.full_name,
-                'class_grade': student.class_grade or '—',
+                'class_grade': student.current_class_grade or '—',
                 'attended': attended_count,
                 'total': total,
                 'percentage': percentage,

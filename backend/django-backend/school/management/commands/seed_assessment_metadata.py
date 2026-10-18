@@ -8,7 +8,7 @@ from school.models.assessment import (
     SchoolClass,
     Subject,
 )
-from school.models.student import Student, StudentYearRecord
+from school.models.student import Student, StudentClassRecord
 
 
 class Command(BaseCommand):
@@ -33,14 +33,15 @@ class Command(BaseCommand):
                 defaults={'code': f'CLASS_{grade}', 'is_active': True},
             )
 
-        # Seed student year records for existing students for 2026 - 2027 (and 2025 - 2026)
+        # Seed student class records for existing students for current academic year only
+        current_ay = next((ay for ay in ay_instances if ay.is_current), None) or ay_instances[0]
         all_students = Student.objects.all()
         for student in all_students:
-            for ay in ay_instances:
-                StudentYearRecord.objects.get_or_create(
+            if student.class_grade:
+                StudentClassRecord.objects.get_or_create(
                     student=student,
-                    academic_year=ay,
-                    defaults={'is_active': True},
+                    academic_year=current_ay,
+                    defaults={'class_grade': student.class_grade, 'is_active': True},
                 )
 
         assessment_types = [

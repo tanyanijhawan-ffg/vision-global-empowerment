@@ -388,7 +388,7 @@ export const ExpandedStudentCard: React.FC<ExpandedStudentCardProps> = ({
         <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
             <FileText size={14} className="text-indigo-600" />
-            <span>Narrative Observation <span className="text-slate-400 font-normal">(Mandatory)</span></span>
+            <span>Narrative Observation <span className="text-rose-600 font-semibold">* (Mandatory to Publish)</span></span>
           </div>
 
           <textarea

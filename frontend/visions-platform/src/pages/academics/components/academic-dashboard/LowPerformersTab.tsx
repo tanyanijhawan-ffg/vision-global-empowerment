@@ -48,6 +48,9 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
    */
   const getDiagnosticObservation = (studentId: string | number, academicScore?: number) => {
     const obs = observationsData.find((o) => String(o.studentId) === String(studentId));
+    if (obs?.keyImprovements && obs.keyImprovements.trim()) {
+      return obs.keyImprovements.trim();
+    }
     if (obs?.subjectsNeedingSupport && obs.subjectsNeedingSupport.trim()) {
       const val = obs.subjectsNeedingSupport.trim();
       if (
@@ -58,9 +61,6 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
         return val;
       }
       return `Needs support in ${val}`;
-    }
-    if (obs?.keyImprovements && obs.keyImprovements.trim()) {
-      return obs.keyImprovements;
     }
 
     // Check diagnostics data for NOT_UNDERSTAND or REPETITION
@@ -84,22 +84,6 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
     if (score < 40) return 'Critical concept support required';
     if (score < 60) return 'Needs support in core subjects';
     return 'Needs targeted practice';
-  };
-
-  /**
-   * Helper function to extract recommended action from backend observations
-   */
-  const getRecommendedAction = (studentId: string | number, academicScore?: number) => {
-    const obs = observationsData.find((o) => String(o.studentId) === String(studentId));
-    if (obs?.interventionPlan && obs.interventionPlan.trim()) {
-      return obs.interventionPlan;
-    }
-
-    // Fallback based on score
-    const score = academicScore ?? 0;
-    if (score < 40) return 'Provide Remedial Classes & Worksheets';
-    if (score < 60) return 'Provide Practice Worksheets';
-    return 'Group Study & Mentorship';
   };
 
   return (
@@ -146,7 +130,6 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
             <div className="xl:hidden space-y-3">
               {lowPerformersList.map((s) => {
                 const observation = getDiagnosticObservation(s.id, s.academicScore);
-                const action = getRecommendedAction(s.id, s.academicScore);
                 const isPositiveObs =
                   /^(no|none|n\/a|on track|good|excellent)/i.test(observation) ||
                   observation.toLowerCase().includes('no specific support');
@@ -159,19 +142,11 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
                       </div>
                       <div className="text-lg font-extrabold text-rose-600 shrink-0">{s.academicScore}%</div>
                     </div>
-                    <div className="mt-3 space-y-2">
-                      <div>
-                        <div className="text-xs text-slate-400 mb-1">Diagnostic Observation</div>
-                        <span className={`px-2 py-0.5 rounded-md text-xs font-medium inline-block ${isPositiveObs ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-rose-50 text-rose-700'}`}>
-                          {observation}
-                        </span>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400 mb-1">Recommended Action</div>
-                        <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200/60 inline-block">
-                          {action}
-                        </span>
-                      </div>
+                    <div className="mt-3">
+                      <div className="text-xs text-slate-400 mb-1">Diagnostic Observation</div>
+                      <span className={`px-2 py-0.5 rounded-md text-xs font-medium inline-block ${isPositiveObs ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-rose-50 text-rose-700'}`}>
+                        {observation}
+                      </span>
                     </div>
                   </div>
                 );
@@ -189,13 +164,11 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
                   <th className="py-3 px-3 text-center bg-slate-50">Class</th>
                   <th className="py-3 px-3 text-center bg-slate-50">Academic Score</th>
                   <th className="py-3 px-4 bg-slate-50">Diagnostic Observation</th>
-                  <th className="py-3 px-4 text-left bg-slate-50">Recommended Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm bg-white">
                 {lowPerformersList.map((s) => {
                   const observation = getDiagnosticObservation(s.id, s.academicScore);
-                  const action = getRecommendedAction(s.id, s.academicScore);
 
                   const isPositiveObs =
                     /^(no|none|n\/a|on track|good|excellent)/i.test(observation) ||
@@ -221,11 +194,6 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
                           }`}
                         >
                           {observation}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-left">
-                        <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200/60 inline-block">
-                          {action}
                         </span>
                       </td>
                     </tr>

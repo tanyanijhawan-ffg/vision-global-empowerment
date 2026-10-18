@@ -33,21 +33,35 @@ class Student(models.Model):
             self.age = today.year - self.dob.year - ((today.month, today.day) < (self.dob.month, self.dob.day))
         super().save(*args, **kwargs)
 
+    @property
+    def current_class_grade(self):
+        if hasattr(self, 'latest_class_grade') and self.latest_class_grade is not None:
+            return self.latest_class_grade
+        rec = self.class_records.filter(is_active=True).order_by('-student_class_record_id').first()
+        if not rec:
+            rec = self.class_records.order_by('-student_class_record_id').first()
+        if rec:
+            return rec.class_grade
+        return self.class_grade
+
     def __str__(self):
         return self.full_name or f'Student {self.student_id}'
 
 
-class StudentYearRecord(models.Model):
-    student_year_record_id = models.AutoField(primary_key=True)
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='year_records')
-    academic_year = models.ForeignKey('school.AcademicYear', on_delete=models.CASCADE, related_name='student_year_records')
+class StudentClassRecord(models.Model):
+    student_class_record_id = models.AutoField(primary_key=True)
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='class_records')
+    academic_year = models.ForeignKey('school.AcademicYear', on_delete=models.CASCADE, related_name='student_class_records')
+    class_grade = models.CharField(max_length=30)
     is_active = models.BooleanField(default=True)
+    promoted = models.BooleanField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'student_year_record'
+        db_table = 'student_class_record'
         unique_together = ('student', 'academic_year')
 
     def __str__(self):
-        return f"{self.student.full_name} - {self.academic_year.name}"
+        return f"{self.student.full_name} - {self.academic_year.name} ({self.class_grade})"
+

@@ -934,20 +934,21 @@ class AssessmentSubmitView(AssessmentAPIView):
                         )
                 behaviours = StudentLearningBehaviour.objects.filter(assessment=assessment)
 
-        if not observations.exists() and student_ids:
-            for sid in student_ids:
+        # Check narrative observations - mandatory for all assessed students
+        obs_map = {
+            obs.student_id: obs
+            for obs in StudentObservation.objects.filter(assessment=assessment, student_id__in=student_ids)
+        }
+        students_missing_narrative = []
+        for sid in student_ids:
+            obs = obs_map.get(sid)
+            narrative = ''
+            if obs:
+                narrative = (obs.key_improvements or '').strip() or (obs.intervention_plan or '').strip()
+            if not narrative:
                 st = Student.objects.filter(student_id=sid).first()
-                if st:
-                    StudentObservation.objects.get_or_create(
-                        assessment=assessment,
-                        student=st,
-                        defaults={
-                            'key_improvements': 'General observation recorded.',
-                            'subjects_needing_support': '',
-                            'intervention_plan': '',
-                        }
-                    )
-            observations = StudentObservation.objects.filter(assessment=assessment)
+                name = st.full_name if st else f"Student #{sid}"
+                students_missing_narrative.append(name)
 
         missing = []
         if not scores.exists() or not student_ids:
@@ -956,12 +957,16 @@ class AssessmentSubmitView(AssessmentAPIView):
             missing.append('diagnostics')
         if not behaviours.exists():
             missing.append('learning behaviour')
-        if not observations.exists():
-            missing.append('narrative observations')
 
         if missing:
             return Response({
                 'error': f"The assessment cannot be submitted because required components are missing: {', '.join(missing)}. Please save progress as draft instead."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if students_missing_narrative:
+            missing_names = ', '.join(students_missing_narrative)
+            return Response({
+                'error': f"Cannot publish to dashboard: Narrative observation is mandatory for each student. Missing for: {missing_names}."
             }, status=status.HTTP_400_BAD_REQUEST)
 
         assessment.status = Assessment.STATUS_SUBMITTED
@@ -976,11 +981,24 @@ class AssessmentSubmitView(AssessmentAPIView):
         ).exclude(assessment_id=assessment.assessment_id)
         other_drafts.delete()
 
-        return Response({
+        promotion_result = None
+        try:
+            from school.services.promotion import process_class_promotion_and_rollover
+            promotion_result = process_class_promotion_and_rollover(assessment)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception("Error processing promotion and rollover: %s", e)
+
+        resp_data = {
             'assessmentId': assessment.assessment_id,
             'status': 'SUBMITTED',
             'submittedAt': assessment.updated_at.isoformat(),
-        })
+        }
+        if promotion_result:
+            resp_data['promotionResult'] = promotion_result
+
+        return Response(resp_data)
+
 
 
 class AssessmentReopenView(AssessmentAPIView):
@@ -1418,9 +1436,9 @@ class AssessmentCentrePerformanceView(AssessmentAPIView):
             # Count students enrolled in this class at this centre
             student_qs = Student.objects.filter(centre=c).filter(class_q)
             if ay_id_int:
-                student_year_qs = student_qs.filter(year_records__academic_year_id=ay_id_int, year_records__is_active=True).distinct()
-                if student_year_qs.exists():
-                    student_count_in_centre = student_year_qs.count()
+                student_class_qs = student_qs.filter(class_records__academic_year_id=ay_id_int, class_records__is_active=True).distinct()
+                if student_class_qs.exists():
+                    student_count_in_centre = student_class_qs.count()
                 else:
                     student_count_in_centre = student_qs.count()
             else:
