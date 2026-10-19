@@ -14,9 +14,10 @@ const participationLabels: Record<string, string> = {
 };
 
 function formatClassGrade(value: string): string {
-  const grade = value.trim();
+  // Strip a leading "Class " prefix — the badge already renders "Class " itself.
+  const grade = value.trim().replace(/^class\s+/i, '');
   if (!grade || grade === 'Not provided') return '';
-  if (/^class\s/i.test(grade) || /(?:st|nd|rd|th)$/i.test(grade)) return grade;
+  if (/(?:st|nd|rd|th)$/i.test(grade)) return grade;
   const numericGrade = Number(grade);
   if (!Number.isInteger(numericGrade) || numericGrade < 1) return grade;
   const lastTwoDigits = numericGrade % 100;
