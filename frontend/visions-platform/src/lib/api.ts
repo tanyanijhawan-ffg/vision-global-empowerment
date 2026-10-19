@@ -1,4 +1,4 @@
-import { getAuthHeaders } from './auth';
+import { getAuthHeaders, getCurrentUser } from './auth';
 
 export interface StudentListItem {
   id: string;
@@ -442,11 +442,13 @@ export async function saveAttendance(input: AttendanceInput): Promise<Attendance
 }
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const authHeaders = getAuthHeaders();
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers: {
       Accept: "application/json",
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...authHeaders,
       ...init?.headers,
     },
   });
@@ -697,4 +699,50 @@ export const createAcademicYearMetadata = (payload: {
 }) => apiRequest<AcademicYear>("/v1/metadata/academic-years/", { method: "POST", body: JSON.stringify(payload) });
 
 export const createAcademicYear = createAcademicYearMetadata;
+
+export interface PromoteClassInput {
+  academicYearId?: number;
+  centreId: number;
+  classId: number | string;
+}
+
+export interface PromotionStudentDetail {
+  studentId: number;
+  studentName: string;
+  currentClass: string;
+  nextClass: string;
+  isPromoted: boolean;
+  subjectAverages: Record<string, number>;
+}
+
+export interface PromoteClassResult {
+  status: string;
+  message: string;
+  current_academic_year: string;
+  next_academic_year: string;
+  centre_id: number;
+  centre_name: string;
+  class_id: number;
+  total_evaluated: number;
+  promoted_count: number;
+  retained_count: number;
+  submitted_assessments_count: number;
+  students: PromotionStudentDetail[];
+}
+
+export const promoteClassStudents = (payload: PromoteClassInput) => {
+  const user = getCurrentUser();
+  const authHeaders = getAuthHeaders();
+  return apiRequest<PromoteClassResult>('/v1/academics/promote-class/', {
+    method: 'POST',
+    headers: {
+      ...authHeaders,
+      ...(user?.role ? { 'X-User-Role': user.role } : {}),
+    },
+    body: JSON.stringify({
+      ...payload,
+      userRole: user?.role,
+    }),
+  });
+};
 

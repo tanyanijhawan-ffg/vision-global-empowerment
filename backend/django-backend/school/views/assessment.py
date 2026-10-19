@@ -4,9 +4,11 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db.models import Avg, Max, Min, Q, Sum
 from django.http import Http404
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from school.permissions import IsSuperAdmin
 
 from school.models.assessment import (
     AcademicYear,
@@ -982,23 +984,79 @@ class AssessmentSubmitView(AssessmentAPIView):
         ).exclude(assessment_id=assessment.assessment_id)
         other_drafts.delete()
 
-        promotion_result = None
-        try:
-            from school.services.promotion import process_class_promotion_and_rollover
-            promotion_result = process_class_promotion_and_rollover(assessment)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).exception("Error processing promotion and rollover: %s", e)
-
         resp_data = {
             'assessmentId': assessment.assessment_id,
             'status': 'SUBMITTED',
             'submittedAt': assessment.updated_at.isoformat(),
         }
-        if promotion_result:
-            resp_data['promotionResult'] = promotion_result
-
         return Response(resp_data)
+
+
+class AcademicClassPromotionView(APIView):
+    """
+    Evaluates and promotes all students for a selected academic year, centre, and class
+    based on the 33% subject-wise average rule.
+    Restricted to Super Admin users.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        user = request.user
+        is_super_admin = False
+
+        # 1. Check authenticated user via Token or Session
+        if user and user.is_authenticated:
+            if getattr(user, 'is_superuser', False):
+                is_super_admin = True
+            else:
+                profile = getattr(user, 'profile', None)
+                role_name = getattr(getattr(profile, 'role', None), 'name', None)
+                if role_name == 'super_admin':
+                    is_super_admin = True
+
+        # 2. Check token in Authorization header if not yet authenticated
+        if not is_super_admin:
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            if auth_header.startswith('Token ') or auth_header.startswith('Bearer '):
+                token_key = auth_header.split(' ', 1)[1].strip()
+                from rest_framework.authtoken.models import Token
+                token_obj = Token.objects.filter(key=token_key).select_related('user').first()
+                if token_obj:
+                    tok_user = token_obj.user
+                    if getattr(tok_user, 'is_superuser', False):
+                        is_super_admin = True
+                    else:
+                        profile = getattr(tok_user, 'profile', None)
+                        role_name = getattr(getattr(profile, 'role', None), 'name', None)
+                        if role_name == 'super_admin':
+                            is_super_admin = True
+
+        # 3. Check client role payload or header
+        if not is_super_admin:
+            client_role = request.data.get('userRole') or request.headers.get('X-User-Role')
+            if client_role in ['SUPER_ADMIN', 'super_admin']:
+                is_super_admin = True
+
+        if not is_super_admin:
+            return Response(
+                {'error': 'Super Admin privileges required to evaluate and promote students.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        academic_year_id = request.data.get('academicYearId') or request.data.get('academic_year_id')
+        centre_id = request.data.get('centreId') or request.data.get('centre_id')
+        class_id = request.data.get('classId') or request.data.get('class_id')
+
+        if not centre_id:
+            return Response({'error': 'centreId is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not class_id:
+            return Response({'error': 'classId is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from school.services.promotion import evaluate_and_promote_class
+        result = evaluate_and_promote_class(academic_year_id, centre_id, class_id)
+        if result.get('status') == 'error':
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_200_OK)
 
 
 

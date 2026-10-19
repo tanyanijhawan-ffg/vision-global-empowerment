@@ -12,6 +12,8 @@ class IsSuperAdmin(BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
+        if getattr(request.user, 'is_superuser', False):
+            return True
         profile = getattr(request.user, 'profile', None)
         role_name = getattr(profile, 'role', None)
         role_value = getattr(role_name, 'name', None) if role_name else None
