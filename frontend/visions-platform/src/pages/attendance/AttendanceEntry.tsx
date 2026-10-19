@@ -26,9 +26,16 @@ function formatClassGrade(value: string): string {
   return `${numericGrade}${suffix}`;
 }
 
+function normalizeClassGrade(value: string): string {
+  const grade = value.trim().replace(/^class\s*/i, '').replace(/(?:st|nd|rd|th)$/i, '').trim();
+  if (!grade || grade.toLowerCase() === 'not provided') return '';
+  const numericGrade = Number(grade);
+  return Number.isInteger(numericGrade) && numericGrade > 0 ? String(numericGrade) : grade;
+}
+
 type AttendanceDraft = Omit<AttendanceInput, 'student_id' | 'attendance_date'>;
 const emptyDraft = (): AttendanceDraft => ({
-  status: 'Present', absence_reason: '', late_reason: '', participation_level: '3', attention_level: 'Focused',
+  status: 'Present', absence_reason: '', late_reason: '', participation_level: '',
   learning_behaviour: [], tutor_observation: '', what_was_different: '', any_concern: '', any_positive_change: '',
 });
 
@@ -36,6 +43,7 @@ export default function AttendanceEntry() {
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
   const [selectedCentre, setSelectedCentre] = useState('');
+  const [selectedClass, setSelectedClass] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [search, setSearch] = useState('');
   const [drafts, setDrafts] = useState<Record<string, AttendanceDraft>>({});
@@ -47,7 +55,7 @@ export default function AttendanceEntry() {
     Promise.all([fetchStudents(), fetchAttendanceCentres()]).then(([records, centreRecords]) => {
       setStudents(records);
       setCentres(centreRecords);
-      setSelectedCentre(String(centreRecords[0]?.id || ''));
+      setSelectedCentre('');
       setDrafts(Object.fromEntries(records.map(student => [student.id, emptyDraft()])));
     }).catch(error => setMessage(error.message)).finally(() => setLoading(false));
   }, []);
@@ -63,7 +71,7 @@ export default function AttendanceEntry() {
         records.forEach(record => {
           next[String(record.student_id)] = {
             status: record.status || 'Present', absence_reason: record.absence_reason || '', late_reason: record.late_reason || '',
-            participation_level: record.participation_level || '3', attention_level: record.attention_level || 'Focused',
+            participation_level: record.participation_level || '', ...(record.attention_level ? { attention_level: record.attention_level } : {}),
             learning_behaviour: record.learning_behaviour || [], ...(record.behaviour ? { behaviour: record.behaviour } : {}),
             tutor_observation: record.tutor_observation || '', what_was_different: record.what_was_different || '',
             any_concern: record.any_concern || '', any_positive_change: record.any_positive_change || '',
@@ -75,7 +83,16 @@ export default function AttendanceEntry() {
     return () => { active = false; };
   }, [date, students]);
 
-  const filteredStudents = students.filter(student => student.centreId === Number(selectedCentre) && student.name.toLowerCase().includes(search.toLowerCase()));
+  const classOptions = [...new Set(students
+    .filter(student => student.centreId === Number(selectedCentre))
+    .map(student => normalizeClassGrade(student.class))
+    .filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+  const filteredStudents = students.filter(student =>
+    student.centreId === Number(selectedCentre) &&
+    (!selectedClass || normalizeClassGrade(student.class) === selectedClass) &&
+    student.name.toLowerCase().includes(search.toLowerCase()),
+  );
   const updateDraft = (id: string, changes: Partial<AttendanceDraft>) => {
     setDrafts(previous => ({ ...previous, [id]: { ...previous[id], ...changes } }));
     setMessage('');
@@ -85,7 +102,13 @@ export default function AttendanceEntry() {
     updateDraft(id, { learning_behaviour: current.includes(option) ? current.filter(value => value !== option) : [...current, option] });
   };
   const handleSave = async () => {
-    setSaving(true); setMessage('');
+    setMessage('');
+    const studentsMissingParticipation = filteredStudents.filter(student => !drafts[student.id]?.participation_level);
+    if (studentsMissingParticipation.length) {
+      setMessage(`Select a valid Participation Level for all students before saving. ${studentsMissingParticipation.length} student${studentsMissingParticipation.length === 1 ? '' : 's'} still need a selection.`);
+      return;
+    }
+    setSaving(true);
     try {
       const centreId = Number(selectedCentre);
       if (!centreId) throw new Error('The selected centre has no database ID.');
@@ -99,8 +122,9 @@ export default function AttendanceEntry() {
     <div className="max-w-7xl mx-auto space-y-6">
       <PageHeader title="Mark Attendance" subtitle="Record daily attendance, engagement, and tutor observations."
         action={<button onClick={handleSave} disabled={saving || loading || !filteredStudents.length} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"><Save size={16} />{saving ? 'Saving...' : 'Save Attendance'}</button>} />
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6"><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <label className="space-y-1.5"><span className="block text-sm font-medium text-slate-700">Select Centre</span><select value={selectedCentre} onChange={event => setSelectedCentre(event.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"><option value="">Select a centre</option>{centres.map(centre => <option key={centre.id} value={centre.id}>{centre.name}</option>)}</select></label>
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6"><div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <label className="space-y-1.5"><span className="block text-sm font-medium text-slate-700">Select Centre</span><select value={selectedCentre} onChange={event => { setSelectedCentre(event.target.value); setSelectedClass(''); }} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"><option value="">Select a centre</option>{centres.map(centre => <option key={centre.id} value={centre.id}>{centre.name}</option>)}</select></label>
+        <label className="space-y-1.5"><span className="block text-sm font-medium text-slate-700">Select Class</span><select value={selectedClass} onChange={event => setSelectedClass(event.target.value)} disabled={!selectedCentre} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm disabled:bg-slate-50 disabled:text-slate-400"><option value="">All classes</option>{classOptions.map(classGrade => <option key={classGrade} value={classGrade}>{classGrade}</option>)}</select></label>
         <label className="space-y-1.5"><span className="block text-sm font-medium text-slate-700">Date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm" /></label>
       </div></div>
       {message && <p className={`text-sm ${message.includes('successfully') ? 'text-emerald-600' : 'text-red-600'}`}>{message}</p>}
@@ -116,7 +140,7 @@ export default function AttendanceEntry() {
                   {draft.status === 'Present' && <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"><Info size={16} aria-label="Information" /><span>No Remarks required for Present.</span></div>}
                   {draft.status === 'Absent' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Absence <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.absence_reason} onChange={event => updateDraft(student.id, { absence_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}
                   {draft.status === 'Late' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Late <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.late_reason} onChange={event => updateDraft(student.id, { late_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}
-                  <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Participation Level</span><select value={draft.participation_level} onChange={event => updateDraft(student.id, { participation_level: event.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">{Object.entries(participationLabels).map(([level, label]) => <option key={level} value={level}>{level} - {label}</option>)}</select></label>
+                  <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Participation Level</span><select required value={draft.participation_level} onChange={event => updateDraft(student.id, { participation_level: event.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="" disabled>Select valid option</option>{Object.entries(participationLabels).map(([level, label]) => <option key={level} value={level}>{level} - {label}</option>)}</select></label>
                 </div>
               </div>
               <aside className="border-t md:border-t-0 md:border-l border-slate-200 pt-5 md:pt-0 md:pl-6 space-y-6">
@@ -127,7 +151,7 @@ export default function AttendanceEntry() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">What was different today?</span><textarea value={draft.what_was_different} onChange={event => updateDraft(student.id, { what_was_different: event.target.value })} rows={3} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-y" /></label><label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Any concern?</span><textarea value={draft.any_concern} onChange={event => updateDraft(student.id, { any_concern: event.target.value })} rows={3} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-y" /></label><label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Any positive change?</span><textarea value={draft.any_positive_change} onChange={event => updateDraft(student.id, { any_positive_change: event.target.value })} rows={3} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-y" /></label></div>
           </section>; })}
-          {!filteredStudents.length && <p className="p-8 text-center text-slate-500">No students found for this centre.</p>}
+          {!filteredStudents.length && <p className="p-8 text-center text-slate-500">No students found for this centre and class selection.</p>}
         </div>}
       </div>
     </div>
