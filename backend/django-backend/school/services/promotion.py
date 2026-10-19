@@ -11,6 +11,7 @@ from school.models.assessment import (
     AssessmentSubject,
     AssessmentType,
 )
+from school.models.center import Center
 from school.models.student import Student, StudentClassRecord
 
 
@@ -309,4 +310,164 @@ def process_class_promotion_and_rollover(assessment):
         'promoted_count': promoted_count,
         'retained_count': retained_count,
         'academic_year_rolled_over': rollover_done,
+    }
+
+
+@transaction.atomic
+def evaluate_and_promote_class(academic_year_id, centre_id, class_id):
+    """
+    Evaluates all students in a given academic_year, centre, and class based on the 33% logic.
+    Triggered on-demand via the Super Admin Promotion button on the Academic Dashboard.
+    Does NOT require a minimum number of exams.
+    """
+    # 1. Resolve Academic Year
+    current_ay = None
+    if academic_year_id:
+        current_ay = AcademicYear.objects.filter(academic_year_id=academic_year_id).first()
+    if not current_ay:
+        current_ay = AcademicYear.objects.filter(is_current=True).first()
+    if not current_ay:
+        return {'status': 'error', 'message': 'Academic year not found.'}
+
+    # 2. Resolve Class Number
+    class_num = None
+    if class_id is not None:
+        match = re.search(r'\d+', str(class_id))
+        if match:
+            class_num = int(match.group())
+    if not class_num:
+        return {'status': 'error', 'message': 'Valid class is required.'}
+
+    # 3. Resolve Centre
+    centre = Center.objects.filter(centre_id=centre_id).first()
+    if not centre:
+        return {'status': 'error', 'message': 'Centre is required.'}
+
+    # 4. Ensure Next Academic Year exists
+    next_ay = get_or_create_next_academic_year(current_ay)
+
+    # 5. Fetch all SUBMITTED assessments for this class, centre, and academic year
+    submitted_assessments = list(Assessment.objects.filter(
+        class_id=class_num,
+        centre_id=centre.centre_id,
+        academic_year_id=current_ay.academic_year_id,
+        status=Assessment.STATUS_SUBMITTED
+    ))
+
+    # 6. Fetch students in this class and centre for current_ay
+    class_str = str(class_num)
+    cr_grade_q = (
+        Q(class_grade__iexact=class_str) |
+        Q(class_grade__iexact=f'Class {class_str}') |
+        Q(class_grade__iexact=f'Grade {class_str}')
+    )
+    cr_filter = Q(academic_year=current_ay, is_active=True) & cr_grade_q & Q(student__centre_id=centre.centre_id)
+    class_records = list(StudentClassRecord.objects.filter(cr_filter).select_related('student'))
+
+    # Safety-net: include legacy students whose grade is only on Student.class_grade
+    legacy_grade_q = (
+        Q(class_grade__iexact=class_str) |
+        Q(class_grade__iexact=f'Class {class_str}') |
+        Q(class_grade__iexact=f'Grade {class_str}')
+    )
+    already_have_record_ids = {r.student_id for r in class_records}
+    legacy_students = Student.objects.filter(legacy_grade_q, centre_id=centre.centre_id).exclude(student_id__in=already_have_record_ids)
+    for st in legacy_students:
+        rec, _ = StudentClassRecord.objects.get_or_create(
+            student=st,
+            academic_year=current_ay,
+            defaults={'class_grade': st.class_grade or f"Class {class_num}", 'is_active': True}
+        )
+        class_records.append(rec)
+
+    if not class_records:
+        return {
+            'status': 'no_students',
+            'message': f'No students found in Class {class_num} at {centre.centre_name} for {current_ay.name}.',
+            'current_academic_year': current_ay.name,
+            'next_academic_year': next_ay.name,
+            'centre_id': centre.centre_id,
+            'centre_name': centre.centre_name,
+            'class_id': class_num,
+            'total_evaluated': 0,
+            'promoted_count': 0,
+            'retained_count': 0,
+            'students': []
+        }
+
+    # 7. Evaluate each student based on the 33% logic
+    promoted_count = 0
+    retained_count = 0
+    evaluated_students = []
+
+    for rec in class_records:
+        student = rec.student
+        scores = AssessmentScore.objects.filter(
+            student=student,
+            assessment__in=submitted_assessments
+        ).select_related('assessment', 'subject')
+
+        scores_by_subject = {}
+        for s in scores:
+            scores_by_subject.setdefault(s.subject_id, []).append(s)
+
+        subject_details = {}
+        if not scores_by_subject or not submitted_assessments:
+            is_promoted = False
+        else:
+            is_promoted = True
+            for subj_id, subj_scores in scores_by_subject.items():
+                pcts = []
+                subj_name = subj_scores[0].subject.name if subj_scores and subj_scores[0].subject else f"Subject {subj_id}"
+                for s in subj_scores:
+                    max_m = _subject_max_marks(s.assessment, s.subject_id)
+                    if max_m and max_m > 0:
+                        pct = (float(s.obtained_marks) / float(max_m)) * 100.0
+                        pcts.append(pct)
+                subj_avg = sum(pcts) / len(pcts) if pcts else 0.0
+                subject_details[subj_name] = round(subj_avg, 1)
+
+                if subj_avg <= 33.0:
+                    is_promoted = False
+
+        if is_promoted:
+            promoted_count += 1
+        else:
+            retained_count += 1
+
+        next_grade_str = calculate_next_class_grade(rec.class_grade, is_promoted)
+
+        # Store in StudentClassRecord for next_ay
+        StudentClassRecord.objects.update_or_create(
+            student=student,
+            academic_year=next_ay,
+            defaults={
+                'class_grade': next_grade_str,
+                'is_active': True,
+                'promoted': is_promoted,
+            }
+        )
+
+        evaluated_students.append({
+            'studentId': student.student_id,
+            'studentName': student.full_name or f"Student #{student.student_id}",
+            'currentClass': rec.class_grade,
+            'nextClass': next_grade_str,
+            'isPromoted': is_promoted,
+            'subjectAverages': subject_details,
+        })
+
+    return {
+        'status': 'success',
+        'message': f'Evaluated {len(evaluated_students)} students: {promoted_count} promoted to next class, {retained_count} retained in current class.',
+        'current_academic_year': current_ay.name,
+        'next_academic_year': next_ay.name,
+        'centre_id': centre.centre_id,
+        'centre_name': centre.centre_name,
+        'class_id': class_num,
+        'total_evaluated': len(evaluated_students),
+        'promoted_count': promoted_count,
+        'retained_count': retained_count,
+        'submitted_assessments_count': len(submitted_assessments),
+        'students': evaluated_students,
     }

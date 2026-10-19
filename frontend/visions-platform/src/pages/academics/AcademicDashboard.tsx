@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Trophy, BookOpen, TrendingUp, AlertTriangle,
   MapPin, Globe, Award, UserCheck, Layers,
-  Calendar, ChevronDown
+  Calendar, ChevronDown, GraduationCap
 } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import StatCard from '../../components/StatCard';
@@ -26,6 +26,7 @@ import CentrePerformanceTab from './components/academic-dashboard/CentrePerforma
 import RegionComparisonTab from './components/academic-dashboard/RegionComparisonTab';
 import LowPerformersTab from './components/academic-dashboard/LowPerformersTab';
 import StudentGradebookTab from './components/academic-dashboard/StudentGradebookTab';
+import { PromoteStudentsModal } from './components/academic-dashboard/PromoteStudentsModal';
 
 type ActiveReportTab = 'comparative' | 'centre-report' | 'region-report' | 'low-performers' | 'class-tracking';
 
@@ -61,6 +62,7 @@ export default function AcademicDashboard() {
   const [filterClass, setFilterClass] = useState('');
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<number | null>(null);
+  const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false);
 
   // Region / District / Centre Scope
   const [filterRegion] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.region : '');
@@ -281,6 +283,14 @@ export default function AcademicDashboard() {
   const availableCentres = useMemo(() => {
     return centres;
   }, [centres]);
+
+  const selectedCentreObj = useMemo(() => {
+    return centres.find(c => c.name === filterCentre || String(c.id) === filterCentre);
+  }, [centres, filterCentre]);
+
+  const selectedAcademicYearObj = useMemo(() => {
+    return academicYears.find(ay => ay.id === selectedAcademicYearId);
+  }, [academicYears, selectedAcademicYearId]);
 
   const availableRegions = useMemo(() => {
     const set = new Set<string>();
@@ -638,37 +648,52 @@ export default function AcademicDashboard() {
           title="Academic Performance & Reports"
           subtitle="Live performance metrics, comparative trends, centre analytics, and diagnostic distribution."
         />
-        <div className="self-start sm:self-auto flex items-center gap-2">
-          <label htmlFor="assessment-year-select" className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 whitespace-nowrap">
-            <Calendar size={14} className="text-indigo-600" />
-            <span>Assessment Year:</span>
-          </label>
-          <div className="relative">
-            <select
-              id="assessment-year-select"
-              value={selectedAcademicYearId ?? ''}
-              onChange={(e) => {
-                const newYearId = e.target.value ? Number(e.target.value) : null;
-                setSelectedAcademicYearId(newYearId);
-                setSelectedAssessmentId(null);
-              }}
-              className="appearance-none pl-3 pr-8 py-2 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none cursor-pointer transition min-w-[140px]"
-            >
-              {academicYears.length === 0 ? (
-                <option value="">Loading years...</option>
-              ) : (
-                academicYears.map((ay) => (
-                  <option key={ay.id} value={ay.id}>
-                    {ay.name} {ay.isCurrent ? '(Current)' : ''}
-                  </option>
-                ))
-              )}
-            </select>
-            <ChevronDown
-              size={13}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-            />
+        <div className="self-start sm:self-auto flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label htmlFor="assessment-year-select" className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 whitespace-nowrap">
+              <Calendar size={14} className="text-indigo-600" />
+              <span>Assessment Year:</span>
+            </label>
+            <div className="relative">
+              <select
+                id="assessment-year-select"
+                value={selectedAcademicYearId ?? ''}
+                onChange={(e) => {
+                  const newYearId = e.target.value ? Number(e.target.value) : null;
+                  setSelectedAcademicYearId(newYearId);
+                  setSelectedAssessmentId(null);
+                }}
+                className="appearance-none pl-3 pr-8 py-2 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none cursor-pointer transition min-w-[140px]"
+              >
+                {academicYears.length === 0 ? (
+                  <option value="">Loading years...</option>
+                ) : (
+                  academicYears.map((ay) => (
+                    <option key={ay.id} value={ay.id}>
+                      {ay.name} {ay.isCurrent ? '(Current)' : ''}
+                    </option>
+                  ))
+                )}
+              </select>
+              <ChevronDown
+                size={13}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              />
+            </div>
           </div>
+
+          {currentUser?.role === 'SUPER_ADMIN' && (
+            <button
+              type="button"
+              id="promote-students-btn"
+              onClick={() => setIsPromotionModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-xs font-semibold shadow-xs hover:shadow transition-all cursor-pointer whitespace-nowrap"
+              title="Promote students for the selected academic year, centre, and class based on the 33% rule"
+            >
+              <GraduationCap size={15} />
+              <span>Promote Students</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -859,6 +884,28 @@ export default function AcademicDashboard() {
             />
           )}
         </>
+      )}
+
+      {currentUser?.role === 'SUPER_ADMIN' && (
+        <PromoteStudentsModal
+          isOpen={isPromotionModalOpen}
+          onClose={() => setIsPromotionModalOpen(false)}
+          academicYearName={selectedAcademicYearObj?.name || ''}
+          academicYearId={selectedAcademicYearId ?? undefined}
+          centreName={selectedCentreObj?.name || filterCentre}
+          centreId={selectedCentreObj?.id}
+          className={filterClass ? `Class ${normalizeClass(filterClass)}` : ''}
+          classId={normalizeClass(filterClass)}
+          onSuccess={() => {
+            // Re-fetch scoped students to immediately reflect updated class records
+            if (filterClass && selectedCentreObj?.id) {
+              const classNum = Number(normalizeClass(filterClass));
+              fetchStudents({ centreId: selectedCentreObj.id, classId: classNum })
+                .then(setStudents)
+                .catch(() => {});
+            }
+          }}
+        />
       )}
     </div>
   );

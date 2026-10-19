@@ -9,6 +9,7 @@ from school.views.attendance import (
 )
 
 from school.views.assessment import (
+    AcademicClassPromotionView,
     AcademicYearListView,
     AssessmentBehaviourView,
     AssessmentCentrePerformanceView,
@@ -103,4 +104,5 @@ urlpatterns = [
     path('assessments/<int:assessment_id>/details', AssessmentDetailsView.as_view(), name='assessment-details'),
     path('assessments/<int:assessment_id>/centre-performance/', AssessmentCentrePerformanceView.as_view(), name='assessment-centre-performance'),
     path('assessments/centre-performance/', AssessmentCentrePerformanceView.as_view(), name='assessment-centre-performance-query'),
+    path('academics/promote-class/', AcademicClassPromotionView.as_view(), name='academic-class-promotion'),
 ]
