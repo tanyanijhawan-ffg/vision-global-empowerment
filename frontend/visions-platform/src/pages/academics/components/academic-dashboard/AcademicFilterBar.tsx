@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { Assessment, AttendanceCentre } from '../../../../lib/api';
+import type { Assessment, AttendanceCentre, SchoolClass } from '../../../../lib/api';
+import { fetchSchoolClasses } from '../../../../lib/api';
 
 /**
  * Styling class for custom select inputs.
@@ -23,6 +24,8 @@ export interface AcademicFilterBarProps {
   onAssessmentChange: (val: number | null) => void;
   /** Available centres loaded from backend */
   availableCentres: AttendanceCentre[];
+  /** Available classes loaded from backend */
+  classes?: SchoolClass[];
   /** Submitted assessments loaded for the selected class & centre */
   assessments: Assessment[];
   /** Total students in scope for current selection */
@@ -47,10 +50,28 @@ export const AcademicFilterBar: React.FC<AcademicFilterBarProps> = ({
   selectedAssessmentId,
   onAssessmentChange,
   availableCentres,
+  classes,
   assessments,
   studentsInScopeCount,
   onResetAll,
 }) => {
+  const [internalClasses, setInternalClasses] = useState<SchoolClass[]>(classes || []);
+
+  useEffect(() => {
+    if (classes && classes.length > 0) {
+      setInternalClasses(classes);
+    } else {
+      fetchSchoolClasses()
+        .then((data) => {
+          if (data && data.length > 0) {
+            setInternalClasses(data);
+          }
+        })
+        .catch((err) => console.error('Failed to load classes from /v1/classes/:', err));
+    }
+  }, [classes]);
+
+  const availableClasses = (classes && classes.length > 0) ? classes : internalClasses;
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4">
       <div className="flex items-center justify-between mb-3">
@@ -115,9 +136,9 @@ export const AcademicFilterBar: React.FC<AcademicFilterBarProps> = ({
               ) : (
                 <>
                   <option value="">Choose Class...</option>
-                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].map((c) => (
-                    <option key={c} value={c}>
-                      Class {c}
+                  {availableClasses.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.name || `Class ${c.id}`}
                     </option>
                   ))}
                 </>

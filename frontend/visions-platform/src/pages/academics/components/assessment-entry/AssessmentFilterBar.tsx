@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Calendar, Building2, User, FileText, ChevronDown } from 'lucide-react';
-import { type AttendanceCentre, type AssessmentType, type AcademicYear } from '../../../../lib/api';
+import { type AttendanceCentre, type AssessmentType, type AcademicYear, type SchoolClass, fetchSchoolClasses } from '../../../../lib/api';
 
 /**
  * Props for AssessmentFilterBar component.
@@ -14,6 +14,7 @@ interface AssessmentFilterBarProps {
   selectedCentreId: string;
   onCentreChange: (id: string) => void;
 
+  classes?: SchoolClass[];
   classId: number | '';
   onClassChange: (c: number | '') => void;
 
@@ -35,6 +36,7 @@ export const AssessmentFilterBar: React.FC<AssessmentFilterBarProps> = ({
   centres,
   selectedCentreId,
   onCentreChange,
+  classes,
   classId,
   onClassChange,
   types,
@@ -42,6 +44,23 @@ export const AssessmentFilterBar: React.FC<AssessmentFilterBarProps> = ({
   onTypeChange,
   maxMarks,
 }) => {
+  const [internalClasses, setInternalClasses] = useState<SchoolClass[]>(classes || []);
+
+  useEffect(() => {
+    if (classes && classes.length > 0) {
+      setInternalClasses(classes);
+    } else {
+      fetchSchoolClasses()
+        .then((data) => {
+          if (data && data.length > 0) {
+            setInternalClasses(data);
+          }
+        })
+        .catch((err) => console.error('Failed to load classes from /v1/classes/:', err));
+    }
+  }, [classes]);
+
+  const availableClasses = (classes && classes.length > 0) ? classes : internalClasses;
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl p-3 shadow-2xs flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
@@ -116,8 +135,10 @@ export const AssessmentFilterBar: React.FC<AssessmentFilterBarProps> = ({
               className="h-10 appearance-none bg-white border border-slate-200 text-slate-800 pl-9 pr-8 rounded-xl text-xs font-medium hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent cursor-pointer shadow-2xs min-w-[130px]"
             >
               <option value="">Select Class</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((c) => (
-                <option key={c} value={c}>Class {c}</option>
+              {availableClasses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name || `Class ${c.id}`}
+                </option>
               ))}
             </select>
             <ChevronDown size={14} className="absolute right-3 text-slate-400 pointer-events-none" />

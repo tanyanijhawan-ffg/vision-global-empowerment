@@ -315,7 +315,7 @@ class AssessmentCreateView(AssessmentAPIView):
                 'status': a_obj.status if a_obj else 'DRAFT',
                 'academicYear': year_name,
                 'academicYearId': resolved_ay_id,
-                'class': f'Grade {as_entry.class_id}',
+                'class': f'Class {as_entry.class_id}',
                 'classId': as_entry.class_id,
                 'assessmentType': exam_obj.name,
                 'assessmentTypeId': as_entry.exam_id,
@@ -355,7 +355,7 @@ class AssessmentCreateView(AssessmentAPIView):
                 'status': a.status,
                 'academicYear': year_name,
                 'academicYearId': a.academic_year_id,
-                'class': f'Grade {a.class_id}',
+                'class': f'Class {a.class_id}',
                 'classId': a.class_id,
                 'assessmentType': a.assessment_type.name if a.assessment_type else '',
                 'assessmentTypeId': a.assessment_type_id,
@@ -521,7 +521,7 @@ class AssessmentDetailView(AssessmentAPIView):
             'assessmentTypeId': assessment.assessment_type_id,
             'academicYear': _format_year(assessment.academic_year_id),
             'academicYearId': assessment.academic_year_id,
-            'class': f'Grade {assessment.class_id}',
+            'class': f'Class {assessment.class_id}',
             'classId': assessment.class_id,
             'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
             'centreId': assessment.centre_id,
@@ -580,7 +580,7 @@ class AssessmentDetailView(AssessmentAPIView):
             'assessmentTypeId': assessment.assessment_type_id,
             'academicYear': _format_year(assessment.academic_year_id),
             'academicYearId': assessment.academic_year_id,
-            'class': f'Grade {assessment.class_id}',
+            'class': f'Class {assessment.class_id}',
             'classId': assessment.class_id,
             'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
             'centreId': assessment.centre_id,
@@ -797,7 +797,8 @@ class AssessmentObservationListView(AssessmentAPIView):
     def put(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         saved = 0
-        for item in request.data.get('students', []):
+        items = request.data.get('students') or request.data.get('observations') or []
+        for item in items:
             student = Student.objects.filter(student_id=item.get('studentId')).first()
             if not student:
                 continue
@@ -1299,17 +1300,23 @@ class StudentDashboardView(AssessmentAPIView):
         previous_max = _score_max_total(previous_assessment, previous_rows) or Decimal('100') if previous_assessment else Decimal('100')
         previous_percentage = _percentage(previous_total, previous_max) if previous_assessment else Decimal('0')
         change = current_percentage - previous_percentage
-        behaviour = StudentLearningBehaviour.objects.filter(student=student, assessment=current_assessment).select_related('behaviour').first() if current_assessment else None
+        behaviour = StudentLearningBehaviour.objects.filter(student=student, assessment=current_assessment).select_related('behaviour_option').first() if current_assessment else None
 
+        student_class = f'Class {current_assessment.class_id}' if current_assessment else (student.current_class_grade or 'N/A')
         return Response({
-            'student': {'id': student.student_id, 'name': student.full_name, 'class': f'Grade {current_assessment.class_id if current_assessment else 0}'},
+            'student': {
+                'id': student.student_id,
+                'name': student.full_name,
+                'class': student_class,
+                'section': 'A',
+            },
             'currentPerformance': {'percentage': float(current_percentage)},
             'previousPerformance': {'percentage': float(previous_percentage)},
             'improvement': {'percentage': float(change), 'trend': 'UP' if change > 0 else 'DOWN' if change < 0 else 'STABLE'},
             'subjectPerformance': [],
             'subjectTrends': [],
             'diagnostic': [],
-            'learningBehaviour': behaviour.behaviour.name if behaviour else 'N/A',
+            'learningBehaviour': behaviour.behaviour_option.name if (behaviour and behaviour.behaviour_option) else 'N/A',
             'areasNeedingSupport': [],
             'observation': {'keyImprovements': '', 'subjectsNeedingSupport': '', 'interventionPlan': ''},
         })

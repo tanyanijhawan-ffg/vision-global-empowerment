@@ -2,12 +2,13 @@ import { useEffect, useState, useMemo } from 'react';
 import { Save, Send, Check, AlertCircle, Sparkles, FileText } from 'lucide-react';
 import {
   createAssessment, fetchAssessmentTypes, fetchDiagnosticOptions, fetchLearningBehaviours,
-  fetchStudents, fetchSubjects, fetchAttendanceCentres, fetchAcademicYears,
+  fetchStudents, fetchSubjects, fetchAttendanceCentres, fetchAcademicYears, fetchSchoolClasses,
   saveAssessmentBehaviours, saveAssessmentDiagnostics, saveAssessmentObservation, saveAssessmentObservations,
   saveAssessmentScores, submitAssessment, reopenAssessment, fetchAssessments,
   fetchAssessmentScores, fetchAssessmentDiagnostics, fetchAssessmentBehaviours,
   fetchAssessmentObservations, type AssessmentType, type AcademicYear, type DiagnosticOptions,
   type LearningBehaviourOption, type AttendanceCentre, type StudentListItem, type Subject,
+  type SchoolClass,
 } from '../../lib/api';
 import { DraftPromptModal } from './components/assessment-entry/DraftPromptModal';
 import { SubmittedPromptModal } from './components/assessment-entry/SubmittedPromptModal';
@@ -36,6 +37,7 @@ export default function AssessmentEntry() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [diagnostics, setDiagnostics] = useState<DiagnosticOptions | null>(null);
   const [behaviours, setBehaviours] = useState<LearningBehaviourOption[]>([]);
+  const [classes, setClasses] = useState<SchoolClass[]>([]);
 
   // Form controls
   const [classId, setClassId] = useState<number | ''>('');
@@ -119,12 +121,16 @@ export default function AssessmentEntry() {
       fetchDiagnosticOptions(),
       fetchLearningBehaviours(),
       fetchAcademicYears().catch(() => []),
+      fetchSchoolClasses().catch(() => []),
     ])
-      .then(([centreList, typeData, diagnosticData, behaviourData, yearData]) => {
+      .then(([centreList, typeData, diagnosticData, behaviourData, yearData, classList]) => {
         setCentres(centreList);
         setTypes(typeData);
         setDiagnostics(diagnosticData);
         setBehaviours(behaviourData);
+        if (classList && classList.length > 0) {
+          setClasses(classList);
+        }
         if (yearData && yearData.length > 0) {
           setAcademicYears(yearData);
           const current = yearData.find((y) => y.isCurrent) || yearData[0];
@@ -893,6 +899,7 @@ export default function AssessmentEntry() {
         centres={centres}
         selectedCentreId={selectedCentreId}
         onCentreChange={handleCentreChange}
+        classes={classes}
         classId={classId}
         onClassChange={handleClassChange}
         types={types}
