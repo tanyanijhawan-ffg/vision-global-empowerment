@@ -11,9 +11,11 @@ import {
   fetchSubjectComparison, fetchAssessmentScores, fetchAssessmentDiagnostics,
   fetchAssessmentBehaviours, fetchAssessmentObservations, fetchAttendanceCentres,
   fetchStudents, fetchSubjects, fetchAcademicYears, fetchCentrePerformanceReport,
+  fetchSchoolClasses,
   type Assessment, type AttendanceCentre, type StudentListItem, type Subject,
   type AssessmentStatistics, type AcademicYear,
-  type CentrePerformanceReportItem, type RegionComparisonReportItem
+  type CentrePerformanceReportItem, type RegionComparisonReportItem,
+  type SchoolClass
 } from '../../lib/api';
 import { getCurrentUser } from '../../lib/auth';
 
@@ -29,7 +31,7 @@ type ActiveReportTab = 'comparative' | 'centre-report' | 'region-report' | 'low-
 
 const normalizeClass = (val?: string | number) => {
   if (!val) return '';
-  return String(val).replace(/^(Class|Grade)\s*/i, '').trim();
+  return String(val).replace(/^(Class|Grade)[_\s]*/i, '').trim();
 };
 
 /**
@@ -50,6 +52,7 @@ export default function AcademicDashboard() {
 
   // Backend Metadata & Records
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
+  const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<number | null>(null);
@@ -84,17 +87,19 @@ export default function AcademicDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [, setError] = useState('');
 
-  // 1. Initial Load: Metadata (centres & academic years)
+  // 1. Initial Load: Metadata (centres, academic years, classes)
   const loadInitialData = async () => {
     setLoading(true);
     setError('');
     try {
-      const [centresRes, yearsRes] = await Promise.all([
+      const [centresRes, yearsRes, classesRes] = await Promise.all([
         fetchAttendanceCentres().catch(() => []),
         fetchAcademicYears().catch(() => []),
+        fetchSchoolClasses().catch(() => []),
       ]);
       setCentres(centresRes);
       setAcademicYears(yearsRes);
+      setClasses(classesRes);
       if (yearsRes && yearsRes.length > 0) {
         const currentYear = yearsRes.find((y) => y.isCurrent) || yearsRes[0];
         if (currentYear) {
@@ -684,6 +689,7 @@ export default function AcademicDashboard() {
         selectedAssessmentId={selectedAssessmentId}
         onAssessmentChange={setSelectedAssessmentId}
         availableCentres={availableCentres}
+        classes={classes}
         assessments={assessments}
         studentsInScopeCount={filteredStudentsWithScores.length}
         onResetAll={() => {
