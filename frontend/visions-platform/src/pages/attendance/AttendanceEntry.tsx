@@ -28,7 +28,7 @@ function formatClassGrade(value: string): string {
 
 type AttendanceDraft = Omit<AttendanceInput, 'student_id' | 'attendance_date'>;
 const emptyDraft = (): AttendanceDraft => ({
-  status: 'Present', absence_reason: '', late_reason: '', participation_level: '3', attention_level: 'Focused',
+  status: 'Present', absence_reason: '', late_reason: '', participation_level: '',
   learning_behaviour: [], tutor_observation: '', what_was_different: '', any_concern: '', any_positive_change: '',
 });
 
@@ -63,7 +63,7 @@ export default function AttendanceEntry() {
         records.forEach(record => {
           next[String(record.student_id)] = {
             status: record.status || 'Present', absence_reason: record.absence_reason || '', late_reason: record.late_reason || '',
-            participation_level: record.participation_level || '3', attention_level: record.attention_level || 'Focused',
+            participation_level: record.participation_level || '', ...(record.attention_level ? { attention_level: record.attention_level } : {}),
             learning_behaviour: record.learning_behaviour || [], ...(record.behaviour ? { behaviour: record.behaviour } : {}),
             tutor_observation: record.tutor_observation || '', what_was_different: record.what_was_different || '',
             any_concern: record.any_concern || '', any_positive_change: record.any_positive_change || '',
@@ -85,7 +85,13 @@ export default function AttendanceEntry() {
     updateDraft(id, { learning_behaviour: current.includes(option) ? current.filter(value => value !== option) : [...current, option] });
   };
   const handleSave = async () => {
-    setSaving(true); setMessage('');
+    setMessage('');
+    const studentsMissingParticipation = filteredStudents.filter(student => !drafts[student.id]?.participation_level);
+    if (studentsMissingParticipation.length) {
+      setMessage(`Select a valid Participation Level for all students before saving. ${studentsMissingParticipation.length} student${studentsMissingParticipation.length === 1 ? '' : 's'} still need a selection.`);
+      return;
+    }
+    setSaving(true);
     try {
       const centreId = Number(selectedCentre);
       if (!centreId) throw new Error('The selected centre has no database ID.');
@@ -116,7 +122,7 @@ export default function AttendanceEntry() {
                   {draft.status === 'Present' && <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"><Info size={16} aria-label="Information" /><span>No Remarks required for Present.</span></div>}
                   {draft.status === 'Absent' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Absence <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.absence_reason} onChange={event => updateDraft(student.id, { absence_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}
                   {draft.status === 'Late' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Late <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.late_reason} onChange={event => updateDraft(student.id, { late_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}
-                  <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Participation Level</span><select value={draft.participation_level} onChange={event => updateDraft(student.id, { participation_level: event.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">{Object.entries(participationLabels).map(([level, label]) => <option key={level} value={level}>{level} - {label}</option>)}</select></label>
+                  <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Participation Level</span><select required value={draft.participation_level} onChange={event => updateDraft(student.id, { participation_level: event.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="" disabled>Select valid option</option>{Object.entries(participationLabels).map(([level, label]) => <option key={level} value={level}>{level} - {label}</option>)}</select></label>
                 </div>
               </div>
               <aside className="border-t md:border-t-0 md:border-l border-slate-200 pt-5 md:pt-0 md:pl-6 space-y-6">
