@@ -141,7 +141,8 @@ function Step2({ data, onChange, invalidFields }: { data: RegistrationData; onCh
           <select value={data.attendance_pattern} onChange={e => onChange('attendance_pattern', e.target.value)} className={inputCls}>
             <option value="">Select pattern</option>
             <option>Regular</option>
-            <option>Irregular</option>
+            <option>Correspondence</option>
+            <option>Any Other</option>
           </select>
         </Field>
       </div>
@@ -167,9 +168,13 @@ function Step3({ data, onChange }: { data: RegistrationData; onChange: FieldChan
           <select value={data.family_data.father_education ?? ''} onChange={e => onChange('family_data', { ...data.family_data, father_education: e.target.value })} className={inputCls}>
             <option value="">Select</option>
             <option>Primary</option>
-            <option>Upper Primary</option>
-            <option>Graduation</option>
-            <option>Post graduation</option>
+            <option>Middle</option>
+            <option>High School</option>
+            <option>Higher Secondary School</option>
+            <option>Diploma</option>
+            <option>UG</option>
+            <option>PG</option>
+            <option>Above PG</option>
           </select>
         </Field>
       </div>
@@ -184,9 +189,13 @@ function Step3({ data, onChange }: { data: RegistrationData; onChange: FieldChan
           <select value={data.family_data.mother_education ?? ''} onChange={e => onChange('family_data', { ...data.family_data, mother_education: e.target.value })} className={inputCls}>
             <option value="">Select</option>
             <option>Primary</option>
-            <option>Upper Primary</option>
-            <option>Graduation</option>
-            <option>Post graduation</option>
+            <option>Middle</option>
+            <option>High School</option>
+            <option>Higher Secondary School</option>
+            <option>Diploma</option>
+            <option>UG</option>
+            <option>PG</option>
+            <option>Above PG</option>
           </select>
         </Field>
       </div>
