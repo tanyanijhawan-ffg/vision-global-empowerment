@@ -85,6 +85,8 @@ CORS_ALLOWED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://visionseducation.in",
+    "https://www.visionseducation.in",
 ] + [origin for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin]
 
 ROOT_URLCONF = 'vision_global_empowerment.urls'

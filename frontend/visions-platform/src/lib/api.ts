@@ -240,13 +240,13 @@ export async function updateStudent(id: string, input: Partial<StudentCreateInpu
       body.append(key, value instanceof File ? value : typeof value === 'object' ? JSON.stringify(value) : String(value));
     }
   });
-  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'PATCH', headers: { Accept: 'application/json' }, body });
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'PATCH', headers: { Accept: 'application/json', ...getAuthHeaders() }, body });
   if (!response.ok) throw new Error(`Failed to update student (${response.status})`);
   return response.json() as Promise<StudentRecord>;
 }
 
 export async function deleteStudent(id: string): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'DELETE' });
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'DELETE', headers: { ...getAuthHeaders() } });
   if (!response.ok) throw new Error(`Failed to delete student (${response.status})`);
 }
 
@@ -273,7 +273,7 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentA
 
   const response = await fetch(`${getApiBaseUrl()}/students/`, {
     method: 'POST',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
     body,
   });
   if (!response.ok) {
