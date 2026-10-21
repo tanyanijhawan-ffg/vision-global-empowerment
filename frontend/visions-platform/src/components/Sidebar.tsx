@@ -27,6 +27,7 @@ const navItems = [
       { name: 'Districts', path: '/masters/districts' },
       { name: 'Centres', path: '/masters/centres' },
       { name: 'Assessments', path: '/masters/assessments' },
+      { name: 'Tribal Communities', path: '/masters/tribal-communities' },
     ]
   },
   { name: 'Students', icon: Users, path: '/students' },

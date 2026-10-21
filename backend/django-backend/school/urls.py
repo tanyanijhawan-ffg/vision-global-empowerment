@@ -1,7 +1,7 @@
 from django.urls import include, path
 
 from school.views.auth import LoginView, PasswordResetConfirmView, PasswordResetRequestView, RegionListView
-from school.views.master import MasterBulkUploadView, MasterCentreListCreateView, MasterDistrictListCreateView, MasterExportView, MasterRegionListCreateView
+from school.views.master import MasterBulkUploadView, MasterCentreListCreateView, MasterDistrictListCreateView, MasterExportView, MasterRegionListCreateView, MasterTribalCommunityListCreateView
 from school.views.student_bulk import StudentBulkUploadView, StudentWorkbookExportView
 from school.views.user import UserDetailView, UserListCreateView
 from school.views.attendance import AbsenceAlertListView
@@ -26,6 +26,8 @@ urlpatterns = [
     path('masters/districts/<int:pk>/', MasterDistrictListCreateView.as_view(), name='master-district-detail'),
     path('masters/centres/', MasterCentreListCreateView.as_view(), name='master-centres'),
     path('masters/centres/<int:pk>/', MasterCentreListCreateView.as_view(), name='master-centre-detail'),
+    path('masters/tribal-communities/', MasterTribalCommunityListCreateView.as_view(), name='master-tribal-communities'),
+    path('masters/tribal-communities/<int:pk>/', MasterTribalCommunityListCreateView.as_view(), name='master-tribal-community-detail'),
     path('masters/<str:resource>/export/', MasterExportView.as_view(), name='master-export'),
     path('masters/<str:resource>/bulk-upload/', MasterBulkUploadView.as_view(), name='master-bulk-upload'),
     path('students/export/', StudentWorkbookExportView.as_view(), name='student-export'),

@@ -168,6 +168,7 @@ export const getRouteAccess = (role: Role, path: string) => {
     '/masters/regions': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
     '/masters/centres': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
     '/masters/assessments': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
+    '/masters/tribal-communities': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
     '/students': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
     '/students/new': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
     '/attendance': ['SUPER_ADMIN', 'REGIONAL_ADMIN', 'FACILITATOR'],
