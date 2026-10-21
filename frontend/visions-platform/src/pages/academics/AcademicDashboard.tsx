@@ -899,8 +899,9 @@ export default function AcademicDashboard() {
           onSuccess={() => {
             // Re-fetch scoped students to immediately reflect updated class records
             if (filterClass && selectedCentreObj?.id) {
-              const classNum = Number(normalizeClass(filterClass));
-              fetchStudents({ centreId: selectedCentreObj.id, classId: classNum })
+              const classNum = normalizeClass(filterClass);
+              const selectedYearName = selectedAcademicYearObj?.name;
+              fetchStudents(classNum, selectedCentreObj.id, selectedYearName)
                 .then(setStudents)
                 .catch(() => {});
             }
