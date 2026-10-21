@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Users, Building2, Map, CalendarCheck, Trophy, AlertTriangle, UserPlus, Activity } from 'lucide-react';
+import { Users, Building2, Map, CalendarCheck, Trophy, AlertTriangle, UserPlus, Activity, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import StatCard from '../components/StatCard';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line } from 'recharts';
 import { getAuthHeaders, getCurrentUser } from '../lib/auth';
+import { fetchMasterRegions, fetchMasterCentres, type MasterRegion, type MasterCentre } from '../lib/api';
 
 type DashboardData = {
   stats: {
@@ -40,23 +42,63 @@ function timeAgo(timestamp: string) {
   return days === 1 ? 'Yesterday' : `${days} days ago`;
 }
 
+type DrilldownItem = { id: number; name: string; class?: string; centre?: string; region?: string; state?: string; attendance?: string; url?: string };
+type DrilldownPayload = { title: string; kind: string; items: DrilldownItem[] };
+
 export default function Dashboard() {
   const currentUser = getCurrentUser();
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [regions, setRegions] = useState<MasterRegion[]>([]);
+  const [centres, setCentres] = useState<MasterCentre[]>([]);
+  const [filterRegion, setFilterRegion] = useState('');
+  const [filterCentre, setFilterCentre] = useState('');
+
+  const [drilldown, setDrilldown] = useState<DrilldownPayload | null>(null);
+  const [drilldownLoading, setDrilldownLoading] = useState(false);
+
+  // Load master lists for the filter dropdowns
   useEffect(() => {
-    fetch('/api/dashboard/summary/', { headers: { ...getAuthHeaders(), Accept: 'application/json' } })
+    fetchMasterRegions().then(setRegions).catch(() => setRegions([]));
+    fetchMasterCentres().then(setCentres).catch(() => setCentres([]));
+  }, []);
+
+  const filteredCentres = centres.filter(c => !filterRegion || c.region_name === regions.find(r => String(r.id) === filterRegion)?.region_name);
+
+  // Load dashboard summary, refetching whenever the filters change
+  useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (filterRegion) params.append('region_id', filterRegion);
+    if (filterCentre) params.append('centre_id', filterCentre);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    fetch(`/api/dashboard/summary/${qs}`, { headers: { ...getAuthHeaders(), Accept: 'application/json' } })
       .then(async (response) => {
         if (!response.ok) throw new Error('Unable to load dashboard data.');
         setData(await response.json());
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load dashboard data.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [filterRegion, filterCentre]);
 
-  if (loading) return <div className="max-w-7xl mx-auto p-8 text-slate-500">Loading dashboard...</div>;
+  const openDrilldown = (metric: string) => {
+    setDrilldownLoading(true);
+    const params = new URLSearchParams({ metric });
+    if (filterRegion) params.append('region_id', filterRegion);
+    if (filterCentre) params.append('centre_id', filterCentre);
+    fetch(`/api/dashboard/drilldown/?${params.toString()}`, { headers: { ...getAuthHeaders(), Accept: 'application/json' } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load details.');
+        setDrilldown(await response.json());
+      })
+      .catch(() => setDrilldown(null))
+      .finally(() => setDrilldownLoading(false));
+  };
+
+  if (loading && !data) return <div className="max-w-7xl mx-auto p-8 text-slate-500">Loading dashboard...</div>;
   if (error || !data) return <div className="max-w-7xl mx-auto p-8 text-red-600">{error || 'No dashboard data available.'}</div>;
 
   const { stats } = data;
@@ -66,18 +108,37 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
-          <p className="text-sm text-slate-500 mt-1">Welcome back, {currentUser?.name ?? 'there'}. Here is what's happening across all regions.</p>
+          <p className="text-sm text-slate-500 mt-1">Welcome back, {currentUser?.name ?? 'there'}. Here is what's happening{filterRegion || filterCentre ? ' in your selection' : ' across all regions'}.</p>
+        </div>
+        {/* Region / Centre filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={filterRegion}
+            onChange={(e) => { setFilterRegion(e.target.value); setFilterCentre(''); }}
+            className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
+          >
+            <option value="">All Regions</option>
+            {regions.map(r => <option key={r.id} value={String(r.id)}>{r.region_name}</option>)}
+          </select>
+          <select
+            value={filterCentre}
+            onChange={(e) => setFilterCentre(e.target.value)}
+            className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
+          >
+            <option value="">All Centres</option>
+            {filteredCentres.map(c => <option key={c.id} value={String(c.id)}>{c.centre_name}</option>)}
+          </select>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Students" value={stats.total_students.toLocaleString()} icon={Users} trend={`+${stats.new_registrations} this month`} trendUp={stats.new_registrations > 0} />
-        <StatCard title="Active Centres" value={String(stats.active_centres)} icon={Building2} />
-        <StatCard title="Regions & Districts" value={`${stats.regions} / ${stats.districts}`} icon={Map} />
+        <button type="button" onClick={() => openDrilldown('total_students')} className="text-left"><StatCard title="Total Students" value={stats.total_students.toLocaleString()} icon={Users} trend={`+${stats.new_registrations} this month`} trendUp={stats.new_registrations > 0} /></button>
+        <button type="button" onClick={() => openDrilldown('active_centres')} className="text-left"><StatCard title="Active Centres" value={String(stats.active_centres)} icon={Building2} /></button>
+        <button type="button" onClick={() => openDrilldown('regions')} className="text-left"><StatCard title="Regions & Districts" value={`${stats.regions} / ${stats.districts}`} icon={Map} /></button>
         <StatCard title="Attendance Today" value={`${stats.attendance_today}%`} icon={CalendarCheck} />
         <StatCard title="Avg Academic Score" value={`${stats.avg_academic_score}%`} icon={Trophy} />
-        <StatCard title="High Risk Students" value={String(stats.high_risk_students)} icon={AlertTriangle} trend={stats.high_risk_students ? 'Needs review' : 'None'} trendUp={!stats.high_risk_students} />
-        <StatCard title="New Registrations" value={String(stats.new_registrations)} icon={UserPlus} />
+        <button type="button" onClick={() => openDrilldown('high_risk_students')} className="text-left"><StatCard title="High Risk Students" value={String(stats.high_risk_students)} icon={AlertTriangle} trend={stats.high_risk_students ? 'Needs review' : 'None'} trendUp={!stats.high_risk_students} /></button>
+        <button type="button" onClick={() => openDrilldown('new_registrations')} className="text-left"><StatCard title="New Registrations" value={String(stats.new_registrations)} icon={UserPlus} /></button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
@@ -146,7 +207,7 @@ export default function Dashboard() {
                 <BarChart data={data.students_by_region} layout="vertical" margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
                   <XAxis type="number" axisLine={false} tickLine={false} tick={{fill: '#64748B', fontSize: 12}} />
-                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#475569', fontSize: 12, fontWeight: 500}} />
+                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={140} tick={{fill: '#475569', fontSize: 12, fontWeight: 500}} />
                   <Tooltip cursor={{fill: '#F1F5F9'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                   <Bar dataKey="students" fill="#6366F1" radius={[0, 4, 4, 0]} maxBarSize={30} />
                 </BarChart>
@@ -183,6 +244,42 @@ export default function Dashboard() {
           <p className="p-8 text-center text-sm text-slate-400">No recent activity yet.</p>
         )}
       </div>
+
+      {/* Drill-down modal */}
+      {(drilldown || drilldownLoading) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={() => setDrilldown(null)}>
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h2 className="text-lg font-semibold text-slate-900">{drilldownLoading ? 'Loading...' : drilldown?.title}</h2>
+              <button type="button" onClick={() => setDrilldown(null)} aria-label="Close" className="p-1 text-slate-400 hover:text-slate-700"><X size={20} /></button>
+            </div>
+            <div className="overflow-y-auto divide-y divide-slate-100">
+              {drilldownLoading ? (
+                <p className="p-8 text-center text-sm text-slate-400">Loading details...</p>
+              ) : drilldown && drilldown.items.length ? (
+                drilldown.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => { if (item.url) { setDrilldown(null); navigate(item.url); } }}
+                    className="w-full text-left px-6 py-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-4"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900 truncate">{item.name}</div>
+                      <div className="text-xs text-slate-500 truncate">
+                        {[item.class, item.centre, item.region, item.state].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                    {item.attendance ? <span className="shrink-0 text-xs font-semibold text-red-600">{item.attendance}</span> : null}
+                  </button>
+                ))
+              ) : (
+                <p className="p-8 text-center text-sm text-slate-400">No records found.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

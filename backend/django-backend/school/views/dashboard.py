@@ -26,17 +26,35 @@ class DashboardSummaryView(APIView):
         eight_weeks_ago = today - timedelta(weeks=8)
         month_start = today.replace(day=1)
 
+        # Optional filters (dashboard Region/Centre filter bar)
+        region_id = request.query_params.get('region_id') or request.query_params.get('region')
+        centre_id = request.query_params.get('centre_id') or request.query_params.get('centre')
+
         students = Student.objects.select_related('centre__region').all()
+        centres = Center.objects.all()
+        attendance_qs = Attendance.objects.all()
+        score_rows = AssessmentScore.objects.select_related('subject', 'assessment__assessment_type').all()
+
+        if region_id:
+            students = students.filter(centre__region_id=region_id)
+            centres = centres.filter(region_id=region_id)
+            attendance_qs = attendance_qs.filter(student__centre__region_id=region_id)
+            score_rows = score_rows.filter(student__centre__region_id=region_id)
+        if centre_id:
+            students = students.filter(centre_id=centre_id)
+            centres = centres.filter(centre_id=centre_id)
+            attendance_qs = attendance_qs.filter(student__centre_id=centre_id)
+            score_rows = score_rows.filter(student__centre_id=centre_id)
+
         total_students = students.count()
         new_registrations = students.filter(created_at__date__gte=month_start).count()
 
         # Attendance today
-        todays = Attendance.objects.filter(attendance_date=today)
+        todays = attendance_qs.filter(attendance_date=today)
         attendance_today = pct(todays.filter(status='Present').count(), todays.count())
 
         # Attendance last 30 days, for at-risk and overall
-        recent_attendance = Attendance.objects.filter(attendance_date__gte=last_30_days)
-        overall_attendance = pct(recent_attendance.filter(status='Present').count(), recent_attendance.count())
+        recent_attendance = attendance_qs.filter(attendance_date__gte=last_30_days)
 
         # High risk: students whose 30-day attendance rate is below 75%
         at_risk = (
@@ -47,13 +65,12 @@ class DashboardSummaryView(APIView):
         high_risk = sum(1 for row in at_risk if row['present'] / row['total'] < 0.75)
 
         # Academics: average percentage across all scored assessments
-        score_rows = AssessmentScore.objects.select_related('subject', 'assessment__assessment_type').all()
         avg_academic = self._average_score(score_rows)
 
         data = {
             'stats': {
                 'total_students': total_students,
-                'active_centres': Center.objects.filter(status__iexact='active').count() or Center.objects.count(),
+                'active_centres': centres.filter(status__iexact='active').count() or centres.count(),
                 'regions': Region.objects.count(),
                 'districts': District.objects.count(),
                 'attendance_today': attendance_today,
@@ -62,7 +79,7 @@ class DashboardSummaryView(APIView):
                 'new_registrations': new_registrations,
             },
             'student_growth': self._student_growth(students),
-            'attendance_trend': self._attendance_trend(eight_weeks_ago),
+            'attendance_trend': self._attendance_trend(eight_weeks_ago, attendance_qs),
             'academics_by_subject': self._academics_by_subject(score_rows),
             'students_by_region': self._students_by_region(students),
             'activities': self._activities(today),
@@ -84,9 +101,10 @@ class DashboardSummaryView(APIView):
             result.append({'month': row['month'].strftime('%b'), 'students': cumulative})
         return result
 
-    def _attendance_trend(self, since):
+    def _attendance_trend(self, since, attendance_qs=None):
+        attendance_qs = attendance_qs if attendance_qs is not None else Attendance.objects.all()
         rows = (
-            Attendance.objects.filter(attendance_date__gte=since)
+            attendance_qs.filter(attendance_date__gte=since)
             .annotate(week=TruncWeek('attendance_date'))
             .values('week')
             .annotate(total=Count('attendance_id'), present=Count('attendance_id', filter=Q(status='Present')))
@@ -169,3 +187,93 @@ class DashboardSummaryView(APIView):
 
         activities.sort(key=lambda item: item['timestamp'], reverse=True)
         return activities[:10]
+
+
+def _student_detail(student):
+    centre = student.centre
+    return {
+        'id': student.student_id,
+        'name': student.full_name,
+        'class': student.current_class_grade or '',
+        'centre': centre.centre_name if centre else '',
+        'region': centre.region.region_name if centre and centre.region else '',
+        'url': f'/students/{student.student_id}',
+    }
+
+
+class DashboardDrilldownView(APIView):
+    """Return the concrete records behind a dashboard stat card, so the UI
+    can show a 'who are these?' modal when a card is clicked."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        metric = request.query_params.get('metric', '')
+        region_id = request.query_params.get('region_id') or request.query_params.get('region')
+        centre_id = request.query_params.get('centre_id') or request.query_params.get('centre')
+
+        students = Student.objects.select_related('centre__region').all()
+        centres = Center.objects.select_related('region').all()
+        if region_id:
+            students = students.filter(centre__region_id=region_id)
+            centres = centres.filter(region_id=region_id)
+        if centre_id:
+            students = students.filter(centre_id=centre_id)
+            centres = centres.filter(centre_id=centre_id)
+
+        today = timezone.localdate()
+        month_start = today.replace(day=1)
+        last_30_days = today - timedelta(days=30)
+
+        if metric == 'total_students':
+            items = [_student_detail(s) for s in students.order_by('full_name')[:500]]
+            return Response({'title': 'All Students', 'kind': 'students', 'items': items})
+
+        if metric == 'new_registrations':
+            qs = students.filter(created_at__date__gte=month_start).order_by('-created_at')[:500]
+            return Response({'title': 'New Registrations (this month)', 'kind': 'students', 'items': [_student_detail(s) for s in qs]})
+
+        if metric == 'high_risk_students':
+            at_risk_ids = []
+            recent = Attendance.objects.filter(attendance_date__gte=last_30_days)
+            if region_id:
+                recent = recent.filter(student__centre__region_id=region_id)
+            if centre_id:
+                recent = recent.filter(student__centre_id=centre_id)
+            rows = (
+                recent.values('student')
+                .annotate(total=Count('attendance_id'), present=Count('attendance_id', filter=Q(status='Present')))
+                .filter(total__gt=0)
+            )
+            pct_by_student = {row['student']: row['present'] / row['total'] for row in rows}
+            at_risk_ids = [sid for sid, ratio in pct_by_student.items() if ratio < 0.75]
+            qs = Student.objects.select_related('centre__region').filter(student_id__in=at_risk_ids).order_by('full_name')
+            items = []
+            for s in qs:
+                detail = _student_detail(s)
+                detail['attendance'] = f"{round(pct_by_student.get(s.student_id, 0) * 100)}%"
+                items.append(detail)
+            return Response({'title': 'High Risk Students (attendance < 75%, last 30 days)', 'kind': 'students', 'items': items})
+
+        if metric == 'active_centres':
+            qs = centres.filter(status__iexact='active')
+            if not qs.exists():
+                qs = centres
+            items = [{
+                'id': c.centre_id,
+                'name': c.centre_name,
+                'region': c.region.region_name if c.region else '',
+                'url': '/masters/centres',
+            } for c in qs.order_by('centre_name')[:500]]
+            return Response({'title': 'Active Centres', 'kind': 'centres', 'items': items})
+
+        if metric == 'regions':
+            items = [{
+                'id': r.region_id,
+                'name': r.region_name,
+                'state': r.state or '',
+                'url': '/masters/regions',
+            } for r in Region.objects.order_by('region_name')]
+            return Response({'title': 'Regions', 'kind': 'regions', 'items': items})
+
+        return Response({'detail': 'Unknown metric.'}, status=400)
