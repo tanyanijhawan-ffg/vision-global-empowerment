@@ -4,12 +4,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import MasterDataActions from '../../components/MasterDataActions';
 import StatusChip from '../../components/StatusChip';
-import { fetchStudents, type StudentListItem } from '../../lib/api';
+import { fetchMasterCentres, fetchMasterRegions, fetchSchoolClasses, fetchStudents, type MasterCentre, type MasterRegion, type SchoolClass, type StudentListItem } from '../../lib/api';
 import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
 
 export default function StudentsList() {
   const currentUser = getCurrentUser();
   const [data, setData] = useState<StudentListItem[]>([]);
+  const [masterRegions, setMasterRegions] = useState<MasterRegion[]>([]);
+  const [masterCentres, setMasterCentres] = useState<MasterCentre[]>([]);
+  const [masterClasses, setMasterClasses] = useState<SchoolClass[]>([]);
   const [filterRegion, setFilterRegion] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.region : 'All');
   const [filterCentre, setFilterCentre] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.centre : 'All');
   const [filterClass, setFilterClass] = useState('All');
@@ -53,6 +56,12 @@ export default function StudentsList() {
 
     loadStudents();
 
+    // Load full master lists so filters show ALL regions/centres/classes
+    // even when no student is enrolled in them yet.
+    fetchMasterRegions().then(setMasterRegions).catch(() => setMasterRegions([]));
+    fetchMasterCentres().then(setMasterCentres).catch(() => setMasterCentres([]));
+    fetchSchoolClasses().then(setMasterClasses).catch(() => setMasterClasses([]));
+
     return () => {
       active = false;
     };
@@ -61,21 +70,30 @@ export default function StudentsList() {
   const scopedData = useMemo(() => filterUserScopedRows(data, currentUser), [data, currentUser]);
 
   const availableRegions = useMemo(() => {
-    const set = new Set(scopedData.map(student => student.region));
-    return Array.from(set).filter(value => Boolean(value) && value !== 'All').sort();
-  }, [scopedData]);
+    const all = masterRegions.map(region => region.region_name).filter(Boolean);
+    if (currentUser?.role === 'SUPER_ADMIN' || !currentUser) return Array.from(new Set(all)).sort();
+    // Non-super-admins only see their own region.
+    return all.filter(region => region === currentUser.region).sort();
+  }, [masterRegions, currentUser]);
 
   const availableCentres = useMemo(() => {
-    const set = new Set(scopedData.filter(student => filterRegion === 'All' || student.region === filterRegion).map(student => student.centre));
-    return Array.from(set).filter(value => Boolean(value) && value !== 'All').sort();
-  }, [scopedData, filterRegion]);
+    return masterCentres
+      .filter(centre => (filterRegion === 'All' || centre.region_name === filterRegion) && (!currentUser || currentUser.role === 'SUPER_ADMIN' || centre.region_name === currentUser.region))
+      .map(centre => centre.centre_name)
+      .filter(Boolean)
+      .sort();
+  }, [masterCentres, filterRegion, currentUser]);
 
   const availableClasses = useMemo(() => {
-    const set = new Set(scopedData
-      .filter(student => (filterRegion === 'All' || student.region === filterRegion) && (filterCentre === 'All' || student.centre === filterCentre))
-      .map(student => student.class));
-    return Array.from(set).filter(value => Boolean(value) && value !== 'All').sort();
-  }, [scopedData, filterRegion, filterCentre]);
+    // Prefer the full class master list (shows all classes, even with no students).
+    // Fall back to classes present in the loaded students if the master list is empty.
+    if (masterClasses.length > 0) {
+      return masterClasses.map(schoolClass => schoolClass.name).filter(Boolean);
+    }
+    return Array.from(new Set(scopedData.map(student => student.class)))
+      .filter(value => Boolean(value) && value !== 'All')
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+  }, [masterClasses, scopedData]);
 
   const filteredData = scopedData.filter(s => 
     (filterRegion === 'All' || s.region === filterRegion) &&

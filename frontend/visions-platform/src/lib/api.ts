@@ -674,6 +674,24 @@ export interface SchoolClass {
 }
 
 export const fetchSchoolClasses = () => apiRequest<SchoolClass[]>("/v1/classes/");
+
+export interface MasterRegion {
+  id: number;
+  region_name: string;
+  state?: string | null;
+  status?: string | null;
+}
+
+export interface MasterCentre {
+  id: number;
+  region_name: string;
+  district_name: string;
+  centre_name: string;
+  status?: string | null;
+}
+
+export const fetchMasterRegions = () => apiRequest<MasterRegion[]>("/masters/regions/");
+export const fetchMasterCentres = () => apiRequest<MasterCentre[]>("/masters/centres/");
 export const fetchAllSubjects = () => apiRequest<Subject[]>("/v1/metadata/subjects/");
 export const createSubjectMetadata = (payload: { name: string; code: string }) =>
   apiRequest<Subject>("/v1/metadata/subjects/", { method: "POST", body: JSON.stringify(payload) });
