@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { PieChart as PieIcon, BarChart3 } from 'lucide-react';
+import { PieChart as PieIcon, BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend,
@@ -36,21 +36,70 @@ const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'
 const classSort = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, undefined, { numeric: true });
 
-function PieCard({ title, data }: { title: string; data: Breakdown }) {
+// Estimate the Y-axis width from the longest label so there is no large
+// empty gap between the chart boundary and the axis when labels are short.
+const yAxisWidth = (rows: Breakdown) => {
+  const longest = rows.reduce((max, row) => Math.max(max, row.name.length), 0);
+  return Math.min(130, Math.max(20, Math.round(longest * 6)));
+};
+
+function PieCard({ title, data, donut = false }: { title: string; data: Breakdown; donut?: boolean }) {
   const filtered = data.filter(d => d.count > 0);
+  const total = filtered.reduce((sum, d) => sum + d.count, 0);
+  const top = filtered[0];
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-      <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><PieIcon size={15} className="text-indigo-500" />{title}</h3>
+      <h3 className="text-sm font-semibold text-slate-600 mb-4 flex items-center gap-2"><PieIcon size={15} className="text-indigo-400" />{title}</h3>
       {filtered.length ? (
-        <div className="h-64 w-full">
+        <div className="h-64 w-full relative">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={filtered} dataKey="count" nameKey="name" cx="50%" cy="45%" outerRadius={75} label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
+              <Pie data={filtered} dataKey="count" nameKey="name" cx="50%" cy="45%" outerRadius={75} innerRadius={donut ? 48 : 0} label={donut ? false : ({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
                 {filtered.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
               <Tooltip formatter={(value: number, name: string) => [`${value} students`, name]} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
             </PieChart>
+          </ResponsiveContainer>
+          {donut && top ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ transform: 'translateY(-12px)' }}>
+              <span className="text-xl font-bold text-slate-600">{total ? Math.round((top.count / total) * 100) : 0}%</span>
+              <span className="text-[11px] text-slate-500">{top.name}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : <p className="h-64 flex items-center justify-center text-sm text-slate-400">No data recorded yet.</p>}
+    </div>
+  );
+}
+
+function BarCard({ title, data, sortNumeric = false, vertical = false }: { title: string; data: Breakdown; sortNumeric?: boolean; vertical?: boolean }) {
+  const filtered = [...data.filter(d => d.count > 0)];
+  if (sortNumeric) filtered.sort(classSort);
+  const axisWidth = yAxisWidth(filtered);
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+      <h3 className="text-sm font-semibold text-slate-600 mb-4 flex items-center gap-2"><BarChart3 size={15} className="text-indigo-400" />{title}</h3>
+      {filtered.length ? (
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            {vertical ? (
+              <BarChart data={filtered} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} angle={filtered.some(d => d.name.length > 8) ? -30 : 0} textAnchor={filtered.some(d => d.name.length > 8) ? 'end' : 'middle'} height={filtered.some(d => d.name.length > 8) ? 60 : 30} />
+                <YAxis type="number" allowDecimals={false} width={30} tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(value: number) => [`${value} students`]} />
+                <Bar dataKey="count" fill="#6366F1" radius={[4, 4, 0, 0]} maxBarSize={36} />
+              </BarChart>
+            ) : (
+              <BarChart data={filtered} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                <XAxis type="number" allowDecimals={false} tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={axisWidth} mirror={false} tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} tickMargin={2} />
+                <Tooltip formatter={(value: number) => [`${value} students`]} />
+                <Bar dataKey="count" fill="#6366F1" radius={[0, 4, 4, 0]} maxBarSize={22} />
+              </BarChart>
+            )}
           </ResponsiveContainer>
         </div>
       ) : <p className="h-64 flex items-center justify-center text-sm text-slate-400">No data recorded yet.</p>}
@@ -58,26 +107,19 @@ function PieCard({ title, data }: { title: string; data: Breakdown }) {
   );
 }
 
-function BarCard({ title, data, sortNumeric = false }: { title: string; data: Breakdown; sortNumeric?: boolean }) {
-  const filtered = [...data.filter(d => d.count > 0)];
-  if (sortNumeric) filtered.sort(classSort);
+function Section({ id, title, children, open, onToggle }: { id: string; title: string; children: React.ReactNode; open: boolean; onToggle: (id: string) => void }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-      <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><BarChart3 size={15} className="text-indigo-500" />{title}</h3>
-      {filtered.length ? (
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={filtered} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-              <XAxis type="number" allowDecimals={false} tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" width={150} tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(value: number) => [`${value} students`]} />
-              <Bar dataKey="count" fill="#6366F1" radius={[0, 4, 4, 0]} maxBarSize={22} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      ) : <p className="h-64 flex items-center justify-center text-sm text-slate-400">No data recorded yet.</p>}
-    </div>
+    <section className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors"
+      >
+        <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+        {open ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+      </button>
+      {open ? <div className="px-5 pb-5 pt-4 border-t border-slate-100 space-y-5">{children}</div> : null}
+    </section>
   );
 }
 
@@ -91,6 +133,9 @@ export default function StudentReports() {
   const [centres, setCentres] = useState<MasterCentre[]>([]);
   const [filterRegion, setFilterRegion] = useState('');
   const [filterCentre, setFilterCentre] = useState('');
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ demographics: true });
+
+  const toggleSection = (id: string) => setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
 
   useEffect(() => {
     fetchMasterRegions().then(setRegions).catch(() => setRegions([]));
@@ -138,50 +183,53 @@ export default function StudentReports() {
         action={filterBar}
       />
 
-      <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider pt-2">Demographics</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        <PieCard title="Gender" data={data.gender} />
-        <PieCard title="Caste Category" data={data.caste_category} />
-        <PieCard title="Religion" data={data.religion} />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <BarCard title="Tribal Communities / Sub-Castes" data={data.tribe_name} />
-        <BarCard title="Top Vulnerabilities" data={data.vulnerabilities} />
-      </div>
+      <Section id="demographics" title="Demographics" open={!!openSections.demographics} onToggle={toggleSection}>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <PieCard title="Tribal Communities / Sub-Castes" data={data.tribe_name} />
+          <PieCard title="Caste Category" data={data.caste_category} />
+          <PieCard title="Religion" data={data.religion} />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <BarCard title="Gender" data={data.gender} />
+          <BarCard title="Top Vulnerabilities" data={data.vulnerabilities} />
+        </div>
+      </Section>
 
-      <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider pt-4">Socio-Economic Conditions</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        <PieCard title="Housing Condition" data={data.housing_condition} />
-        <PieCard title="Housing Ownership" data={data.housing_ownership} />
-        <PieCard title="Monthly Household Income" data={data.income_range} />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-        <PieCard title="Electricity Access" data={data.access.electricity} />
-        <PieCard title="Clean Water Access" data={data.access.drinking_water} />
-        <PieCard title="Toilet Access" data={data.access.toilet} />
-        <PieCard title="Study Space at Home" data={data.access.study_space} />
-      </div>
+      <Section id="socio" title="Socio-Economic Conditions" open={!!openSections.socio} onToggle={toggleSection}>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <PieCard title="Housing Condition" data={data.housing_condition} />
+          <PieCard title="Housing Ownership" data={data.housing_ownership} />
+          <PieCard title="Monthly Household Income" data={data.income_range} />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+          <PieCard title="Electricity Access" data={data.access.electricity} donut />
+          <PieCard title="Clean Water Access" data={data.access.drinking_water} donut />
+          <PieCard title="Toilet Access" data={data.access.toilet} donut />
+          <PieCard title="Study Space at Home" data={data.access.study_space} donut />
+        </div>
+      </Section>
 
-      <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider pt-4">Education Profile</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <BarCard title="Students by Class" data={data.class_grade} sortNumeric />
-        <BarCard title="School Attendance Pattern" data={data.attendance_pattern} />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <PieCard title="School Type" data={data.school_type} />
-        <PieCard title="Medium of Instruction" data={data.medium_of_instruction} />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <BarCard title="Father's Education" data={data.father_education} />
-        <BarCard title="Mother's Education" data={data.mother_education} />
-      </div>
+      <Section id="education" title="Education Profile" open={!!openSections.education} onToggle={toggleSection}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <BarCard title="School Attendance Pattern" data={data.attendance_pattern} />
+          <PieCard title="School Type" data={data.school_type} />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <PieCard title="Medium of Instruction" data={data.medium_of_instruction} />
+          <BarCard title="Father's Education" data={data.father_education} />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <BarCard title="Mother's Education" data={data.mother_education} />
+        </div>
+      </Section>
 
-      <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider pt-4">Geography</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        <BarCard title="Students by Region" data={data.by_region} />
-        <BarCard title="Students by District" data={data.by_district} />
-        <BarCard title="Students by Centre" data={data.by_centre} />
-      </div>
+      <Section id="geography" title="Geography" open={!!openSections.geography} onToggle={toggleSection}>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <BarCard title="Students by Region" data={data.by_region} vertical />
+          <BarCard title="Students by District" data={data.by_district} vertical />
+          <BarCard title="Students by Centre" data={data.by_centre} vertical />
+        </div>
+      </Section>
     </div>
   );
 }

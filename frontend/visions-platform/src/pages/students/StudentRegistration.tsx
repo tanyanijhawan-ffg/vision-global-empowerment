@@ -271,9 +271,9 @@ function Step4({ data, onChange, tribalCommunities = [] }: { data: RegistrationD
             {CASTE_CATEGORIES.map(option => <option key={option}>{option}</option>)}
           </select>
         </Field>
-        <Field label="Tribal Community / Sub-Caste (if applicable)">
+        <Field label="Tribal Community / Sub-Caste">
           <select value={stringValue('tribe_name')} onChange={e => setSocio('tribe_name', e.target.value)} className={inputCls}>
-            <option value="">Select</option>
+            <option value="">Select (if applicable)</option>
             {tribalCommunities.map(option => <option key={option}>{option}</option>)}
           </select>
         </Field>
