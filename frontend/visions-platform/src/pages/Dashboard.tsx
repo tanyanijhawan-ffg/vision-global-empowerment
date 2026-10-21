@@ -132,13 +132,13 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <button type="button" onClick={() => openDrilldown('total_students')} className="text-left"><StatCard title="Total Students" value={stats.total_students.toLocaleString()} icon={Users} trend={`+${stats.new_registrations} this month`} trendUp={stats.new_registrations > 0} /></button>
+        <StatCard title="Total Students" value={stats.total_students.toLocaleString()} icon={Users} trend={`+${stats.new_registrations} this month`} trendUp={stats.new_registrations > 0} />
         <button type="button" onClick={() => openDrilldown('active_centres')} className="text-left"><StatCard title="Active Centres" value={String(stats.active_centres)} icon={Building2} /></button>
-        <button type="button" onClick={() => openDrilldown('regions')} className="text-left"><StatCard title="Regions & Districts" value={`${stats.regions} / ${stats.districts}`} icon={Map} /></button>
+        <StatCard title="Regions & Districts" value={`${stats.regions} / ${stats.districts}`} icon={Map} />
         <StatCard title="Attendance Today" value={`${stats.attendance_today}%`} icon={CalendarCheck} />
         <StatCard title="Avg Academic Score" value={`${stats.avg_academic_score}%`} icon={Trophy} />
         <button type="button" onClick={() => openDrilldown('high_risk_students')} className="text-left"><StatCard title="High Risk Students" value={String(stats.high_risk_students)} icon={AlertTriangle} trend={stats.high_risk_students ? 'Needs review' : 'None'} trendUp={!stats.high_risk_students} /></button>
-        <button type="button" onClick={() => openDrilldown('new_registrations')} className="text-left"><StatCard title="New Registrations" value={String(stats.new_registrations)} icon={UserPlus} /></button>
+        <StatCard title="New Registrations" value={String(stats.new_registrations)} icon={UserPlus} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
