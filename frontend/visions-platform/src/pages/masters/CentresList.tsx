@@ -17,13 +17,18 @@ type Centre = {
   status: string | null;
 };
 
+type RegionOption = { id: number; region_name: string };
+type DistrictOption = { id: number; district_name: string; region_name: string };
+
 const blankCentre = {
-  region_name: '', district_name: '', centre_name: '', centre_type: '', block: '', village: '', facilitator_name: '', status: 'active',
+  region_name: '', district_name: '', centre_name: '', block: '', village: '', facilitator_name: '', status: 'active',
 };
 
 export default function CentresList() {
   const canManage = getCurrentUser()?.role === 'SUPER_ADMIN';
   const [data, setData] = useState<Centre[]>([]);
+  const [regionOptions, setRegionOptions] = useState<RegionOption[]>([]);
+  const [districtOptions, setDistrictOptions] = useState<DistrictOption[]>([]);
   const [filterRegion, setFilterRegion] = useState('All');
   const [search, setSearch] = useState('');
   const [form, setForm] = useState(blankCentre);
@@ -37,9 +42,19 @@ export default function CentresList() {
     setData(await response.json());
   };
 
-  useEffect(() => { loadCentres().catch(loadError => setError(loadError.message)); }, []);
+  useEffect(() => {
+    loadCentres().catch(loadError => setError(loadError.message));
+    const headers = { ...getAuthHeaders(), Accept: 'application/json' };
+    fetch('/api/masters/regions/', { headers }).then(response => response.ok ? response.json() : []).then(setRegionOptions).catch(() => setRegionOptions([]));
+    fetch('/api/masters/districts/', { headers }).then(response => response.ok ? response.json() : []).then(setDistrictOptions).catch(() => setDistrictOptions([]));
+  }, []);
 
   const regions = useMemo(() => [...new Set(data.map(centre => centre.region_name))].filter(Boolean).sort(), [data]);
+  // Districts shown in the form, narrowed to the selected region when possible.
+  const formDistrictOptions = useMemo(() => {
+    const inRegion = districtOptions.filter(district => !form.region_name || district.region_name === form.region_name);
+    return inRegion.length > 0 ? inRegion : districtOptions;
+  }, [districtOptions, form.region_name]);
   const filteredData = data.filter(centre =>
     (filterRegion === 'All' || centre.region_name === filterRegion) &&
     [centre.centre_name, centre.district_name, centre.village, centre.facilitator_name].join(' ').toLowerCase().includes(search.toLowerCase()),
@@ -99,14 +114,13 @@ export default function CentresList() {
                 <StatusChip status={centre.status || 'Active'} />
               </div>
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                <div className="text-slate-600"><span className="text-xs text-slate-400 block">Type</span>{centre.centre_type || '-'}</div>
                 <div className="text-slate-600"><span className="text-xs text-slate-400 block">Facilitator</span>{centre.facilitator_name || '-'}</div>
                 <div className="text-slate-600"><span className="text-xs text-slate-400 block">Block</span>{centre.block || '-'}</div>
                 <div className="text-slate-600"><span className="text-xs text-slate-400 block">Village</span>{centre.village || '-'}</div>
               </div>
               {canManage ? (
                 <div className="mt-3 flex items-center gap-1">
-                  <button onClick={() => { setEditingId(centre.id); setForm({ region_name: centre.region_name, district_name: centre.district_name, centre_name: centre.centre_name, centre_type: centre.centre_type || '', block: centre.block || '', village: centre.village || '', facilitator_name: centre.facilitator_name || '', status: centre.status || 'active' }); setIsFormOpen(true); }} title="Edit centre" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button>
+                  <button onClick={() => { setEditingId(centre.id); setForm({ region_name: centre.region_name, district_name: centre.district_name, centre_name: centre.centre_name, block: centre.block || '', village: centre.village || '', facilitator_name: centre.facilitator_name || '', status: centre.status || 'active' }); setIsFormOpen(true); }} title="Edit centre" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button>
                   <button onClick={() => deleteCentre(centre.id)} title="Delete centre" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
                 </div>
               ) : null}
@@ -115,11 +129,32 @@ export default function CentresList() {
         </div>
 
         {/* Table on lg+ screens */}
-        <div className="overflow-x-auto hidden xl:block"><table className="w-full text-left text-sm text-slate-600 whitespace-nowrap"><thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200"><tr><th className="px-6 py-3">Centre Name</th><th className="px-6 py-3">Region</th><th className="px-6 py-3">District</th><th className="px-6 py-3">Centre Type</th><th className="px-6 py-3">Block</th><th className="px-6 py-3">Village</th><th className="px-6 py-3">Facilitator</th><th className="px-6 py-3">Status</th>{canManage ? <th className="px-6 py-3 text-right">Actions</th> : null}</tr></thead><tbody className="divide-y divide-slate-100">{filteredData.map(centre => <tr key={centre.id} className="hover:bg-slate-50/80"><td className="px-6 py-4 font-medium text-slate-900">{centre.centre_name}</td><td className="px-6 py-4">{centre.region_name}</td><td className="px-6 py-4">{centre.district_name}</td><td className="px-6 py-4">{centre.centre_type || '-'}</td><td className="px-6 py-4">{centre.block || '-'}</td><td className="px-6 py-4">{centre.village || '-'}</td><td className="px-6 py-4 text-slate-900">{centre.facilitator_name || '-'}</td><td className="px-6 py-4"><StatusChip status={centre.status || 'Active'} /></td>{canManage ? <td className="px-6 py-4 text-right"><button onClick={() => { setEditingId(centre.id); setForm({ region_name: centre.region_name, district_name: centre.district_name, centre_name: centre.centre_name, centre_type: centre.centre_type || '', block: centre.block || '', village: centre.village || '', facilitator_name: centre.facilitator_name || '', status: centre.status || 'active' }); setIsFormOpen(true); }} title="Edit centre" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button><button onClick={() => deleteCentre(centre.id)} title="Delete centre" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button></td> : null}</tr>)}</tbody></table></div>
+        <div className="overflow-x-auto hidden xl:block"><table className="w-full text-left text-sm text-slate-600 whitespace-nowrap"><thead className="bg-slate-50 text-slate-700 font-medium border-b border-slate-200"><tr><th className="px-6 py-3">Centre Name</th><th className="px-6 py-3">Region</th><th className="px-6 py-3">District</th><th className="px-6 py-3">Block</th><th className="px-6 py-3">Village</th><th className="px-6 py-3">Facilitator</th><th className="px-6 py-3">Status</th>{canManage ? <th className="px-6 py-3 text-right">Actions</th> : null}</tr></thead><tbody className="divide-y divide-slate-100">{filteredData.map(centre => <tr key={centre.id} className="hover:bg-slate-50/80"><td className="px-6 py-4 font-medium text-slate-900">{centre.centre_name}</td><td className="px-6 py-4">{centre.region_name}</td><td className="px-6 py-4">{centre.district_name}</td><td className="px-6 py-4">{centre.block || '-'}</td><td className="px-6 py-4">{centre.village || '-'}</td><td className="px-6 py-4 text-slate-900">{centre.facilitator_name || '-'}</td><td className="px-6 py-4"><StatusChip status={centre.status || 'Active'} /></td>{canManage ? <td className="px-6 py-4 text-right"><button onClick={() => { setEditingId(centre.id); setForm({ region_name: centre.region_name, district_name: centre.district_name, centre_name: centre.centre_name, block: centre.block || '', village: centre.village || '', facilitator_name: centre.facilitator_name || '', status: centre.status || 'active' }); setIsFormOpen(true); }} title="Edit centre" className="p-1.5 text-slate-400 hover:text-indigo-600"><Edit2 size={16} /></button><button onClick={() => deleteCentre(centre.id)} title="Delete centre" className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button></td> : null}</tr>)}</tbody></table></div>
         {!error && filteredData.length === 0 ? <p className="p-12 text-center text-slate-400">No centres found.</p> : null}
       </div>
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-      {isFormOpen ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><form onSubmit={createCentre} className="w-full max-w-lg space-y-3 rounded-lg bg-white p-6 shadow-xl"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">{editingId ? 'Edit Centre' : 'Add Centre'}</h2><button type="button" onClick={closeForm} aria-label="Close"><X size={18} /></button></div>{[['region_name', 'Region Name'], ['district_name', 'District Name'], ['centre_name', 'Centre Name'], ['centre_type', 'Centre Type'], ['block', 'Block'], ['village', 'Village'], ['facilitator_name', 'Facilitator Name']].map(([field, label]) => <label key={field} className="block text-sm font-medium text-slate-700">{label}{field === 'region_name' || field === 'district_name' || field === 'centre_name' ? ' *' : ''}<input required={field === 'region_name' || field === 'district_name' || field === 'centre_name'} value={form[field as keyof typeof form]} onChange={event => setForm({ ...form, [field]: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>)}<label className="block text-sm font-medium text-slate-700">Status<select value={form.status} onChange={event => setForm({ ...form, status: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="active">Active</option><option value="inactive">Inactive</option></select></label><button className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white">{editingId ? 'Save Centre' : 'Add Centre'}</button></form></div> : null}
+      {isFormOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <form onSubmit={createCentre} className="w-full max-w-lg space-y-3 rounded-lg bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">{editingId ? 'Edit Centre' : 'Add Centre'}</h2><button type="button" onClick={closeForm} aria-label="Close"><X size={18} /></button></div>
+            <label className="block text-sm font-medium text-slate-700">Region Name *
+              <select required value={form.region_name} onChange={event => setForm({ ...form, region_name: event.target.value, district_name: '' })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                <option value="">Select region</option>
+                {regionOptions.map(region => <option key={region.id} value={region.region_name}>{region.region_name}</option>)}
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-slate-700">District Name *
+              <select required value={form.district_name} onChange={event => setForm({ ...form, district_name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" disabled={!form.region_name}>
+                <option value="">{form.region_name ? 'Select district' : 'Select a region first'}</option>
+                {formDistrictOptions.map(district => <option key={district.id} value={district.district_name}>{district.district_name}</option>)}
+              </select>
+            </label>
+            {[['centre_name', 'Centre Name'], ['block', 'Block'], ['village', 'Village'], ['facilitator_name', 'Facilitator Name']].map(([field, label]) => <label key={field} className="block text-sm font-medium text-slate-700">{label}{field === 'centre_name' ? ' *' : ''}<input required={field === 'centre_name'} value={form[field as keyof typeof form]} onChange={event => setForm({ ...form, [field]: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>)}
+            <label className="block text-sm font-medium text-slate-700">Status<select value={form.status} onChange={event => setForm({ ...form, status: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+            <button className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white">{editingId ? 'Save Centre' : 'Add Centre'}</button>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

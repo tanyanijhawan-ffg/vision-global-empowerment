@@ -130,7 +130,7 @@ export default function StudentsList() {
             />
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-slate-400" />
               <select 
