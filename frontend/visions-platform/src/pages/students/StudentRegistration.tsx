@@ -141,7 +141,8 @@ function Step2({ data, onChange, invalidFields }: { data: RegistrationData; onCh
           <select value={data.attendance_pattern} onChange={e => onChange('attendance_pattern', e.target.value)} className={inputCls}>
             <option value="">Select pattern</option>
             <option>Regular</option>
-            <option>Correspondence</option>
+            <option>Irregular</option>
+            <option>Correspondence / Open Schooling</option>
             <option>Any Other</option>
           </select>
         </Field>
