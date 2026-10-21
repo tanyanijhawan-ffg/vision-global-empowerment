@@ -10,7 +10,10 @@ from rest_framework.views import APIView
 from school.models.assessment import AssessmentScore, AssessmentSubject
 from school.models.attendance import Attendance
 from school.models.center import Center, District, Region
+from school.models.family import Family
+from school.models.socio_economic import SocioEconomic
 from school.models.student import Student
+from school.models.vulnerability import StudentVulnerability
 
 
 def pct(numerator, denominator):
@@ -277,3 +280,76 @@ class DashboardDrilldownView(APIView):
             return Response({'title': 'Regions', 'kind': 'regions', 'items': items})
 
         return Response({'detail': 'Unknown metric.'}, status=400)
+
+
+def _breakdown(queryset, field, label_map=None):
+    """Return [{name, count}] for a model field, normalising blanks to 'Not provided'."""
+    rows = queryset.values(field).annotate(count=Count('pk')).order_by('-count')
+    result = []
+    for row in rows:
+        name = row[field] or 'Not provided'
+        if label_map and name in label_map:
+            name = label_map[name]
+        result.append({'name': str(name), 'count': row['count']})
+    return result
+
+
+class StudentReportView(APIView):
+    """Aggregate student demographics / socio-economic / education data for the
+    Student Reports dashboard. Supports optional region_id / centre_id filters."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        region_id = request.query_params.get('region_id') or request.query_params.get('region')
+        centre_id = request.query_params.get('centre_id') or request.query_params.get('centre')
+
+        students = Student.objects.select_related('centre__region', 'centre__district').all()
+        socio = SocioEconomic.objects.all()
+        family = Family.objects.all()
+        vulns = StudentVulnerability.objects.select_related('vulnerability').all()
+
+        if region_id:
+            students = students.filter(centre__region_id=region_id)
+            socio = socio.filter(student__centre__region_id=region_id)
+            family = family.filter(student__centre__region_id=region_id)
+            vulns = vulns.filter(student__centre__region_id=region_id)
+        if centre_id:
+            students = students.filter(centre_id=centre_id)
+            socio = socio.filter(student__centre_id=centre_id)
+            family = family.filter(student__centre_id=centre_id)
+            vulns = vulns.filter(student__centre_id=centre_id)
+
+        bool_map = {True: 'Yes', False: 'No'}
+
+        def socio_bool(field):
+            rows = socio.values(field).annotate(count=Count('pk')).order_by('-count')
+            return [{'name': bool_map.get(row[field], 'Not provided'), 'count': row['count']} for row in rows]
+
+        data = {
+            'total_students': students.count(),
+            'gender': _breakdown(students, 'gender'),
+            'caste_category': _breakdown(socio, 'caste_category'),
+            'religion': _breakdown(socio, 'religion'),
+            'tribe_name': _breakdown(socio.exclude(tribe_name__isnull=True).exclude(tribe_name=''), 'tribe_name'),
+            'housing_condition': _breakdown(socio, 'house_type'),
+            'housing_ownership': _breakdown(socio, 'ownership'),
+            'income_range': _breakdown(socio, 'income_range'),
+            'access': {
+                'electricity': socio_bool('electricity'),
+                'drinking_water': socio_bool('drinking_water'),
+                'toilet': socio_bool('toilet'),
+                'study_space': socio_bool('study_space'),
+            },
+            'class_grade': _breakdown(students, 'class_grade'),
+            'school_type': _breakdown(students, 'school_type'),
+            'medium_of_instruction': _breakdown(students, 'medium_of_instruction'),
+            'attendance_pattern': _breakdown(students, 'attendance_pattern'),
+            'father_education': _breakdown(family, 'father_education'),
+            'mother_education': _breakdown(family, 'mother_education'),
+            'vulnerabilities': _breakdown(vulns, 'vulnerability__vulnerability_name'),
+            'by_region': _breakdown(students, 'centre__region__region_name'),
+            'by_district': _breakdown(students, 'centre__district__district_name'),
+            'by_centre': _breakdown(students, 'centre__centre_name'),
+        }
+        return Response(data)

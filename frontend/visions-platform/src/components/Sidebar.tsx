@@ -30,7 +30,14 @@ const navItems = [
       { name: 'Tribal Communities', path: '/masters/tribal-communities' },
     ]
   },
-  { name: 'Students', icon: Users, path: '/students' },
+  { 
+    name: 'Students', 
+    icon: Users, 
+    children: [
+      { name: 'List', path: '/students' },
+      { name: 'Reports', path: '/students/reports' },
+    ]
+  },
   { 
     name: 'Attendance', 
     icon: CalendarCheck, 
@@ -90,6 +97,7 @@ export default function Sidebar({ isOpen, setIsOpen, isMobile = false }: { isOpe
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     Masters: location.pathname.startsWith('/masters'),
+    Students: location.pathname.startsWith('/students'),
     Attendance: location.pathname.startsWith('/attendance'),
     Academics: location.pathname.startsWith('/academics'),
   });

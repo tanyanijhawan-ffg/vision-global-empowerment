@@ -5,7 +5,7 @@ from school.views.master import MasterBulkUploadView, MasterCentreListCreateView
 from school.views.student_bulk import StudentBulkUploadView, StudentWorkbookExportView
 from school.views.user import UserDetailView, UserListCreateView
 from school.views.attendance import AbsenceAlertListView
-from school.views.dashboard import DashboardSummaryView, DashboardDrilldownView
+from school.views.dashboard import DashboardSummaryView, DashboardDrilldownView, StudentReportView
 from school.views.student_summary import StudentSummaryView
 from .views import (
     AttendanceCreateView,
@@ -20,6 +20,7 @@ urlpatterns = [
     path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password-reset-request'),
     path('dashboard/summary/', DashboardSummaryView.as_view(), name='dashboard-summary'),
     path('dashboard/drilldown/', DashboardDrilldownView.as_view(), name='dashboard-drilldown'),
+    path('dashboard/student-report/', StudentReportView.as_view(), name='student-report'),
     path('auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     path('masters/regions/', MasterRegionListCreateView.as_view(), name='master-regions'),
     path('masters/regions/<int:pk>/', MasterRegionListCreateView.as_view(), name='master-region-detail'),
