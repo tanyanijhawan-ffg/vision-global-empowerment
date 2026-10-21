@@ -11,6 +11,7 @@ const blankRegion = { region_name: '', state: '', status: 'active' };
 export default function RegionsList() {
   const canManage = getCurrentUser()?.role === 'SUPER_ADMIN';
   const [data, setData] = useState<Region[]>([]);
+  const [search, setSearch] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState(blankRegion);
@@ -23,6 +24,13 @@ export default function RegionsList() {
   };
 
   useEffect(() => { loadRegions().catch(error => setError(error.message)); }, []);
+
+  const filteredData = data.filter(region =>
+    [region.region_name, region.state, region.status]
+      .join(' ')
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  );
 
   const createRegion = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -70,6 +78,8 @@ export default function RegionsList() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
+              value={search}
+              onChange={event => setSearch(event.target.value)}
               placeholder="Search regions..." 
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all shadow-sm"
             />
@@ -78,7 +88,7 @@ export default function RegionsList() {
 
         {/* Cards on small screens */}
         <div className="xl:hidden space-y-3 p-3">
-          {data.map((region) => (
+          {filteredData.map((region) => (
             <div key={region.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-medium text-slate-900 truncate">{region.region_name}</div>
@@ -107,7 +117,7 @@ export default function RegionsList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {data.map((region) => (
+              {filteredData.map((region) => (
                 <tr key={region.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="px-6 py-4 font-medium text-slate-900">{region.region_name}</td>
                   <td className="px-6 py-4">{region.state || '-'}</td>
