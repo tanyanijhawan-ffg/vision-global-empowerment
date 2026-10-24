@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Edit2, Search, Trash2, X, Plus, Filter, ChevronDown, AlertCircle } from 'lucide-react';
+import { Edit2, Search, Trash2, X, Plus, Filter, ChevronDown, AlertCircle, Check } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import { getCurrentUser } from '../../lib/auth';
 import {
@@ -53,6 +53,7 @@ export default function AssessmentsList() {
   const [selectedExamIds, setSelectedExamIds] = useState<number[]>([]);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<number[]>([]);
   const [maxMarks, setMaxMarks] = useState<number>(100);
+  const [subjectMaxMarks, setSubjectMaxMarks] = useState<Record<number, number>>({});
   const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
 
   // Sub-modals for inline creation
@@ -150,6 +151,20 @@ export default function AssessmentsList() {
     });
   }, [data, search, filterClass, filterYear, academicYears, normalizeClass]);
 
+  const totalMaxMarks = useMemo(() => {
+    return selectedSubjectIds.reduce((sum, subId) => {
+      const mark = Number(subjectMaxMarks[subId]);
+      return sum + (isNaN(mark) ? 0 : mark);
+    }, 0);
+  }, [selectedSubjectIds, subjectMaxMarks]);
+
+  const handleSubjectMarkChange = (subjectId: number, value: number) => {
+    setSubjectMaxMarks((prev) => ({
+      ...prev,
+      [subjectId]: value,
+    }));
+  };
+
   const openAddForm = () => {
     setEditingId(null);
     setError('');
@@ -163,6 +178,12 @@ export default function AssessmentsList() {
     setSelectedClassIds(defaultClassIds);
     setSelectedSubjectIds(availableSubjects.map((s) => s.id));
     setMaxMarks(100);
+
+    const initialMarks: Record<number, number> = {};
+    availableSubjects.forEach((s) => {
+      initialMarks[s.id] = 100;
+    });
+    setSubjectMaxMarks(initialMarks);
 
     if (defaultYearId) {
       fetchAssessmentTypes({ academicYearId: Number(defaultYearId) }).then((examList) => {
@@ -273,12 +294,18 @@ export default function AssessmentsList() {
 
         // Also save subject metadata
         if (selectedSubjectIds.length > 0) {
+          const subjectMarksPayload: Record<number, number> = {};
+          selectedSubjectIds.forEach((id) => {
+            subjectMarksPayload[id] = Number(subjectMaxMarks[id]) || 100;
+          });
+
           await createAssessmentSubjectMetadata({
             academicYearId: Number(selectedAcademicYearId),
             classIds: selectedClassIds,
             examIds: selectedExamIds,
             subjectIds: selectedSubjectIds,
-            maxMarks: Number(maxMarks),
+            maxMarks: totalMaxMarks,
+            subjectMarks: subjectMarksPayload,
             isActive: true,
           }).catch(() => null);
         }
@@ -590,32 +617,33 @@ export default function AssessmentsList() {
 
       {/* Add / Edit Assessment Modal */}
       {isFormOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 sm:p-4">
           <form
             onSubmit={handleFormSubmit}
-            className="w-full max-w-2xl bg-white rounded-2xl p-6 shadow-2xl space-y-5 my-8"
+            className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
+                <h2 className="text-base font-bold text-slate-900 leading-tight">
                   {editingId ? 'Edit Assessment' : 'Create New Assessment'}
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
                   {editingId ? 'Modify assessment exam, class, and subject configuration.' : 'Define exam schedule, class, and subjects.'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeForm}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
               >
                 <X size={18} />
               </button>
             </div>
 
+            <div className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto">
             {/* When Editing: show single selects */}
             {editingId ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {/* Academic Year */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -719,34 +747,19 @@ export default function AssessmentsList() {
                       ))}
                     </select>
                   </div>
-
-                  {/* Max Marks */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Max Marks (subject)*
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={1000}
-                      value={maxMarks}
-                      onChange={(e) => setMaxMarks(Number(e.target.value))}
-                      required
-                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                    />
-                  </div>
                 </div>
-                {/* Class Multi-Select */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                      Classes * ({selectedClassIds.length} of {classes.length} selected)
+
+                {/* SECTION 1: CLASSES */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      CLASSES * ({selectedClassIds.length} OF {classes.length} SELECTED)
                     </label>
                     <div className="flex items-center gap-2 text-xs">
                       <button
                         type="button"
                         onClick={() => setSelectedClassIds(classes.map((c) => c.id))}
-                        className="font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                        className="font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
                       >
                         Select All
                       </button>
@@ -754,7 +767,7 @@ export default function AssessmentsList() {
                       <button
                         type="button"
                         onClick={() => setSelectedClassIds([])}
-                        className="font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+                        className="font-semibold text-slate-500 hover:text-slate-700 transition cursor-pointer"
                       >
                         Clear
                       </button>
@@ -762,7 +775,7 @@ export default function AssessmentsList() {
                   </div>
 
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
-                    <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
+                    <div className="flex flex-wrap gap-2">
                       {classes.map((cls) => {
                         const isSelected = selectedClassIds.includes(cls.id);
                         return (
@@ -776,9 +789,11 @@ export default function AssessmentsList() {
                                 : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
                             }`}
                           >
-                            <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
-                              isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
-                            }`}>
+                            <span
+                              className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                                isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
+                              }`}
+                            >
                               {isSelected ? '✓' : ''}
                             </span>
                             {cls.name}
@@ -792,17 +807,17 @@ export default function AssessmentsList() {
                   </div>
                 </div>
 
-                {/* Exam Multi-Select */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                      Exams / Assessment Types * ({selectedExamIds.length} of {exams.length} selected)
+                {/* SECTION 2: EXAMS / ASSESSMENT TYPES */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      EXAMS / ASSESSMENT TYPES * ({selectedExamIds.length} OF {exams.length} SELECTED)
                     </label>
                     <div className="flex items-center gap-3 text-xs">
                       <button
                         type="button"
                         onClick={() => setSelectedExamIds(exams.map((e) => e.id))}
-                        className="font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                        className="font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
                       >
                         Select All
                       </button>
@@ -810,7 +825,7 @@ export default function AssessmentsList() {
                       <button
                         type="button"
                         onClick={() => setSelectedExamIds([])}
-                        className="font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+                        className="font-semibold text-slate-500 hover:text-slate-700 transition cursor-pointer"
                       >
                         Clear
                       </button>
@@ -818,9 +833,9 @@ export default function AssessmentsList() {
                       <button
                         type="button"
                         onClick={() => setAddExamModalOpen(true)}
-                        className="font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 cursor-pointer"
+                        className="font-bold text-indigo-600 hover:text-indigo-800 transition cursor-pointer inline-flex items-center gap-0.5"
                       >
-                        <Plus size={13} />
+                        <Plus size={13} className="stroke-[2.5]" />
                         New Exam
                       </button>
                     </div>
@@ -828,9 +843,11 @@ export default function AssessmentsList() {
 
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
                     {exams.length === 0 ? (
-                      <p className="text-xs text-slate-500 py-1">No exams configured for this academic year yet. Click &quot;+ New Exam&quot; to create one.</p>
+                      <p className="text-xs text-slate-500 py-1">
+                        No exams configured for this academic year yet. Click &quot;+ New Exam&quot; to create one.
+                      </p>
                     ) : (
-                      <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
+                      <div className="flex flex-wrap gap-2">
                         {exams.map((ex) => {
                           const isSelected = selectedExamIds.includes(ex.id);
                           return (
@@ -844,15 +861,23 @@ export default function AssessmentsList() {
                                   : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
                               }`}
                             >
-                              <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
-                                isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
-                              }`}>
+                              <span
+                                className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                                  isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
+                                }`}
+                              >
                                 {isSelected ? '✓' : ''}
                               </span>
                               {ex.name}
-                              <span className={isSelected ? 'text-indigo-200 text-[10px]' : 'text-slate-400 text-[10px]'}>
-                                ({ex.code})
-                              </span>
+                              {ex.code && (
+                                <span
+                                  className={`text-[10px] ${
+                                    isSelected ? 'text-indigo-200 font-normal' : 'text-slate-400'
+                                  }`}
+                                >
+                                  ({ex.code})
+                                </span>
+                              )}
                             </button>
                           );
                         })}
@@ -866,96 +891,124 @@ export default function AssessmentsList() {
               </div>
             )}
 
-            {/* Subjects Selection */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                  Configured Subjects ({selectedSubjectIds.length})
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setAddSubjectModalOpen(true)}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <Plus size={13} />
-                  New Subject
-                </button>
+            {/* SECTION 3: CONFIGURED SUBJECTS */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                    CONFIGURED SUBJECTS ({selectedSubjectIds.length})
+                  </label>
+                  <p className="text-xs text-slate-400 font-normal mt-0.5">
+                    Each subject has its own maximum marks field.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {unselectedSubjects.length > 0 && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        Add Existing
+                        <ChevronDown size={13} />
+                      </button>
+                      {subjectDropdownOpen && (
+                        <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 z-20 max-h-48 overflow-y-auto">
+                          {unselectedSubjects.map((sub) => (
+                            <button
+                              key={sub.id}
+                              type="button"
+                              onClick={() => {
+                                toggleSubjectSelect(sub.id);
+                                setSubjectDropdownOpen(false);
+                              }}
+                              className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 text-xs font-medium text-slate-700 hover:text-indigo-700 cursor-pointer"
+                            >
+                              {sub.name} ({sub.code || `SUB${sub.id}`})
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAddSubjectModalOpen(true)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition cursor-pointer inline-flex items-center gap-0.5"
+                  >
+                    <Plus size={13} className="stroke-[2.5]" />
+                    New Subject
+                  </button>
+                </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
-                {/* Selected Subject Badges */}
-                <div className="flex flex-wrap gap-2">
-                  {selectedSubjectIds.map((subId) => {
-                    const sub = availableSubjects.find((s) => s.id === subId);
-                    if (!sub) return null;
-                    return (
-                      <span
-                        key={subId}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800 font-semibold text-xs rounded-lg"
-                      >
-                        {sub.name}
-                        <button
-                          type="button"
-                          onClick={() => toggleSubjectSelect(subId)}
-                          className="text-indigo-400 hover:text-indigo-700 cursor-pointer"
-                        >
-                          <X size={14} />
-                        </button>
-                      </span>
-                    );
-                  })}
-                  {selectedSubjectIds.length === 0 ? (
-                    <p className="text-xs text-slate-400 py-1">No subjects selected.</p>
-                  ) : null}
-                </div>
+              <div className="border border-slate-200/90 rounded-2xl p-4 bg-white space-y-3">
+                {selectedSubjectIds.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-3 text-center">
+                    No subjects configured. Add existing or create a new subject.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {selectedSubjectIds.map((subId) => {
+                      const sub = availableSubjects.find((s) => s.id === subId);
+                      const currentMax = subjectMaxMarks[subId] ?? 100;
+                      return (
+                        <div key={subId} className="flex items-center gap-3">
+                          <div className="flex-1 bg-indigo-50/70 border border-indigo-100/50 text-indigo-950 font-semibold text-xs sm:text-sm py-2.5 px-4 rounded-xl truncate">
+                            {sub?.name || `Subject ${subId}`}
+                          </div>
 
-                {/* Add Subject Dropdown button */}
-                {unselectedSubjects.length > 0 ? (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 font-semibold text-xs rounded-lg hover:bg-slate-100 transition cursor-pointer"
-                    >
-                      <Plus size={14} />
-                      Add Subject...
-                      <ChevronDown size={14} />
-                    </button>
+                          <input
+                            type="number"
+                            min="1"
+                            max="1000"
+                            value={currentMax}
+                            onChange={(e) => handleSubjectMarkChange(subId, Number(e.target.value))}
+                            className="w-24 sm:w-32 h-10 px-3 text-center bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-2xs"
+                          />
 
-                    {subjectDropdownOpen ? (
-                      <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-20 max-h-48 overflow-y-auto py-1">
-                        {unselectedSubjects.map((sub) => (
                           <button
-                            key={sub.id}
                             type="button"
-                            onClick={() => {
-                              toggleSubjectSelect(sub.id);
-                              setSubjectDropdownOpen(false);
-                            }}
-                            className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-indigo-50 hover:text-indigo-700 transition cursor-pointer"
+                            onClick={() => toggleSubjectSelect(subId)}
+                            title="Remove Subject"
+                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
                           >
-                            {sub.name} ({sub.code})
+                            <X size={16} />
                           </button>
-                        ))}
-                      </div>
-                    ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
-                ) : null}
+                )}
+
+                {/* Total Maximum Marks Footer */}
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between px-3 bg-indigo-50/40 rounded-xl py-3">
+                  <span className="text-indigo-700 font-bold text-xs sm:text-sm">
+                    Total Maximum Marks
+                  </span>
+                  <span className="text-indigo-600 font-black text-lg sm:text-xl">
+                    {totalMaxMarks}
+                  </span>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            {/* Footer */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={closeForm}
-                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-white transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving || (!editingId && (selectedClassIds.length === 0 || selectedExamIds.length === 0))}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
               >
                 {saving
                   ? 'Saving...'

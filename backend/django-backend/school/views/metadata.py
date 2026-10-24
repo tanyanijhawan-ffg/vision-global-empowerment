@@ -229,6 +229,41 @@ class AssessmentSubjectMetadataListCreateView(generics.ListCreateAPIView):
         max_m = payload.get('maxMarks') or payload.get('max_marks')
         parsed_max = Decimal(str(max_m)) if max_m is not None else Decimal('100.00')
 
+        subject_marks = payload.get('subjectMarks') or {}
+        if isinstance(subject_marks, dict) and subject_marks and cids and eids:
+            groups = {}
+            for sid_str, m_val in subject_marks.items():
+                try:
+                    s_id = int(sid_str)
+                    m_dec = Decimal(str(m_val))
+                    groups.setdefault(m_dec, []).append(s_id)
+                except (ValueError, TypeError):
+                    continue
+
+            if groups:
+                last_obj = None
+                for cid in cids:
+                    for eid in eids:
+                        filter_kwargs = {'class_id': cid, 'exam_id': eid}
+                        if ay_id is not None:
+                            filter_kwargs['academic_year_id'] = ay_id
+                        if centre_id is not None:
+                            filter_kwargs['centre_id'] = centre_id
+                        AssessmentSubject.objects.filter(**filter_kwargs).delete()
+                        for m_dec, sub_ids in groups.items():
+                            last_obj = AssessmentSubject.objects.create(
+                                class_id=cid,
+                                exam_id=eid,
+                                academic_year_id=ay_id,
+                                centre_id=centre_id,
+                                max_marks=m_dec,
+                                subject_ids=sub_ids,
+                                is_active=True,
+                            )
+                if last_obj:
+                    serializer = self.get_serializer(last_obj)
+                    return Response(serializer.data, status=status.HTTP_200_OK)
+
         if cids and eids:
             last_obj = None
             for cid in cids:

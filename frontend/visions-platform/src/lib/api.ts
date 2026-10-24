@@ -687,6 +687,7 @@ export const createAssessmentSubjectMetadata = (payload: {
   examIds?: number[];
   subjectIds: number[];
   maxMarks?: number;
+  subjectMarks?: Record<number, number>;
   isActive?: boolean;
 }) => apiRequest<any>("/v1/metadata/assessment-subjects/", { method: "POST", body: JSON.stringify(payload) });
 

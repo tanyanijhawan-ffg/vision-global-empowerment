@@ -16,6 +16,7 @@ import RegionsList from './pages/masters/RegionsList';
 import CentresList from './pages/masters/CentresList';
 import DistrictsList from './pages/masters/DistrictsList';
 import AssessmentsList from './pages/masters/AssessmentsList';
+import CreateAssessmentMaster from './pages/masters/CreateAssessmentMaster';
 import StudentsList from './pages/students/StudentsList';
 import StudentRegistration from './pages/students/StudentRegistration';
 import StudentProfile from './pages/students/StudentProfile';
@@ -51,6 +52,7 @@ function App() {
             <Route path="/masters/regions" element={<ProtectedRoute><RegionsList /></ProtectedRoute>} />
             <Route path="/masters/centres" element={<ProtectedRoute><CentresList /></ProtectedRoute>} />
             <Route path="/masters/assessments" element={<ProtectedRoute><AssessmentsList /></ProtectedRoute>} />
+            <Route path="/masters/assessments/new" element={<ProtectedRoute><CreateAssessmentMaster /></ProtectedRoute>} />
             
             <Route path="/students" element={<ProtectedRoute><StudentsList /></ProtectedRoute>} />
             <Route path="/students/new" element={<ProtectedRoute><StudentRegistration /></ProtectedRoute>} />
