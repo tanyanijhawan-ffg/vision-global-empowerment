@@ -98,10 +98,19 @@ export const ExpandedStudentCard: React.FC<ExpandedStudentCardProps> = ({
   }, [defaultSubjects, data.scores]);
 
   const firstSubId = defaultSubjects[0]?.id;
-  const currentUnderstanding = (firstSubId && data?.diagnostics?.[firstSubId]?.understanding) || '';
-  const currentApplication = (firstSubId && data?.diagnostics?.[firstSubId]?.application) || '';
-  const currentInterest = (firstSubId && data?.diagnostics?.[firstSubId]?.interest) || '';
-  const currentBehaviour = data?.behaviour || 'INDEPENDENT';
+  const currentUnderstanding =
+    (firstSubId && data?.diagnostics?.[firstSubId]?.understanding) ??
+    Object.values(data?.diagnostics || {})[0]?.understanding ??
+    'CLEAR';
+  const currentApplication =
+    (firstSubId && data?.diagnostics?.[firstSubId]?.application) ??
+    Object.values(data?.diagnostics || {})[0]?.application ??
+    'APPLIES';
+  const currentInterest =
+    (firstSubId && data?.diagnostics?.[firstSubId]?.interest) ??
+    Object.values(data?.diagnostics || {})[0]?.interest ??
+    'INTERESTED';
+  const currentBehaviour = data?.behaviour ?? 'INDEPENDENT';
 
   const narrativeText = data.keyImprovements || data.comments || '';
 
@@ -375,6 +384,7 @@ export const ExpandedStudentCard: React.FC<ExpandedStudentCardProps> = ({
                 onChange={(e) => onUpdate({ behaviour: e.target.value })}
                 className="w-full h-9 appearance-none bg-white border border-slate-200 text-slate-800 pl-8 pr-7 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
+                <option value="">Select Learning Behaviour</option>
                 <option value="INDEPENDENT">Studies independently</option>
                 <option value="SUPERVISION">Needs supervision</option>
                 <option value="MOTIVATED">Motivated</option>

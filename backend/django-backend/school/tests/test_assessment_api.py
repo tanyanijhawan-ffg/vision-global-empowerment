@@ -153,7 +153,6 @@ class AssessmentSubmissionMandatoryNarrativeTests(TestCase):
         AssessmentSubject.objects.create(
             class_id=5,
             exam_id=self.exam_type.assessment_type_id,
-            centre_id=self.centre.centre_id,
             academic_year_id=self.ay.academic_year_id,
             subject_ids=[self.sub.subject_id],
             max_marks=Decimal('100.00'),
@@ -197,4 +196,168 @@ class AssessmentSubmissionMandatoryNarrativeTests(TestCase):
         response = self.client.post(f'/api/v1/assessments/{self.assessment.assessment_id}/submit')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json().get('status'), 'SUBMITTED')
+
+    def test_create_assessment_duplicate_combination_rejected(self):
+        # self.assessment already exists for Class 5 and self.exam_type in self.ay
+        payload = {
+            'academicYearId': self.ay.academic_year_id,
+            'classIds': [5],
+            'assessmentTypeIds': [self.exam_type.assessment_type_id],
+            'assessmentDate': '2025-10-15',
+            'subjectIds': [self.sub.subject_id],
+            'maxMarks': 100,
+        }
+        response = self.client.post('/api/v1/assessments/', data=payload, content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('same exam and class combination already exists', response.json().get('error', ''))
+
+    def test_edit_assessment_adding_new_subject_demotes_submitted_to_draft(self):
+        from school.models.assessment import Assessment, Subject
+        sub2 = Subject.objects.create(name='Science', code='SCI_TEST')
+
+        # Set assessment as submitted
+        self.assessment.status = Assessment.STATUS_SUBMITTED
+        self.assessment.save()
+
+        # Edit assessment by adding a new subject (sub2)
+        payload = {
+            'subjectIds': [self.sub.subject_id, sub2.subject_id],
+            'subjectMarks': {
+                str(self.sub.subject_id): 100,
+                str(sub2.subject_id): 100,
+            },
+        }
+        response = self.client.patch(
+            f'/api/v1/assessments/{self.assessment.assessment_id}/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # Refresh from database and verify status was demoted to DRAFT
+        self.assessment.refresh_from_db()
+        self.assertEqual(self.assessment.status, Assessment.STATUS_DRAFT)
+
+    def test_delete_subject_with_submitted_marks_without_confirmation_fails(self):
+        # self.sub already has an AssessmentScore entry
+        payload = {
+            'subjectIds': [],
+            'subjectMarks': {},
+            'deleteScores': False,
+        }
+        response = self.client.patch(
+            f'/api/v1/assessments/{self.assessment.assessment_id}/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Marks are already submitted for that subject, do you want to delete them?', response.json().get('error', ''))
+
+    def test_delete_subject_with_submitted_marks_with_confirmation_deletes_scores(self):
+        from school.models.assessment import AssessmentScore
+        # self.sub already has an AssessmentScore entry
+        self.assertTrue(AssessmentScore.objects.filter(assessment=self.assessment, subject=self.sub).exists())
+
+        payload = {
+            'subjectIds': [],
+            'subjectMarks': {},
+            'deleteScores': True,
+        }
+        response = self.client.patch(
+            f'/api/v1/assessments/{self.assessment.assessment_id}/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        # Verify AssessmentScore for self.sub was deleted
+        self.assertFalse(AssessmentScore.objects.filter(assessment=self.assessment, subject=self.sub).exists())
+
+    def test_editing_marks_only_deletes_scores_for_changed_subject(self):
+        from decimal import Decimal
+        from school.models.assessment import AssessmentScore, AssessmentSubject, Subject
+        sub2 = Subject.objects.create(name='Social Science', code='SOC_TEST')
+        AssessmentSubject.objects.create(
+            class_id=5,
+            exam_id=self.exam_type.assessment_type_id,
+            academic_year_id=self.ay.academic_year_id,
+            subject_ids=[sub2.subject_id],
+            max_marks=Decimal('100.00'),
+            is_active=True,
+        )
+        AssessmentScore.objects.create(
+            assessment=self.assessment,
+            student=self.student,
+            subject=sub2,
+            obtained_marks=Decimal('90.00'),
+        )
+
+        # Both sub (Math) and sub2 (Social) have scores
+        self.assertTrue(AssessmentScore.objects.filter(assessment=self.assessment, subject=self.sub).exists())
+        self.assertTrue(AssessmentScore.objects.filter(assessment=self.assessment, subject=sub2).exists())
+
+        # Change max_marks for sub2 only (from 100 to 50), keep sub at 100
+        payload = {
+            'subjectIds': [self.sub.subject_id, sub2.subject_id],
+            'subjectMarks': {
+                str(self.sub.subject_id): 100,
+                str(sub2.subject_id): 50,
+            },
+            'deleteScores': True,
+        }
+        response = self.client.patch(
+            f'/api/v1/assessments/{self.assessment.assessment_id}/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # Only sub2 scores should be deleted; self.sub scores must remain intact!
+        self.assertTrue(AssessmentScore.objects.filter(assessment=self.assessment, subject=self.sub).exists())
+        self.assertFalse(AssessmentScore.objects.filter(assessment=self.assessment, subject=sub2).exists())
+
+    def test_removing_subject_only_deletes_scores_for_removed_subject(self):
+        from decimal import Decimal
+        from school.models.assessment import AssessmentScore, AssessmentSubject, Subject
+        sub2 = Subject.objects.create(name='English', code='ENG_TEST')
+        AssessmentSubject.objects.create(
+            class_id=5,
+            exam_id=self.exam_type.assessment_type_id,
+            academic_year_id=self.ay.academic_year_id,
+            subject_ids=[sub2.subject_id],
+            max_marks=Decimal('100.00'),
+            is_active=True,
+        )
+        AssessmentScore.objects.create(
+            assessment=self.assessment,
+            student=self.student,
+            subject=sub2,
+            obtained_marks=Decimal('78.00'),
+        )
+
+        # Both sub and sub2 have scores
+        self.assertTrue(AssessmentScore.objects.filter(assessment=self.assessment, subject=self.sub).exists())
+        self.assertTrue(AssessmentScore.objects.filter(assessment=self.assessment, subject=sub2).exists())
+
+        # Remove sub2, keep self.sub
+        payload = {
+            'subjectIds': [self.sub.subject_id],
+            'subjectMarks': {
+                str(self.sub.subject_id): 100,
+            },
+            'deleteScores': True,
+        }
+        response = self.client.patch(
+            f'/api/v1/assessments/{self.assessment.assessment_id}/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # Only sub2 scores should be deleted; self.sub scores must remain intact!
+        self.assertTrue(AssessmentScore.objects.filter(assessment=self.assessment, subject=self.sub).exists())
+        self.assertFalse(AssessmentScore.objects.filter(assessment=self.assessment, subject=sub2).exists())
+
+
+
+
 

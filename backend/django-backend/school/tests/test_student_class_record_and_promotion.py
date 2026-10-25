@@ -147,7 +147,6 @@ class StudentClassRecordAndPromotionTests(TestCase):
             AssessmentSubject.objects.create(
                 class_id=6,
                 exam_id=exam.assessment_type_id,
-                centre_id=self.centre.centre_id,
                 academic_year_id=self.ay_current.academic_year_id,
                 subject_ids=[self.sub_tamil.subject_id, self.sub_math.subject_id],
                 max_marks=Decimal('100.00'),
@@ -199,7 +198,6 @@ class StudentClassRecordAndPromotionTests(TestCase):
             AssessmentSubject.objects.create(
                 class_id=6,
                 exam_id=exam.assessment_type_id,
-                centre_id=self.centre.centre_id,
                 academic_year_id=self.ay_current.academic_year_id,
                 subject_ids=[self.sub_tamil.subject_id],
                 max_marks=Decimal('100.00'),

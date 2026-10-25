@@ -6,8 +6,10 @@ from rest_framework.response import Response
 
 from school.models.assessment import (
     AcademicYear,
+    Assessment,
     AssessmentScore,
     AssessmentSubject,
+    AssessmentSubmission,
     AssessmentType,
     DiagnosticOption,
     LearningBehaviourOption,
@@ -223,7 +225,6 @@ class AssessmentSubjectMetadataListCreateView(generics.ListCreateAPIView):
         cids = [int(c) for c in (raw_class_ids or []) if str(c).isdigit()]
         eids = [int(e) for e in (raw_exam_ids or []) if str(e).isdigit()]
 
-        centre_id = payload.get('centreId')
         ay_id = payload.get('academicYearId')
         sids = payload.get('subjectIds') or []
         max_m = payload.get('maxMarks') or payload.get('max_marks')
@@ -247,15 +248,44 @@ class AssessmentSubjectMetadataListCreateView(generics.ListCreateAPIView):
                         filter_kwargs = {'class_id': cid, 'exam_id': eid}
                         if ay_id is not None:
                             filter_kwargs['academic_year_id'] = ay_id
-                        if centre_id is not None:
-                            filter_kwargs['centre_id'] = centre_id
+
+                        # Track existing subjects before deleting
+                        prev_as = AssessmentSubject.objects.filter(**filter_kwargs)
+                        prev_sids = set()
+                        for p in prev_as:
+                            for sid in (p.subject_ids or []):
+                                try:
+                                    prev_sids.add(int(sid))
+                                except (ValueError, TypeError):
+                                    pass
+
+                        new_sids = set()
+                        for sub_ids in groups.values():
+                            for sid in sub_ids:
+                                try:
+                                    new_sids.add(int(sid))
+                                except (ValueError, TypeError):
+                                    pass
+
+                        if new_sids - prev_sids:
+                            demote_filter = {
+                                'class_id': cid,
+                                'assessment_type_id': eid,
+                                'status': Assessment.STATUS_SUBMITTED,
+                            }
+                            if ay_id is not None:
+                                demote_filter['academic_year_id'] = ay_id
+                            for sa in Assessment.objects.filter(**demote_filter):
+                                sa.status = Assessment.STATUS_DRAFT
+                                sa.save()
+                                AssessmentSubmission.objects.filter(assessment=sa).delete()
+
                         AssessmentSubject.objects.filter(**filter_kwargs).delete()
                         for m_dec, sub_ids in groups.items():
                             last_obj = AssessmentSubject.objects.create(
                                 class_id=cid,
                                 exam_id=eid,
                                 academic_year_id=ay_id,
-                                centre_id=centre_id,
                                 max_marks=m_dec,
                                 subject_ids=sub_ids,
                                 is_active=True,
@@ -271,9 +301,29 @@ class AssessmentSubjectMetadataListCreateView(generics.ListCreateAPIView):
                     filter_kwargs = {'class_id': cid, 'exam_id': eid}
                     if ay_id is not None:
                         filter_kwargs['academic_year_id'] = ay_id
-                    if centre_id is not None:
-                        filter_kwargs['centre_id'] = centre_id
                     existing = AssessmentSubject.objects.filter(**filter_kwargs).first()
+                    prev_sids = set()
+                    if existing:
+                        for sid in (existing.subject_ids or []):
+                            try:
+                                prev_sids.add(int(sid))
+                            except (ValueError, TypeError):
+                                pass
+
+                    new_sids = set(int(s) for s in sids if str(s).isdigit())
+                    if new_sids - prev_sids:
+                        demote_filter = {
+                            'class_id': cid,
+                            'assessment_type_id': eid,
+                            'status': Assessment.STATUS_SUBMITTED,
+                        }
+                        if ay_id is not None:
+                            demote_filter['academic_year_id'] = ay_id
+                        for sa in Assessment.objects.filter(**demote_filter):
+                            sa.status = Assessment.STATUS_DRAFT
+                            sa.save()
+                            AssessmentSubmission.objects.filter(assessment=sa).delete()
+
                     if existing:
                         if max_m is not None:
                             existing.max_marks = parsed_max
@@ -287,7 +337,6 @@ class AssessmentSubjectMetadataListCreateView(generics.ListCreateAPIView):
                             class_id=cid,
                             exam_id=eid,
                             academic_year_id=ay_id,
-                            centre_id=centre_id,
                             max_marks=parsed_max,
                             subject_ids=sids,
                             is_active=True,

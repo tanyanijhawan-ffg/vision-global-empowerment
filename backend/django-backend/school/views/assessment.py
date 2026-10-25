@@ -1,7 +1,7 @@
 import re
 from decimal import Decimal, ROUND_HALF_UP
 
-from django.db.models import Avg, Max, Min, Q, Sum
+from django.db.models import Avg, Count, Max, Min, Q, Sum
 from django.http import Http404
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -74,10 +74,8 @@ def _subject_max_marks(assessment, subject_id):
         exam_id=assessment.assessment_type_id,
         is_active=True,
     )
-    if assessment.centre_id:
-        for c_config in configs.filter(centre_id=assessment.centre_id).order_by('-assessment_subject_id'):
-            if c_config.max_marks is not None and subject_id in (c_config.subject_ids or []):
-                return Decimal(str(c_config.max_marks))
+    if assessment.academic_year_id:
+        configs = configs.filter(Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True))
     for config in configs.order_by('-assessment_subject_id'):
         if config.max_marks is not None and subject_id in (config.subject_ids or []):
             return Decimal(str(config.max_marks))
@@ -185,7 +183,6 @@ class SubjectListView(AssessmentAPIView):
     def get(self, request):
         class_id = request.query_params.get('classId') or request.query_params.get('class_id')
         exam_id = request.query_params.get('examId') or request.query_params.get('exam_id') or request.query_params.get('assessmentTypeId') or request.query_params.get('assessment_type_id')
-        centre_id = request.query_params.get('centreId') or request.query_params.get('centre_id')
         academic_year_id = request.query_params.get('academicYearId') or request.query_params.get('academic_year_id')
 
         as_qs = AssessmentSubject.objects.filter(is_active=True)
@@ -204,12 +201,6 @@ class SubjectListView(AssessmentAPIView):
                 as_qs = as_qs.filter(academic_year_id=int(academic_year_id))
             except ValueError:
                 pass
-        if centre_id:
-            try:
-                cid = int(centre_id)
-                as_qs = as_qs.filter(Q(centre_id=cid) | Q(centre_id__isnull=True))
-            except ValueError:
-                pass
 
         as_entries = list(as_qs)
 
@@ -223,7 +214,7 @@ class SubjectListView(AssessmentAPIView):
                     try:
                         sid_int = int(sid)
                         allowed_subject_ids.add(sid_int)
-                        if sid_int not in subject_max_marks_map or entry.centre_id is not None:
+                        if sid_int not in subject_max_marks_map:
                             subject_max_marks_map[sid_int] = float(entry.max_marks)
                     except (ValueError, TypeError):
                         pass
@@ -263,12 +254,10 @@ class AssessmentCreateView(AssessmentAPIView):
         seen_ids = set()
         results = []
 
-        def get_dedup_key(ay, cid, eid, centre):
-            if centre_id:
-                return (ay, cid, eid)
-            return (ay, cid, eid, centre)
+        def get_dedup_key(ay, cid, eid, centre=None):
+            return (ay, cid, eid)
 
-        # 1. Process AssessmentSubject master configs
+        # 1. Process AssessmentSubject master configs grouped by assessment definition
         as_qs = AssessmentSubject.objects.filter(is_active=True).order_by('-assessment_subject_id')
         if class_id:
             as_qs = as_qs.filter(class_id=class_id)
@@ -277,6 +266,8 @@ class AssessmentCreateView(AssessmentAPIView):
         if academic_year_id:
             as_qs = as_qs.filter(academic_year_id=academic_year_id)
 
+        grouped_as = {}
+        order_keys = []
         for as_entry in as_qs:
             exam_obj = exam_map.get(as_entry.exam_id)
             if not exam_obj:
@@ -292,8 +283,28 @@ class AssessmentCreateView(AssessmentAPIView):
                 a_filter['academic_year_id'] = ay_id
             if centre_id:
                 a_filter['centre_id'] = centre_id
-
-            a_obj = Assessment.objects.filter(**a_filter).order_by('-assessment_id').first()
+                a_obj = (
+                    Assessment.objects.filter(**a_filter)
+                    .annotate(scores_cnt=Count('scores'))
+                    .order_by('-scores_cnt', '-assessment_id')
+                    .first()
+                )
+                if not a_obj:
+                    fallback_filter = {k: v for k, v in a_filter.items() if k != 'centre_id'}
+                    fallback_filter['centre_id__isnull'] = True
+                    a_obj = (
+                        Assessment.objects.filter(**fallback_filter)
+                        .annotate(scores_cnt=Count('scores'))
+                        .order_by('-scores_cnt', '-assessment_id')
+                        .first()
+                    )
+            else:
+                a_obj = (
+                    Assessment.objects.filter(**a_filter)
+                    .annotate(scores_cnt=Count('scores'))
+                    .order_by('-scores_cnt', '-assessment_id')
+                    .first()
+                )
 
             if status_param and a_obj and a_obj.status.lower() != status_param.lower():
                 continue
@@ -301,31 +312,70 @@ class AssessmentCreateView(AssessmentAPIView):
                 continue
 
             resolved_ay_id = (a_obj.academic_year_id if a_obj else None) or ay_id
-            resolved_centre_id = a_obj.centre_id if a_obj else as_entry.centre_id
+            resolved_centre_id = a_obj.centre_id if a_obj else (int(centre_id) if centre_id else None)
+            key = get_dedup_key(resolved_ay_id, as_entry.class_id, as_entry.exam_id, resolved_centre_id)
+
+            if key not in grouped_as:
+                grouped_as[key] = {
+                    'exam_obj': exam_obj,
+                    'a_obj': a_obj,
+                    'resolved_ay_id': resolved_ay_id,
+                    'resolved_centre_id': resolved_centre_id,
+                    'class_id': as_entry.class_id,
+                    'exam_id': as_entry.exam_id,
+                    'entries': []
+                }
+                order_keys.append(key)
+            grouped_as[key]['entries'].append(as_entry)
+
+        for key in order_keys:
+            group = grouped_as[key]
+            exam_obj = group['exam_obj']
+            a_obj = group['a_obj']
+            resolved_ay_id = group['resolved_ay_id']
+            resolved_centre_id = group['resolved_centre_id']
             year_name = ay_map.get(resolved_ay_id) or _format_year(resolved_ay_id)
 
-            key = get_dedup_key(resolved_ay_id, as_entry.class_id, as_entry.exam_id, resolved_centre_id)
-            if key in seen_keys:
-                continue
             seen_keys.add(key)
-
             if a_obj:
                 seen_ids.add(a_obj.assessment_id)
 
+            merged_subject_ids = []
+            subject_marks_map = {}
+            for entry in sorted(group['entries'], key=lambda e: e.assessment_subject_id):
+                for sid in (entry.subject_ids or []):
+                    try:
+                        sid_int = int(sid)
+                        if sid_int not in merged_subject_ids:
+                            merged_subject_ids.append(sid_int)
+                        subject_marks_map[sid_int] = float(entry.max_marks)
+                    except (ValueError, TypeError):
+                        pass
+
+            total_max_marks = sum(subject_marks_map.values()) if subject_marks_map else 100.0
+            scores_count = AssessmentScore.objects.filter(assessment=a_obj).count() if a_obj else 0
+            scored_sub_ids = list(
+                AssessmentScore.objects.filter(assessment=a_obj).values_list('subject_id', flat=True).distinct()
+            ) if a_obj else []
+
             results.append({
-                'id': a_obj.assessment_id if a_obj else as_entry.assessment_subject_id,
+                'id': a_obj.assessment_id if a_obj else group['entries'][0].assessment_subject_id,
                 'status': a_obj.status if a_obj else 'DRAFT',
                 'academicYear': year_name,
                 'academicYearId': resolved_ay_id,
-                'class': f'Class {as_entry.class_id}',
-                'classId': as_entry.class_id,
+                'class': f'Class {group["class_id"]}',
+                'classId': group['class_id'],
                 'assessmentType': exam_obj.name,
-                'assessmentTypeId': as_entry.exam_id,
+                'assessmentTypeId': group['exam_id'],
                 'assessmentDate': str(a_obj.assessment_date) if (a_obj and a_obj.assessment_date) else '',
                 'centreId': resolved_centre_id,
                 'centreName': a_obj.centre.centre_name if (a_obj and a_obj.centre) else '',
-                'maxMarks': float(as_entry.max_marks) if as_entry.max_marks is not None else 100.0,
-                'subjectIds': as_entry.subject_ids or [],
+                'maxMarks': total_max_marks,
+                'subjectIds': merged_subject_ids,
+                'subjectMarks': subject_marks_map,
+                'hasScores': scores_count > 0,
+                'scoresCount': scores_count,
+                'scoredSubjectIds': scored_sub_ids,
             })
 
         # 2. Include any standalone Assessment batch records
@@ -333,7 +383,7 @@ class AssessmentCreateView(AssessmentAPIView):
         if class_id:
             a_qs = a_qs.filter(class_id=class_id)
         if centre_id:
-            a_qs = a_qs.filter(centre_id=centre_id)
+            a_qs = a_qs.filter(Q(centre_id=centre_id) | Q(centre_id__isnull=True))
         if assessment_type_id:
             a_qs = a_qs.filter(assessment_type_id=assessment_type_id)
         if academic_year_id:
@@ -352,6 +402,10 @@ class AssessmentCreateView(AssessmentAPIView):
             seen_ids.add(a.assessment_id)
 
             year_name = ay_map.get(a.academic_year_id) or _format_year(a.academic_year_id)
+            scores_count = AssessmentScore.objects.filter(assessment=a).count()
+            scored_sub_ids = list(
+                AssessmentScore.objects.filter(assessment=a).values_list('subject_id', flat=True).distinct()
+            )
             results.append({
                 'id': a.assessment_id,
                 'status': a.status,
@@ -366,6 +420,10 @@ class AssessmentCreateView(AssessmentAPIView):
                 'centreName': a.centre.centre_name if a.centre else '',
                 'maxMarks': 100.0,
                 'subjectIds': [],
+                'subjectMarks': {},
+                'hasScores': scores_count > 0,
+                'scoresCount': scores_count,
+                'scoredSubjectIds': scored_sub_ids,
             })
 
         return Response(results)
@@ -421,6 +479,38 @@ class AssessmentCreateView(AssessmentAPIView):
 
         target_centre_id = int(centre_id) if centre_id else None
 
+        # Check if already existing exam and class combination is being submitted (only for master assessment creation)
+        if not target_centre_id:
+            existing_conflicts = []
+            for cid in class_ids:
+                for eid in exam_ids:
+                    has_assessment = Assessment.objects.filter(
+                        academic_year_id=ay_id,
+                        class_id=cid,
+                        assessment_type_id=eid,
+                    ).exists()
+
+                    has_as_config = AssessmentSubject.objects.filter(
+                        class_id=cid,
+                        exam_id=eid,
+                        is_active=True,
+                    ).filter(Q(academic_year_id=ay_id) | Q(academic_year_id__isnull=True)).exists()
+
+                    if has_assessment or has_as_config:
+                        exam_obj = AssessmentType.objects.filter(assessment_type_id=eid).first()
+                        cls_obj = SchoolClass.objects.filter(class_id=cid).first()
+                        cls_name = cls_obj.name if cls_obj else f"Class {cid}"
+                        exam_name = exam_obj.name if exam_obj else f"Exam {eid}"
+                        existing_conflicts.append(f"{cls_name} - {exam_name}")
+
+            if existing_conflicts:
+                return Response(
+                    {
+                        'error': f"New assessment cannot be created as the same exam and class combination already exists ({', '.join(existing_conflicts)})."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         created_assessments = []
 
         # Create separate database entry for each (class_id, assessment_type) combination
@@ -439,6 +529,34 @@ class AssessmentCreateView(AssessmentAPIView):
                     filter_kwargs['centre_id'] = target_centre_id
 
                 assessment = Assessment.objects.filter(**filter_kwargs).first()
+                if not assessment and target_centre_id:
+                    unassigned = (
+                        Assessment.objects.filter(
+                            academic_year_id=ay_id,
+                            class_id=cid,
+                            assessment_type=exam_obj,
+                            centre_id__isnull=True,
+                        )
+                        .annotate(scores_cnt=Count('scores'))
+                        .filter(scores_cnt=0)
+                        .first()
+                    )
+                    if unassigned:
+                        unassigned.centre_id = target_centre_id
+                        unassigned.assessment_date = assessment_date
+                        unassigned.save()
+                        assessment = unassigned
+                elif not assessment and not target_centre_id:
+                    existing = Assessment.objects.filter(
+                        academic_year_id=ay_id,
+                        class_id=cid,
+                        assessment_type=exam_obj,
+                    ).first()
+                    if existing:
+                        assessment = existing
+                        assessment.assessment_date = assessment_date
+                        assessment.save()
+
                 if not assessment:
                     assessment = Assessment.objects.create(
                         academic_year_id=ay_id,
@@ -461,27 +579,46 @@ class AssessmentCreateView(AssessmentAPIView):
                 }
                 if ay_id:
                     as_filter['academic_year_id'] = ay_id
-                if target_centre_id:
-                    as_filter['centre_id'] = target_centre_id
 
-                as_entry = AssessmentSubject.objects.filter(**as_filter).first()
-                if not as_entry:
-                    AssessmentSubject.objects.create(
-                        class_id=cid,
-                        exam_id=eid,
-                        academic_year_id=ay_id,
-                        centre_id=target_centre_id,
-                        max_marks=parsed_max_marks,
-                        is_active=True,
-                        subject_ids=subject_ids if subject_ids else [],
-                    )
+                subject_marks = request.data.get('subjectMarks')
+                if isinstance(subject_marks, dict) and subject_marks:
+                    groups = {}
+                    for sid_str, m_val in subject_marks.items():
+                        try:
+                            s_id = int(sid_str)
+                            m_dec = Decimal(str(m_val))
+                            groups.setdefault(m_dec, []).append(s_id)
+                        except (ValueError, TypeError):
+                            continue
+                    if groups:
+                        AssessmentSubject.objects.filter(**as_filter).delete()
+                        for m_dec, sub_ids in groups.items():
+                            AssessmentSubject.objects.create(
+                                class_id=cid,
+                                exam_id=eid,
+                                academic_year_id=ay_id,
+                                max_marks=m_dec,
+                                subject_ids=sub_ids,
+                                is_active=True,
+                            )
                 else:
-                    if subject_ids:
-                        as_entry.subject_ids = subject_ids
-                    if max_marks is not None:
-                        as_entry.max_marks = parsed_max_marks
-                    as_entry.is_active = True
-                    as_entry.save()
+                    as_entry = AssessmentSubject.objects.filter(**as_filter).first()
+                    if not as_entry:
+                        AssessmentSubject.objects.create(
+                            class_id=cid,
+                            exam_id=eid,
+                            academic_year_id=ay_id,
+                            max_marks=parsed_max_marks,
+                            is_active=True,
+                            subject_ids=subject_ids if subject_ids else [],
+                        )
+                    else:
+                        if subject_ids:
+                            as_entry.subject_ids = subject_ids
+                        if max_marks is not None:
+                            as_entry.max_marks = parsed_max_marks
+                        as_entry.is_active = True
+                        as_entry.save()
 
         first_resp = AssessmentSerializer(created_assessments[0]).data if created_assessments else {}
         return Response({
@@ -510,12 +647,35 @@ class AssessmentDetailView(AssessmentAPIView):
         )
         if assessment.academic_year_id:
             as_qs = as_qs.filter(Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True))
-        if assessment.centre_id:
-            as_qs = as_qs.filter(Q(centre_id=assessment.centre_id) | Q(centre_id__isnull=True))
 
-        as_entry = as_qs.exclude(subject_ids=[]).order_by('-assessment_subject_id').first() or as_qs.order_by('-assessment_subject_id').first()
-        subject_ids = as_entry.subject_ids if (as_entry and as_entry.subject_ids) else []
-        max_marks = float(as_entry.max_marks) if (as_entry and as_entry.max_marks is not None) else 100.0
+        all_subject_ids = []
+        subject_marks_map = {}
+        for entry in as_qs.order_by('assessment_subject_id'):
+            for sid in (entry.subject_ids or []):
+                try:
+                    sid_int = int(sid)
+                    if sid_int not in all_subject_ids:
+                        all_subject_ids.append(sid_int)
+                    subject_marks_map[sid_int] = float(entry.max_marks)
+                except (ValueError, TypeError):
+                    pass
+
+        total_max_marks = sum(subject_marks_map.values()) if subject_marks_map else 100.0
+        related_assessments = Assessment.objects.filter(
+            class_id=assessment.class_id,
+            assessment_type_id=assessment.assessment_type_id,
+        )
+        if assessment.academic_year_id:
+            related_assessments = related_assessments.filter(
+                Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True)
+            )
+
+        assessment_filter = Q(assessment=assessment) | Q(assessment__in=related_assessments)
+        scores_count = AssessmentScore.objects.filter(assessment_filter).count()
+        scored_subject_ids = list(
+            AssessmentScore.objects.filter(assessment_filter).values_list('subject_id', flat=True).distinct()
+        )
+
         return Response({
             'id': assessment.assessment_id,
             'status': assessment.status,
@@ -528,14 +688,135 @@ class AssessmentDetailView(AssessmentAPIView):
             'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
             'centreId': assessment.centre_id,
             'centreName': assessment.centre.centre_name if assessment.centre else '',
-            'subjectIds': subject_ids,
-            'maxMarks': max_marks,
+            'subjectIds': all_subject_ids,
+            'subjectMarks': subject_marks_map,
+            'maxMarks': total_max_marks,
             'totalStudents': student_count,
+            'hasScores': scores_count > 0,
+            'scoresCount': scores_count,
+            'scoredSubjectIds': scored_subject_ids,
         })
 
     def patch(self, request, assessment_id):
         assessment = _get_assessment_or_404(assessment_id)
         data = request.data
+        delete_scores = bool(data.get('deleteScores', False))
+
+        # Collect related assessments sharing the same class, exam, and academic year
+        related_assessments = Assessment.objects.filter(
+            class_id=assessment.class_id,
+            assessment_type_id=assessment.assessment_type_id,
+        )
+        if assessment.academic_year_id:
+            related_assessments = related_assessments.filter(
+                Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True)
+            )
+
+        assessment_filter = Q(assessment=assessment) | Q(assessment__in=related_assessments)
+        scores_count = AssessmentScore.objects.filter(assessment_filter).count()
+        scores_exist = scores_count > 0
+
+        subject_marks = data.get('subjectMarks')
+        subject_ids = data.get('subjectIds')
+        max_m = Decimal(str(data['maxMarks'])) if ('maxMarks' in data and data['maxMarks'] is not None) else None
+
+        # Collect current existing subject IDs and marks map for this assessment definition
+        prev_as_qs = AssessmentSubject.objects.filter(
+            class_id=assessment.class_id,
+            exam_id=assessment.assessment_type_id,
+            is_active=True,
+        )
+        if assessment.academic_year_id:
+            prev_as_qs = prev_as_qs.filter(Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True))
+
+        prev_subject_ids = set()
+        prev_subject_marks = {}
+        for pas in prev_as_qs:
+            for sid in (pas.subject_ids or []):
+                try:
+                    sid_int = int(sid)
+                    prev_subject_ids.add(sid_int)
+                    if sid_int not in prev_subject_marks and pas.max_marks is not None:
+                        prev_subject_marks[sid_int] = Decimal(str(pas.max_marks))
+                except (ValueError, TypeError):
+                    pass
+
+        # Parse incoming new subject IDs and marks map
+        new_subject_ids = set()
+        new_subject_marks = {}
+        if isinstance(subject_marks, dict) and subject_marks:
+            for sid_str, m_val in subject_marks.items():
+                try:
+                    s_id = int(sid_str)
+                    new_subject_ids.add(s_id)
+                    new_subject_marks[s_id] = Decimal(str(m_val))
+                except (ValueError, TypeError):
+                    continue
+        elif isinstance(subject_ids, list):
+            for sid in subject_ids:
+                try:
+                    s_id = int(sid)
+                    new_subject_ids.add(s_id)
+                    new_subject_marks[s_id] = max_m if max_m is not None else Decimal('100.00')
+                except (ValueError, TypeError):
+                    continue
+
+        new_subjects_added = bool(new_subject_ids - prev_subject_ids)
+        removed_subject_ids = prev_subject_ids - new_subject_ids
+
+        # Identify which existing subjects had their maximum marks changed
+        changed_marks_subject_ids = set()
+        for sid in prev_subject_ids:
+            if sid in new_subject_marks and sid in prev_subject_marks:
+                if new_subject_marks[sid] != prev_subject_marks[sid]:
+                    changed_marks_subject_ids.add(sid)
+            elif sid in prev_subject_marks and max_m is not None and max_m != prev_subject_marks[sid]:
+                changed_marks_subject_ids.add(sid)
+
+        # Subjects where changes have been made that have scores
+        removed_subjects_with_scores = set(
+            AssessmentScore.objects.filter(assessment_filter, subject_id__in=removed_subject_ids)
+            .values_list('subject_id', flat=True)
+            .distinct()
+        )
+        changed_marks_with_scores = set(
+            AssessmentScore.objects.filter(assessment_filter, subject_id__in=changed_marks_subject_ids)
+            .values_list('subject_id', flat=True)
+            .distinct()
+        )
+        subjects_with_changes_with_scores = removed_subjects_with_scores | changed_marks_with_scores
+
+        # Check if marks are already submitted for removed subject(s) without confirmation
+        if removed_subjects_with_scores and not delete_scores:
+            return Response({
+                'error': 'Marks are already submitted for that subject, do you want to delete them?',
+                'hasScores': True,
+                'scoresCount': scores_count,
+                'scoredSubjectIds': list(removed_subjects_with_scores),
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if marks entry exists and existing marks were changed without confirmation
+        if changed_marks_with_scores and not delete_scores:
+            return Response({
+                'error': 'Marks entry has been made for the assessment. Do you want to delete those entries?',
+                'hasScores': True,
+                'scoresCount': scores_count,
+                'scoredSubjectIds': list(changed_marks_with_scores),
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if scores_exist and delete_scores and subjects_with_changes_with_scores:
+            # Only delete marks for the subjects where changes have been made
+            AssessmentScore.objects.filter(
+                assessment_filter,
+                subject_id__in=subjects_with_changes_with_scores,
+            ).delete()
+            AssessmentSubmission.objects.filter(assessment_filter).delete()
+            assessment.status = Assessment.STATUS_DRAFT
+            for rel_a in related_assessments:
+                if rel_a.status == Assessment.STATUS_SUBMITTED:
+                    rel_a.status = Assessment.STATUS_DRAFT
+                    rel_a.save()
+
         if 'assessmentTypeId' in data and data['assessmentTypeId']:
             assessment.assessment_type_id = int(data['assessmentTypeId'])
         if 'academicYearId' in data and data['academicYearId']:
@@ -549,31 +830,90 @@ class AssessmentDetailView(AssessmentAPIView):
             assessment.centre_id = int(cid) if cid else None
         if 'status' in data and data['status']:
             assessment.status = data['status']
+
+        # Demote submitted marks entry to draft if new subjects are being added to the assessment
+        if new_subjects_added:
+            assessment.status = Assessment.STATUS_DRAFT
+
         assessment.save()
 
-        max_m = Decimal(str(data['maxMarks'])) if ('maxMarks' in data and data['maxMarks'] is not None) else None
+        if new_subjects_added:
+            AssessmentSubmission.objects.filter(assessment=assessment).delete()
+            # Also demote any other submitted assessments sharing the same class, exam, and academic year
+            demote_qs = Assessment.objects.filter(
+                class_id=assessment.class_id,
+                assessment_type_id=assessment.assessment_type_id,
+                status=Assessment.STATUS_SUBMITTED,
+            )
+            if assessment.academic_year_id:
+                demote_qs = demote_qs.filter(
+                    Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True)
+                )
 
-        if ('subjectIds' in data and isinstance(data['subjectIds'], list)) or max_m is not None:
-            as_entry = AssessmentSubject.objects.filter(
+            for rel_a in demote_qs:
+                rel_a.status = Assessment.STATUS_DRAFT
+                rel_a.save()
+                AssessmentSubmission.objects.filter(assessment=rel_a).delete()
+
+        # Update AssessmentSubject configs
+        filter_kwargs = {
+            'class_id': assessment.class_id,
+            'exam_id': assessment.assessment_type_id,
+        }
+        if assessment.academic_year_id:
+            filter_kwargs['academic_year_id'] = assessment.academic_year_id
+
+        if isinstance(subject_marks, dict) and subject_marks:
+            groups = {}
+            for sid_str, m_val in subject_marks.items():
+                try:
+                    s_id = int(sid_str)
+                    m_dec = Decimal(str(m_val))
+                    groups.setdefault(m_dec, []).append(s_id)
+                except (ValueError, TypeError):
+                    continue
+
+            if groups:
+                AssessmentSubject.objects.filter(**filter_kwargs).delete()
+                for m_dec, sub_ids in groups.items():
+                    AssessmentSubject.objects.create(
+                        class_id=assessment.class_id,
+                        exam_id=assessment.assessment_type_id,
+                        academic_year_id=assessment.academic_year_id,
+                        max_marks=m_dec,
+                        subject_ids=sub_ids,
+                        is_active=True,
+                    )
+        elif (isinstance(subject_ids, list) and subject_ids) or max_m is not None:
+            AssessmentSubject.objects.filter(**filter_kwargs).delete()
+            AssessmentSubject.objects.create(
                 class_id=assessment.class_id,
                 exam_id=assessment.assessment_type_id,
-            ).order_by('-assessment_subject_id').first()
-            if as_entry:
-                if 'subjectIds' in data and isinstance(data['subjectIds'], list):
-                    as_entry.subject_ids = data['subjectIds']
-                if max_m is not None:
-                    as_entry.max_marks = max_m
-                as_entry.save()
-            else:
-                AssessmentSubject.objects.create(
-                    class_id=assessment.class_id,
-                    exam_id=assessment.assessment_type_id,
-                    academic_year_id=assessment.academic_year_id,
-                    centre_id=assessment.centre_id,
-                    subject_ids=data.get('subjectIds', []),
-                    max_marks=max_m if max_m is not None else Decimal('100'),
-                    is_active=True,
-                )
+                academic_year_id=assessment.academic_year_id,
+                subject_ids=subject_ids if subject_ids is not None else [],
+                max_marks=max_m if max_m is not None else Decimal('100.00'),
+                is_active=True,
+            )
+
+        as_qs = AssessmentSubject.objects.filter(
+            class_id=assessment.class_id,
+            exam_id=assessment.assessment_type_id,
+            is_active=True,
+        )
+        if assessment.academic_year_id:
+            as_qs = as_qs.filter(Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True))
+
+        all_subject_ids = []
+        res_subject_marks = {}
+        for entry in as_qs.order_by('assessment_subject_id'):
+            for sid in (entry.subject_ids or []):
+                try:
+                    sid_int = int(sid)
+                    if sid_int not in all_subject_ids:
+                        all_subject_ids.append(sid_int)
+                    res_subject_marks[sid_int] = float(entry.max_marks)
+                except (ValueError, TypeError):
+                    pass
 
         return Response({
             'id': assessment.assessment_id,
@@ -586,6 +926,13 @@ class AssessmentDetailView(AssessmentAPIView):
             'classId': assessment.class_id,
             'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
             'centreId': assessment.centre_id,
+            'subjectIds': all_subject_ids,
+            'subjectMarks': res_subject_marks,
+            'maxMarks': sum(res_subject_marks.values()) if res_subject_marks else 100.0,
+            'hasScores': AssessmentScore.objects.filter(assessment_filter).exists(),
+            'scoredSubjectIds': list(
+                AssessmentScore.objects.filter(assessment_filter).values_list('subject_id', flat=True).distinct()
+            ),
             'message': 'Assessment updated successfully',
         })
 
@@ -876,15 +1223,17 @@ class AssessmentSubmitView(AssessmentAPIView):
         )
         if assessment.academic_year_id:
             as_qs = as_qs.filter(Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True))
-        if assessment.centre_id:
-            as_qs = as_qs.filter(Q(centre_id=assessment.centre_id) | Q(centre_id__isnull=True))
 
-        as_entry = as_qs.exclude(subject_ids=[]).order_by('-assessment_subject_id').first()
-        if not as_entry:
-            as_entry = as_qs.order_by('-assessment_subject_id').first()
+        all_cfg_subject_ids = set()
+        for entry in as_qs:
+            for sid in (entry.subject_ids or []):
+                try:
+                    all_cfg_subject_ids.add(int(sid))
+                except (ValueError, TypeError):
+                    pass
 
-        if as_entry and as_entry.subject_ids:
-            class_subjects = Subject.objects.filter(subject_id__in=as_entry.subject_ids)
+        if all_cfg_subject_ids:
+            class_subjects = Subject.objects.filter(subject_id__in=all_cfg_subject_ids)
         else:
             # Fall back only to subjects that have actual scores recorded for this assessment
             scores_subject_ids = set(AssessmentScore.objects.filter(assessment=assessment).values_list('subject_id', flat=True).distinct())
@@ -1198,12 +1547,17 @@ class SubjectComparisonView(AssessmentAPIView):
         )
         if assessment.academic_year_id:
             as_qs = as_qs.filter(Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True))
-        if assessment.centre_id:
-            as_qs = as_qs.filter(Q(centre_id=assessment.centre_id) | Q(centre_id__isnull=True))
 
-        as_entry = as_qs.exclude(subject_ids=[]).order_by('-assessment_subject_id').first() or as_qs.order_by('-assessment_subject_id').first()
-        if as_entry and as_entry.subject_ids:
-            subjects = Subject.objects.filter(subject_id__in=as_entry.subject_ids)
+        all_sids = set()
+        for as_entry in as_qs:
+            for sid in (as_entry.subject_ids or []):
+                try:
+                    all_sids.add(int(sid))
+                except (ValueError, TypeError):
+                    pass
+
+        if all_sids:
+            subjects = Subject.objects.filter(subject_id__in=all_sids)
         else:
             scores_subject_ids = set(AssessmentScore.objects.filter(assessment=assessment).values_list('subject_id', flat=True).distinct())
             subjects = Subject.objects.filter(subject_id__in=scores_subject_ids) if scores_subject_ids else Subject.objects.all()

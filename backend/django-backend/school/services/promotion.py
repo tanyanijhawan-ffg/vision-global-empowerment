@@ -23,10 +23,8 @@ def _subject_max_marks(assessment, subject_id):
         exam_id=assessment.assessment_type_id,
         is_active=True,
     )
-    if assessment.centre_id:
-        for c_config in configs.filter(centre_id=assessment.centre_id).order_by('-assessment_subject_id'):
-            if c_config.max_marks is not None and subject_id in (c_config.subject_ids or []):
-                return Decimal(str(c_config.max_marks))
+    if assessment.academic_year_id:
+        configs = configs.filter(Q(academic_year_id=assessment.academic_year_id) | Q(academic_year_id__isnull=True))
     for config in configs.order_by('-assessment_subject_id'):
         if config.max_marks is not None and subject_id in (config.subject_ids or []):
             return Decimal(str(config.max_marks))

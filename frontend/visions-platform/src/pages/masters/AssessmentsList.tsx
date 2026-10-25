@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Edit2, Search, Trash2, X, Plus, Filter, ChevronDown, AlertCircle, Check } from 'lucide-react';
+import { Edit2, Search, Trash2, X, Plus, Filter, ChevronDown, AlertCircle, Check, AlertTriangle } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import { getCurrentUser } from '../../lib/auth';
 import {
@@ -45,15 +45,23 @@ export default function AssessmentsList() {
   // Form Modal state
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editHasScores, setEditHasScores] = useState<boolean>(false);
+  const [editScoresCount, setEditScoresCount] = useState<number>(0);
+  const [scoredSubjectIds, setScoredSubjectIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+  const [subjectToRemoveWithScores, setSubjectToRemoveWithScores] = useState<number | null>(null);
+  const [assessmentToDelete, setAssessmentToDelete] = useState<number | null>(null);
+  const [showEditMarksWarningModal, setShowEditMarksWarningModal] = useState<boolean>(false);
 
   // Form fields
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<number | ''>('');
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
   const [selectedExamIds, setSelectedExamIds] = useState<number[]>([]);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<number[]>([]);
+  const [initialSubjectIds, setInitialSubjectIds] = useState<number[]>([]);
   const [maxMarks, setMaxMarks] = useState<number>(100);
   const [subjectMaxMarks, setSubjectMaxMarks] = useState<Record<number, number>>({});
+  const [initialSubjectMarks, setInitialSubjectMarks] = useState<Record<number, number>>({});
   const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
 
   // Sub-modals for inline creation
@@ -120,7 +128,15 @@ export default function AssessmentsList() {
     );
     const selYearStart = selYearObj?.name?.match(/\d{4}/)?.[0] || String(filterYear);
 
+    const seenKeys = new Set<string>();
+
     return data.filter((item) => {
+      const dedupKey = `${item.academicYearId || item.academicYear}_${item.classId || item.class}_${item.assessmentTypeId || item.assessmentType}`;
+      if (seenKeys.has(dedupKey)) {
+        return false;
+      }
+      seenKeys.add(dedupKey);
+
       const matchesSearch =
         [item.assessmentType, item.academicYear, item.class, item.centreName]
           .join(' ')
@@ -165,8 +181,66 @@ export default function AssessmentsList() {
     }));
   };
 
+  const existingCombinationsWarning = useMemo(() => {
+    if (editingId || selectedClassIds.length === 0 || selectedExamIds.length === 0) {
+      return [];
+    }
+    const selectedYearNum = Number(selectedAcademicYearId);
+    const conflicting: string[] = [];
+
+    for (const cid of selectedClassIds) {
+      for (const eid of selectedExamIds) {
+        const exists = data.some((item) => {
+          const matchYear =
+            !selectedYearNum ||
+            !item.academicYearId ||
+            Number(item.academicYearId) === selectedYearNum ||
+            String(item.academicYear) === String(selectedYearNum);
+          const matchClass =
+            (item.classId && Number(item.classId) === Number(cid)) ||
+            normalizeClass(item.class) === normalizeClass(cid);
+          const matchExam =
+            (item.assessmentTypeId && Number(item.assessmentTypeId) === Number(eid)) ||
+            String(item.assessmentTypeId) === String(eid);
+          return matchYear && matchClass && matchExam;
+        });
+
+        if (exists) {
+          const clsName = classes.find((c) => c.id === cid)?.name || `Class ${cid}`;
+          const examName = exams.find((e) => e.id === eid)?.name || `Exam ${eid}`;
+          conflicting.push(`${clsName} - ${examName}`);
+        }
+      }
+    }
+    return conflicting;
+  }, [editingId, selectedClassIds, selectedExamIds, selectedAcademicYearId, data, classes, exams, normalizeClass]);
+
+  const isSubmitDisabled = Boolean(
+    saving ||
+    !selectedAcademicYearId ||
+    selectedClassIds.length === 0 ||
+    selectedExamIds.length === 0 ||
+    selectedSubjectIds.length === 0 ||
+    (!editingId && existingCombinationsWarning.length > 0)
+  );
+
+  const submitDisabledReason = useMemo(() => {
+    if (saving) return 'Saving in progress...';
+    if (!selectedAcademicYearId) return 'Please select an academic year';
+    if (selectedClassIds.length === 0) return 'Please select at least one class';
+    if (selectedExamIds.length === 0) return 'Please select at least one exam';
+    if (selectedSubjectIds.length === 0) return 'Please select at least one subject';
+    if (!editingId && existingCombinationsWarning.length > 0) {
+      return `Cannot create assessment: combination already exists (${existingCombinationsWarning.join(', ')})`;
+    }
+    return undefined;
+  }, [saving, selectedAcademicYearId, selectedClassIds.length, selectedExamIds.length, selectedSubjectIds.length, editingId, existingCombinationsWarning]);
+
   const openAddForm = () => {
     setEditingId(null);
+    setEditHasScores(false);
+    setEditScoresCount(0);
+    setScoredSubjectIds([]);
     setError('');
     setNotice('');
 
@@ -211,6 +285,12 @@ export default function AssessmentsList() {
     setSelectedClassIds(classId ? [Number(classId)] : []);
     setMaxMarks(item.maxMarks || 100);
 
+    let hasScoresVal = Boolean(item.hasScores);
+    let scoresCountVal = item.scoresCount || 0;
+    let scoredIdsVal: number[] = Array.isArray(item.scoredSubjectIds)
+      ? item.scoredSubjectIds.map(Number)
+      : [];
+
     if (yearId) {
       const examList = await fetchAssessmentTypes({ academicYearId: Number(yearId) }).catch(() => []);
       setExams(examList);
@@ -218,34 +298,86 @@ export default function AssessmentsList() {
       setSelectedExamIds(matchExam ? [matchExam.id] : (item.assessmentTypeId ? [item.assessmentTypeId] : []));
     }
 
-    // Try fetching detailed subject IDs and maxMarks if available
+    // Try fetching detailed subject IDs, subjectMarks and hasScores
     try {
       const detail = await fetchAssessmentDetail(item.id);
       if (detail) {
         if (detail.maxMarks) setMaxMarks(detail.maxMarks);
-        if (Array.isArray(detail.subjectIds) && detail.subjectIds.length > 0) {
-          setSelectedSubjectIds(detail.subjectIds);
+
+        if (detail.subjectMarks && Object.keys(detail.subjectMarks).length > 0) {
+          const subIds = Object.keys(detail.subjectMarks).map(Number);
+          setSelectedSubjectIds(subIds);
+          setSubjectMaxMarks(detail.subjectMarks);
+          setInitialSubjectIds(subIds);
+          setInitialSubjectMarks({ ...detail.subjectMarks });
+        } else if (item.subjectMarks && Object.keys(item.subjectMarks).length > 0) {
+          const subIds = Object.keys(item.subjectMarks).map(Number);
+          setSelectedSubjectIds(subIds);
+          setSubjectMaxMarks(item.subjectMarks);
+          setInitialSubjectIds(subIds);
+          setInitialSubjectMarks({ ...item.subjectMarks });
         } else {
-          setSelectedSubjectIds(availableSubjects.map((s) => s.id));
+          const resolvedIds = (Array.isArray(detail.subjectIds) && detail.subjectIds.length > 0)
+            ? detail.subjectIds
+            : (Array.isArray(item.subjectIds) && item.subjectIds.length > 0
+                ? item.subjectIds
+                : availableSubjects.map((s) => s.id));
+          setSelectedSubjectIds(resolvedIds);
+
+          const initialMarks: Record<number, number> = {};
+          resolvedIds.forEach((sid) => {
+            initialMarks[sid] = Number(detail.maxMarks) || 100;
+          });
+          setSubjectMaxMarks(initialMarks);
+          setInitialSubjectIds(resolvedIds);
+          setInitialSubjectMarks(initialMarks);
+        }
+
+        if (typeof detail.hasScores === 'boolean') {
+          hasScoresVal = detail.hasScores;
+        } else if (typeof detail.scoresCount === 'number') {
+          hasScoresVal = detail.scoresCount > 0;
+        }
+        if (typeof detail.scoresCount === 'number') {
+          scoresCountVal = detail.scoresCount;
+        }
+        if (Array.isArray(detail.scoredSubjectIds)) {
+          scoredIdsVal = detail.scoredSubjectIds.map(Number);
         }
       }
     } catch {
-      setSelectedSubjectIds(availableSubjects.map((s) => s.id));
+      const fallbackIds = item.subjectIds || availableSubjects.map((s) => s.id);
+      setSelectedSubjectIds(fallbackIds);
+      setInitialSubjectIds(fallbackIds);
+      if (item.subjectMarks) {
+        setSubjectMaxMarks(item.subjectMarks);
+        setInitialSubjectMarks({ ...item.subjectMarks });
+      }
     }
+
+    setEditHasScores(hasScoresVal);
+    setEditScoresCount(scoresCountVal);
+    setScoredSubjectIds(scoredIdsVal);
   };
 
   const closeForm = () => {
     setIsFormOpen(false);
     setEditingId(null);
+    setEditHasScores(false);
+    setEditScoresCount(0);
+    setScoredSubjectIds([]);
     setError('');
     setSubjectDropdownOpen(false);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this assessment? All recorded scores and entries for this assessment will be deleted.')) {
-      return;
-    }
+  const handleDelete = (id: number) => {
+    setAssessmentToDelete(id);
+  };
 
+  const confirmDelete = async () => {
+    if (!assessmentToDelete) return;
+    const id = assessmentToDelete;
+    setAssessmentToDelete(null);
     try {
       await deleteAssessment(id);
       setNotice('Assessment deleted successfully.');
@@ -255,50 +387,75 @@ export default function AssessmentsList() {
     }
   };
 
-  const handleFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedClassIds.length === 0) {
-      setError('Please select at least one class.');
-      return;
-    }
-    if (selectedExamIds.length === 0) {
-      setError('Please select at least one exam.');
-      return;
-    }
-
+  const performSave = async (shouldDeleteScoresExplicit?: boolean) => {
     setSaving(true);
     setError('');
     setNotice('');
 
     const defaultDate = new Date().toISOString().split('T')[0];
+    const subjectMarksPayload: Record<number, number> = {};
+    selectedSubjectIds.forEach((id) => {
+      subjectMarksPayload[id] = Number(subjectMaxMarks[id]) || 100;
+    });
 
     try {
       if (editingId) {
+        const isAddingNewSubjects = selectedSubjectIds.some((sid) => !initialSubjectIds.includes(sid));
+        const hasRemovedScoredSubject = initialSubjectIds.some(
+          (sid) => !selectedSubjectIds.includes(sid) && (scoredSubjectIds.includes(sid) || editHasScores)
+        );
+
+        const shouldDeleteScores = shouldDeleteScoresExplicit ?? hasRemovedScoredSubject;
+
         await updateAssessment(editingId, {
           academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
           classId: Number(selectedClassIds[0]),
           assessmentTypeId: Number(selectedExamIds[0]),
           subjectIds: selectedSubjectIds,
-          maxMarks: Number(maxMarks),
+          maxMarks: totalMaxMarks,
+          subjectMarks: subjectMarksPayload,
+          deleteScores: shouldDeleteScores,
         });
-        setNotice('Assessment updated successfully!');
+
+        // Also update subject metadata
+        if (selectedSubjectIds.length > 0) {
+          await createAssessmentSubjectMetadata({
+            academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+            classIds: selectedClassIds,
+            examIds: selectedExamIds,
+            subjectIds: selectedSubjectIds,
+            maxMarks: totalMaxMarks,
+            subjectMarks: subjectMarksPayload,
+            isActive: true,
+          }).catch(() => null);
+        }
+
+        if (isAddingNewSubjects) {
+          setNotice('Assessment updated! Marks entry demoted to draft for new subject entry.');
+        } else {
+          setNotice('Assessment updated successfully!');
+        }
       } else {
+        if (existingCombinationsWarning.length > 0) {
+          setError(
+            `New assessment cannot be created as the same exam and class combination already exists (${existingCombinationsWarning.join(', ')}).`
+          );
+          setSaving(false);
+          return;
+        }
+
         await createAssessment({
           academicYearId: Number(selectedAcademicYearId),
           classIds: selectedClassIds,
           assessmentTypeIds: selectedExamIds,
           assessmentDate: defaultDate,
           subjectIds: selectedSubjectIds,
-          maxMarks: Number(maxMarks),
+          maxMarks: totalMaxMarks,
+          subjectMarks: subjectMarksPayload,
         });
 
         // Also save subject metadata
         if (selectedSubjectIds.length > 0) {
-          const subjectMarksPayload: Record<number, number> = {};
-          selectedSubjectIds.forEach((id) => {
-            subjectMarksPayload[id] = Number(subjectMaxMarks[id]) || 100;
-          });
-
           await createAssessmentSubjectMetadata({
             academicYearId: Number(selectedAcademicYearId),
             classIds: selectedClassIds,
@@ -321,6 +478,41 @@ export default function AssessmentsList() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedClassIds.length === 0) {
+      setError('Please select at least one class.');
+      return;
+    }
+    if (selectedExamIds.length === 0) {
+      setError('Please select at least one exam.');
+      return;
+    }
+
+    if (editingId && editHasScores) {
+      const subjectMarksPayload: Record<number, number> = {};
+      selectedSubjectIds.forEach((id) => {
+        subjectMarksPayload[id] = Number(subjectMaxMarks[id]) || 100;
+      });
+
+      const isEditingExistingMarks = initialSubjectIds.some(
+        (sid) =>
+          selectedSubjectIds.includes(sid) &&
+          subjectMarksPayload[sid] !== undefined &&
+          initialSubjectMarks[sid] !== undefined &&
+          subjectMarksPayload[sid] !== initialSubjectMarks[sid] &&
+          (scoredSubjectIds.includes(sid) || editHasScores)
+      );
+
+      if (isEditingExistingMarks) {
+        setShowEditMarksWarningModal(true);
+        return;
+      }
+    }
+
+    await performSave();
   };
 
   // Inline Subject Creation
@@ -419,6 +611,18 @@ export default function AssessmentsList() {
     setSelectedSubjectIds((prev) =>
       prev.includes(id) ? prev.filter((sId) => sId !== id) : [...prev, id]
     );
+  };
+
+  const handleRemoveSubject = (subId: number) => {
+    if (
+      editingId &&
+      (scoredSubjectIds.includes(subId) ||
+        (editHasScores && (scoredSubjectIds.length === 0 || initialSubjectIds.includes(subId))))
+    ) {
+      setSubjectToRemoveWithScores(subId);
+      return;
+    }
+    toggleSubjectSelect(subId);
   };
 
   const unselectedSubjects = useMemo(() => {
@@ -641,6 +845,44 @@ export default function AssessmentsList() {
             </div>
 
             <div className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto">
+            {/* Error display inside modal */}
+            {error ? (
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start justify-between gap-2.5 text-rose-800 text-xs sm:text-sm">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={17} className="text-rose-600 flex-shrink-0 mt-0.5" />
+                  <span className="font-medium leading-relaxed">{error}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError('')}
+                  className="text-rose-600 hover:text-rose-900 cursor-pointer shrink-0"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : null}
+
+            {/* Warning when existing combination is selected during creation */}
+            {!editingId && existingCombinationsWarning.length > 0 ? (
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-amber-800 text-xs sm:text-sm">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Combination already exists:</span> An assessment already exists for{' '}
+                  <span className="font-semibold underline">{existingCombinationsWarning.join(', ')}</span>. New assessment cannot be created with this combination.
+                </div>
+              </div>
+            ) : null}
+
+            {/* Disclaimer when editing assessment */}
+            {editingId && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-amber-800 text-xs sm:text-sm">
+                <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Disclaimer:</span> Editing marks or removing subjects will only delete entries made for the modified subjects.
+                </div>
+              </div>
+            )}
+
             {/* When Editing: show single selects */}
             {editingId ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -971,7 +1213,7 @@ export default function AssessmentsList() {
 
                           <button
                             type="button"
-                            onClick={() => toggleSubjectSelect(subId)}
+                            onClick={() => handleRemoveSubject(subId)}
                             title="Remove Subject"
                             className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
                           >
@@ -1007,8 +1249,9 @@ export default function AssessmentsList() {
               </button>
               <button
                 type="submit"
-                disabled={saving || (!editingId && (selectedClassIds.length === 0 || selectedExamIds.length === 0))}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                disabled={isSubmitDisabled}
+                title={submitDisabledReason}
+                className="px-5 py-2 font-medium text-xs rounded-xl shadow-xs transition-all bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer"
               >
                 {saving
                   ? 'Saving...'
@@ -1232,6 +1475,126 @@ export default function AssessmentsList() {
           </form>
         </div>
       ) : null}
+
+      {/* In-app confirmation modal for deleting a subject with submitted marks */}
+      {subjectToRemoveWithScores !== null && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Submitted Marks?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Subject Removal Confirmation</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-700 leading-relaxed font-medium">
+              Marks are already submitted for that subject, do you want to delete them?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setSubjectToRemoveWithScores(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                No, Keep Subject
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  toggleSubjectSelect(subjectToRemoveWithScores);
+                  setSubjectToRemoveWithScores(null);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
+              >
+                OK, Delete Marks
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-app confirmation modal for deleting an assessment */}
+      {assessmentToDelete !== null && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Assessment?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Permanent Deletion Confirmation</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-700 leading-relaxed font-medium">
+              Delete this assessment? All recorded scores and entries for this assessment will be deleted.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setAssessmentToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
+              >
+                Delete Assessment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-app confirmation modal for editing maximum marks on scored subjects */}
+      {showEditMarksWarningModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Update Maximum Marks?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Existing Scores Detected</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-700 leading-relaxed font-medium">
+              Marks entry has been made for the edited subject(s). Do you want to delete those entries?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowEditMarksWarningModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowEditMarksWarningModal(false);
+                  await performSave(true);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-sm transition cursor-pointer"
+              >
+                OK, Delete Entries & Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

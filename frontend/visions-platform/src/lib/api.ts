@@ -321,6 +321,11 @@ export interface Assessment {
   centreName?: string;
   maxMarks?: number;
   totalStudents?: number;
+  subjectIds?: number[];
+  subjectMarks?: Record<number, number>;
+  hasScores?: boolean;
+  scoresCount?: number;
+  scoredSubjectIds?: number[];
 }
 
 export interface AssessmentScoreInput {
@@ -539,6 +544,7 @@ export const createAssessment = (payload: {
   centreId?: number | string;
   subjectIds?: number[];
   maxMarks?: number;
+  subjectMarks?: Record<number, number>;
 }) => apiRequest<Assessment>("/v1/assessments/", { method: "POST", body: JSON.stringify(payload) });
 export const fetchAssessments = (params?: {
   classId?: number;
@@ -557,7 +563,7 @@ export const fetchAssessments = (params?: {
   return apiRequest<Assessment[]>(`/v1/assessments/${qs ? `?${qs}` : ''}`);
 };
 export const fetchAssessmentDetail = (assessmentId: number) =>
-  apiRequest<Assessment & { subjectIds?: number[]; maxMarks?: number; totalStudents?: number }>(`/v1/assessments/${assessmentId}/`);
+  apiRequest<Assessment & { subjectIds?: number[]; subjectMarks?: Record<number, number>; maxMarks?: number; totalStudents?: number; hasScores?: boolean; scoresCount?: number }>(`/v1/assessments/${assessmentId}/`);
 export const updateAssessment = (
   assessmentId: number,
   payload: {
@@ -568,7 +574,9 @@ export const updateAssessment = (
     centreId?: number | string;
     subjectIds?: number[];
     maxMarks?: number;
+    subjectMarks?: Record<number, number>;
     status?: string;
+    deleteScores?: boolean;
   }
 ) => apiRequest<Assessment>(`/v1/assessments/${assessmentId}/`, { method: "PATCH", body: JSON.stringify(payload) });
 export const deleteAssessment = (assessmentId: number) =>

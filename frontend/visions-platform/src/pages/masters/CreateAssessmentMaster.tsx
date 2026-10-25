@@ -5,6 +5,7 @@ import {
   fetchSchoolClasses,
   fetchAssessmentTypes,
   fetchAllSubjects,
+  fetchAssessments,
   createSubjectMetadata,
   createExamMetadata,
   createAssessmentSubjectMetadata,
@@ -13,6 +14,7 @@ import {
   type SchoolClass,
   type AssessmentType,
   type Subject,
+  type Assessment,
 } from '../../lib/api';
 
 export default function CreateAssessmentMaster() {
@@ -34,6 +36,7 @@ export default function CreateAssessmentMaster() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [existingAssessments, setExistingAssessments] = useState<Assessment[]>([]);
 
   // Modals state
   const [addSubjectModalOpen, setAddSubjectModalOpen] = useState(false);
@@ -70,8 +73,10 @@ export default function CreateAssessmentMaster() {
       fetchAcademicYears().catch(() => []),
       fetchSchoolClasses().catch(() => []),
       fetchAllSubjects().catch(() => []),
+      fetchAssessments().catch(() => []),
     ])
-      .then(([yearList, classList, subjectList]) => {
+      .then(([yearList, classList, subjectList, assessmentList]) => {
+        setExistingAssessments(assessmentList);
         setAcademicYears(yearList);
         if (yearList.length > 0) {
           const currentYear = yearList.find((y) => y.isCurrent) || yearList[0];
@@ -126,6 +131,65 @@ export default function CreateAssessmentMaster() {
     }, 0);
   }, [selectedSubjectIds, subjectMaxMarks]);
 
+  const normalizeClass = (val?: string | number) => String(val || '').replace(/[^0-9]/g, '');
+
+  const existingCombinationsWarning = useMemo(() => {
+    if (selectedClassIds.length === 0 || selectedExamIds.length === 0) {
+      return [];
+    }
+    const selectedYearNum = Number(selectedAcademicYearId);
+    const conflicting: string[] = [];
+
+    for (const cid of selectedClassIds) {
+      for (const eid of selectedExamIds) {
+        const exists = existingAssessments.some((item) => {
+          const matchYear =
+            !selectedYearNum ||
+            !item.academicYearId ||
+            Number(item.academicYearId) === selectedYearNum ||
+            String(item.academicYear) === String(selectedYearNum);
+          const matchClass =
+            (item.classId && Number(item.classId) === Number(cid)) ||
+            normalizeClass(item.class) === normalizeClass(cid);
+          const matchExam =
+            (item.assessmentTypeId && Number(item.assessmentTypeId) === Number(eid)) ||
+            String(item.assessmentTypeId) === String(eid);
+          return matchYear && matchClass && matchExam;
+        });
+
+        if (exists) {
+          const clsName = classes.find((c) => c.id === cid)?.name || `Class ${cid}`;
+          const examName = exams.find((e) => e.id === eid)?.name || `Exam ${eid}`;
+          conflicting.push(`${clsName} - ${examName}`);
+        }
+      }
+    }
+    return conflicting;
+  }, [selectedClassIds, selectedExamIds, selectedAcademicYearId, existingAssessments, classes, exams]);
+
+  const isCreateDisabled = Boolean(
+    saving ||
+    loading ||
+    !selectedAcademicYearId ||
+    selectedClassIds.length === 0 ||
+    selectedExamIds.length === 0 ||
+    selectedSubjectIds.length === 0 ||
+    existingCombinationsWarning.length > 0
+  );
+
+  const createDisabledReason = useMemo(() => {
+    if (saving) return 'Saving in progress...';
+    if (loading) return 'Loading...';
+    if (!selectedAcademicYearId) return 'Please select an academic year';
+    if (selectedClassIds.length === 0) return 'Please select at least one class';
+    if (selectedExamIds.length === 0) return 'Please select at least one exam';
+    if (selectedSubjectIds.length === 0) return 'Please select at least one subject';
+    if (existingCombinationsWarning.length > 0) {
+      return `Cannot create assessment: combination already exists (${existingCombinationsWarning.join(', ')})`;
+    }
+    return undefined;
+  }, [saving, loading, selectedAcademicYearId, selectedClassIds.length, selectedExamIds.length, selectedSubjectIds.length, existingCombinationsWarning]);
+
   const toggleClassSelect = (classId: number) => {
     setSelectedClassIds((prev) =>
       prev.includes(classId) ? prev.filter((id) => id !== classId) : [...prev, classId]
@@ -167,6 +231,12 @@ export default function CreateAssessmentMaster() {
     }
     if (selectedSubjectIds.length === 0) {
       setError('Please configure at least one subject.');
+      return;
+    }
+    if (existingCombinationsWarning.length > 0) {
+      setError(
+        `New assessment cannot be created as the same exam and class combination already exists (${existingCombinationsWarning.join(', ')}).`
+      );
       return;
     }
 
@@ -314,6 +384,28 @@ export default function CreateAssessmentMaster() {
       </div>
 
       {/* Notifications */}
+      {error && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl text-xs font-semibold flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-rose-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button onClick={() => setError('')} className="text-rose-600 hover:text-rose-900 cursor-pointer">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {existingCombinationsWarning.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-xs font-semibold flex items-start gap-2.5">
+          <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">Combination already exists:</span> An assessment already exists for{' '}
+            <span className="underline">{existingCombinationsWarning.join(', ')}</span>. New assessment cannot be created with this combination.
+          </div>
+        </div>
+      )}
+
       {notice && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-xs font-semibold flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -616,9 +708,10 @@ export default function CreateAssessmentMaster() {
         <div className="pt-2">
           <button
             type="button"
-            disabled={saving || loading}
+            disabled={isCreateDisabled}
+            title={createDisabledReason}
             onClick={handleCreateAssessment}
-            className="w-full sm:w-auto bg-indigo-600 text-white font-bold px-8 py-3.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition shadow-sm cursor-pointer text-xs sm:text-sm"
+            className="w-full sm:w-auto font-bold px-8 py-3.5 rounded-xl transition shadow-sm text-xs sm:text-sm bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer"
           >
             {saving ? 'Creating assessments...' : 'Create assessment'}
           </button>
