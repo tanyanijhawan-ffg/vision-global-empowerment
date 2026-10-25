@@ -339,10 +339,13 @@ def evaluate_and_promote_class(academic_year_id, centre_id, class_id):
     # 4. Ensure Next Academic Year exists
     next_ay = get_or_create_next_academic_year(current_ay)
 
-    # 5. Fetch all SUBMITTED assessments for this class, centre, and academic year
+    # 5. Fetch all SUBMITTED assessments for this class, centre, and academic year.
+    # Include centre-unassigned assessments too: marks are often recorded against a
+    # class/exam without a centre set, so a submitted assessment must still count
+    # when evaluating the students at the selected centre.
     submitted_assessments = list(Assessment.objects.filter(
+        Q(centre_id=centre.centre_id) | Q(centre_id__isnull=True),
         class_id=class_num,
-        centre_id=centre.centre_id,
         academic_year_id=current_ay.academic_year_id,
         status=Assessment.STATUS_SUBMITTED
     ))
