@@ -2089,7 +2089,33 @@ class ClassHistoryView(AssessmentAPIView):
                 records = records.filter(student__centre_id=int(centre_id))
             except (ValueError, TypeError):
                 pass
-        
+
+        # Pre-compute each student's latest record so we can derive a meaningful
+        # status for old rows that were created before promotion tracking existed
+        # (promoted=None). If the student has a newer record, this row was either
+        # a promotion (newer class differs) or a retention (same class again).
+        from django.db.models import Max
+        latest_per_student = {}
+        for row in StudentClassRecord.objects.values('student_id').annotate(latest_id=Max('student_class_record_id')):
+            latest_per_student[row['student_id']] = row['latest_id']
+        latest_records = {
+            rec.student_id: rec
+            for rec in StudentClassRecord.objects.filter(student_class_record_id__in=latest_per_student.values()).select_related('school_class')
+        }
+
+        def _status(rec):
+            if rec.is_active:
+                return 'current'
+            if rec.promoted is True:
+                return 'promoted'
+            if rec.promoted is False:
+                return 'retained'
+            # Legacy rows (promoted=None): infer from the student's latest record
+            latest = latest_records.get(rec.student_id)
+            if latest and latest.student_class_record_id != rec.student_class_record_id:
+                return 'promoted' if latest.school_class_id != rec.school_class_id else 'retained'
+            return 'completed'
+
         return Response([
             {
                 'student_id': rec.student.student_id,
@@ -2099,6 +2125,7 @@ class ClassHistoryView(AssessmentAPIView):
                 'class_name': rec.school_class.name if rec.school_class else '',
                 'is_active': rec.is_active,
                 'promoted': rec.promoted,
+                'status': _status(rec),
             }
             for rec in records
         ])

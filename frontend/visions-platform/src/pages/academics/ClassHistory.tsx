@@ -11,6 +11,7 @@ interface ClassHistoryRecord {
   class_name: string;
   is_active: boolean;
   promoted: boolean | null;
+  status: 'current' | 'promoted' | 'retained' | 'completed';
 }
 
 export default function ClassHistory() {
@@ -26,6 +27,7 @@ export default function ClassHistory() {
   const [selectedYear, setSelectedYear] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedCentre, setSelectedCentre] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
 
   useEffect(() => {
     Promise.all([
@@ -70,22 +72,24 @@ export default function ClassHistory() {
     }
   };
 
-  const filteredRecords = records.filter(r => 
-    r.student_name.toLowerCase().includes(search.toLowerCase()) ||
-    r.centre_name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredRecords = records.filter(r => {
+    const matchesSearch = r.student_name.toLowerCase().includes(search.toLowerCase()) ||
+      r.centre_name.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = !selectedStatus || r.status === selectedStatus;
+    return matchesSearch && matchesStatus;
+  });
 
   const getStatusBadge = (record: ClassHistoryRecord) => {
-    if (record.is_active) {
-      return <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">Current</span>;
+    switch (record.status) {
+      case 'current':
+        return <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">Current</span>;
+      case 'promoted':
+        return <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">Promoted</span>;
+      case 'retained':
+        return <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">Retained</span>;
+      default:
+        return <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">Completed</span>;
     }
-    if (record.promoted === true) {
-      return <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">Promoted</span>;
-    }
-    if (record.promoted === false) {
-      return <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">Retained</span>;
-    }
-    return <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">—</span>;
   };
 
   return (
@@ -97,7 +101,7 @@ export default function ClassHistory() {
 
       {/* Filters */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
           <label className="space-y-1.5">
             <span className="block text-sm font-medium text-slate-700 flex items-center gap-2">
               <Calendar size={16} /> Academic Year
@@ -143,6 +147,21 @@ export default function ClassHistory() {
               {centres.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
+            </select>
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="block text-sm font-medium text-slate-700">Status</span>
+            <select 
+              value={selectedStatus} 
+              onChange={e => setSelectedStatus(e.target.value)}
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
+            >
+              <option value="">All Statuses</option>
+              <option value="current">Current</option>
+              <option value="promoted">Promoted</option>
+              <option value="retained">Retained</option>
+              <option value="completed">Completed</option>
             </select>
           </label>
 
