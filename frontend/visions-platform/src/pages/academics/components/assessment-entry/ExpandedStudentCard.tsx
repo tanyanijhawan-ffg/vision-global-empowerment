@@ -192,7 +192,7 @@ export const ExpandedStudentCard: React.FC<ExpandedStudentCardProps> = ({
               {student.name} {student.centre ? `(${student.centre})` : ''}
             </h3>
             <div className="text-[11px] text-slate-400 mt-0.5">
-              Roll No. {student.id} &nbsp;•&nbsp; Class {student.class || '5'} &nbsp;•&nbsp; Student ID: STU{String(student.id).padStart(5, '0')}
+              Roll No. {student.id} &nbsp;•&nbsp; {/^class\b/i.test(student.class || '') ? student.class : `Class ${student.class || '5'}`} &nbsp;•&nbsp; Student ID: STU{String(student.id).padStart(5, '0')}
             </div>
           </div>
         </div>
@@ -314,7 +314,7 @@ export const ExpandedStudentCard: React.FC<ExpandedStudentCardProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           {/* Understanding Level */}
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+            <label className="text-[11px] font-bold text-red-600 flex items-center gap-1">
               Understanding Level <span className="text-rose-500">*</span>
             </label>
             <div className="relative inline-flex items-center">
@@ -334,7 +334,7 @@ export const ExpandedStudentCard: React.FC<ExpandedStudentCardProps> = ({
 
           {/* Application Ability */}
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+            <label className="text-[11px] font-bold text-red-600 flex items-center gap-1">
               Application Ability <span className="text-rose-500">*</span>
             </label>
             <div className="relative inline-flex items-center">
@@ -354,7 +354,7 @@ export const ExpandedStudentCard: React.FC<ExpandedStudentCardProps> = ({
 
           {/* Interest Level */}
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+            <label className="text-[11px] font-bold text-red-600 flex items-center gap-1">
               Interest Level <span className="text-rose-500">*</span>
             </label>
             <div className="relative inline-flex items-center">
@@ -374,7 +374,7 @@ export const ExpandedStudentCard: React.FC<ExpandedStudentCardProps> = ({
 
           {/* Learning Behaviour */}
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+            <label className="text-[11px] font-bold text-red-600 flex items-center gap-1">
               Learning Behaviour <span className="text-rose-500">*</span>
             </label>
             <div className="relative inline-flex items-center">
