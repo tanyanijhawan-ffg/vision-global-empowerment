@@ -249,6 +249,11 @@ class AssessmentCreateView(AssessmentAPIView):
 
         ay_map = {y.academic_year_id: y.name for y in AcademicYear.objects.all()}
         exam_map = {e.assessment_type_id: e for e in AssessmentType.objects.all()}
+        # class_id is the SchoolClass PK (1, 2...), NOT the grade number. Resolve the
+        # display name from the master so the UI shows the real class (e.g. Class 9).
+        class_map = {c.class_id: c.name for c in SchoolClass.objects.all()}
+        def class_name(cid):
+            return class_map.get(cid) or (f'Class {cid}' if cid is not None else '')
 
         seen_keys = set()
         seen_ids = set()
@@ -371,7 +376,7 @@ class AssessmentCreateView(AssessmentAPIView):
                 'status': a_obj.status if a_obj else 'DRAFT',
                 'academicYear': year_name,
                 'academicYearId': resolved_ay_id,
-                'class': f'Class {group["class_id"]}',
+                'class': class_name(group["class_id"]),
                 'classId': group['class_id'],
                 'assessmentType': exam_obj.name,
                 'assessmentTypeId': group['exam_id'],
@@ -427,7 +432,7 @@ class AssessmentCreateView(AssessmentAPIView):
                 'status': a.status,
                 'academicYear': year_name,
                 'academicYearId': a.academic_year_id,
-                'class': f'Class {a.class_id}',
+                'class': class_name(a.class_id),
                 'classId': a.class_id,
                 'assessmentType': a.assessment_type.name if a.assessment_type else '',
                 'assessmentTypeId': a.assessment_type_id,
@@ -709,7 +714,7 @@ class AssessmentDetailView(AssessmentAPIView):
             'assessmentTypeId': assessment.assessment_type_id,
             'academicYear': _format_year(assessment.academic_year_id),
             'academicYearId': assessment.academic_year_id,
-            'class': f'Class {assessment.class_id}',
+            'class': (SchoolClass.objects.filter(class_id=assessment.class_id).values_list('name', flat=True).first()) or f'Class {assessment.class_id}',
             'classId': assessment.class_id,
             'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
             'centreId': assessment.centre_id,
@@ -948,7 +953,7 @@ class AssessmentDetailView(AssessmentAPIView):
             'assessmentTypeId': assessment.assessment_type_id,
             'academicYear': _format_year(assessment.academic_year_id),
             'academicYearId': assessment.academic_year_id,
-            'class': f'Class {assessment.class_id}',
+            'class': (SchoolClass.objects.filter(class_id=assessment.class_id).values_list('name', flat=True).first()) or f'Class {assessment.class_id}',
             'classId': assessment.class_id,
             'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
             'centreId': assessment.centre_id,
