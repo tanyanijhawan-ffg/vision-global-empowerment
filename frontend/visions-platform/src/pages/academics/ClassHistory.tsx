@@ -45,7 +45,6 @@ export default function ClassHistory() {
   }, []);
 
   useEffect(() => {
-    if (!selectedYear) return;
     fetchClassHistory();
   }, [selectedYear, selectedClass, selectedCentre]);
 
@@ -111,7 +110,7 @@ export default function ClassHistory() {
               onChange={e => setSelectedYear(e.target.value)}
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
             >
-              <option value="">Select Year</option>
+              <option value="">All Academic Years</option>
               {academicYears.map(y => (
                 <option key={y.id} value={y.name}>{y.name}</option>
               ))}

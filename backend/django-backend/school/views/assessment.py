@@ -517,11 +517,17 @@ class AssessmentCreateView(AssessmentAPIView):
                         assessment_type_id=eid,
                     ).exists()
 
+                    # Only treat an AssessmentSubject config as a conflict if it actually
+                    # has subjects configured for this year (or is year-agnostic).
+                    # Empty shells and stale configs pointing at deleted exam types are ignored.
                     has_as_config = AssessmentSubject.objects.filter(
                         class_id=cid,
                         exam_id=eid,
                         is_active=True,
-                    ).filter(Q(academic_year_id=ay_id) | Q(academic_year_id__isnull=True)).exists()
+                    ).filter(Q(academic_year_id=ay_id) | Q(academic_year_id__isnull=True))\
+                     .exclude(subject_ids=[])\
+                     .filter(exam_id__in=AssessmentType.objects.filter(is_active=True).values('assessment_type_id'))\
+                     .exists()
 
                     if has_assessment or has_as_config:
                         exam_obj = AssessmentType.objects.filter(assessment_type_id=eid).first()
