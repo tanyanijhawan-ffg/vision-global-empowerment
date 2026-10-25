@@ -148,6 +148,53 @@ class StudentSerializer(serializers.ModelSerializer):
                 return ret
 
         ret['class_grade'] = instance.current_class_grade
+
+        # Attendance %: present days / total marked days (all time)
+        from school.models.attendance import Attendance
+        att_rows = Attendance.objects.filter(student=instance).values_list('status', flat=True)
+        total_days = len(att_rows)
+        if total_days:
+            present_days = sum(1 for s in att_rows if str(s).lower() in ('present', 'late'))
+            ret['attendance_percent'] = round((present_days / total_days) * 100, 1)
+        else:
+            ret['attendance_percent'] = None
+
+        # Avg score: mean percentage across all scored assessments.
+        # Per assessment: obtained / (sum of per-subject max marks for the subjects scored).
+        from school.models.assessment import AssessmentScore, AssessmentSubject
+        from django.db.models import Sum, Q
+        score_rows = (
+            AssessmentScore.objects.filter(student=instance)
+            .values('assessment_id')
+            .annotate(obtained=Sum('obtained_marks'))
+        )
+        if score_rows:
+            pcts = []
+            for row in score_rows:
+                scores = AssessmentScore.objects.filter(assessment_id=row['assessment_id'], student=instance)
+                if not scores:
+                    continue
+                a = scores.first().assessment
+                as_qs = AssessmentSubject.objects.filter(
+                    class_id=a.class_id, exam_id=a.assessment_type_id, is_active=True
+                )
+                if a.academic_year_id:
+                    as_qs = as_qs.filter(Q(academic_year_id=a.academic_year_id) | Q(academic_year_id__isnull=True))
+                # Per-subject max: the AS row whose subject_ids contains that subject
+                max_total = 0.0
+                for sc in scores:
+                    for entry in as_qs:
+                        if sc.subject_id in (entry.subject_ids or []):
+                            max_total += float(entry.max_marks)
+                            break
+                    else:
+                        max_total += 100.0
+                if max_total > 0:
+                    pcts.append((float(row['obtained']) / max_total) * 100.0)
+            ret['academic_score'] = round(sum(pcts) / len(pcts), 1) if pcts else None
+        else:
+            ret['academic_score'] = None
+
         return ret
 
     @transaction.atomic

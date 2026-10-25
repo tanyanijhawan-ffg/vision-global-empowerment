@@ -215,6 +215,8 @@ interface StudentApiRecord {
   email?: string;
   joined_at?: string;
   photo?: string | null;
+  attendance_percent?: number | null;
+  academic_score?: number | null;
   vulnerabilities?: Array<{ name: string }>;
   centre?: {
     id?: number;
@@ -405,8 +407,8 @@ function mapStudentRecord(record: StudentApiRecord): StudentListItem {
     class: className,
     gender: record.gender || "Not provided",
     age: record.age || 0,
-    attendancePercent: 0,
-    academicScore: 0,
+    attendancePercent: record.attendance_percent ?? 0,
+    academicScore: record.academic_score ?? 0,
     status: "Active",
     vulnerabilities: record.vulnerabilities?.map(item => item.name) || [],
     district: record.centre?.district || "Unknown district",
