@@ -6,7 +6,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Too
 import { AttendanceAlertRecipients, AttendanceCentre, AttendanceIntelligenceSetting, AttendanceRecord, StudentListItem, fetchAttendance, fetchAttendanceAlertRecipients, fetchAttendanceCentres, fetchAttendanceIntelligence, fetchStudents, sendAttendanceDefaultingEmail, saveAttendanceIntelligence } from '../../lib/api';
 import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
 
-const selectClass = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none shadow-sm';
+const selectClass = 'w-full appearance-none px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none shadow-sm';
 type View = 'region' | 'district' | 'centre' | 'class';
 type FilterableStudent = StudentListItem & { centre: string };
 
