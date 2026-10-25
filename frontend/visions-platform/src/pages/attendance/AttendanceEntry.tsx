@@ -115,9 +115,13 @@ export default function AttendanceEntry() {
   };
   const handleSave = async () => {
     setMessage('');
-    const studentsMissingParticipation = filteredStudents.filter(student => !drafts[student.id]?.participation_level);
+    // Participation level is only required for Present students
+    const studentsMissingParticipation = filteredStudents.filter(student => {
+      const draft = drafts[student.id];
+      return draft?.status === 'Present' && !draft?.participation_level;
+    });
     if (studentsMissingParticipation.length) {
-      setMessage(`Select a valid Participation Level for all students before saving. ${studentsMissingParticipation.length} student${studentsMissingParticipation.length === 1 ? '' : 's'} still need a selection.`);
+      setMessage(`Select a valid Participation Level for all Present students before saving. ${studentsMissingParticipation.length} student${studentsMissingParticipation.length === 1 ? '' : 's'} still need a selection.`);
       return;
     }
     setSaving(true);
@@ -152,7 +156,11 @@ export default function AttendanceEntry() {
                   {draft.status === 'Present' && <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"><Info size={16} aria-label="Information" /><span>No Remarks required for Present.</span></div>}
                   {draft.status === 'Absent' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Absence <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.absence_reason} onChange={event => updateDraft(student.id, { absence_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}
                   {draft.status === 'Late' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Late <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.late_reason} onChange={event => updateDraft(student.id, { late_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}
-                  <label><span className="text-xs font-semibold text-red-600 uppercase tracking-wide block mb-2">Participation Level <b className="text-red-500">*</b></span><select required value={draft.participation_level} onChange={event => updateDraft(student.id, { participation_level: event.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="" disabled>Select valid option</option>{Object.entries(participationLabels).map(([level, label]) => <option key={level} value={level}>{level} - {label}</option>)}</select></label>
+                  {draft.status === 'Present' ? (
+                    <label><span className="text-xs font-semibold text-red-600 uppercase tracking-wide block mb-2">Participation Level <b className="text-red-500">*</b></span><select required value={draft.participation_level} onChange={event => updateDraft(student.id, { participation_level: event.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="" disabled>Select valid option</option>{Object.entries(participationLabels).map(([level, label]) => <option key={level} value={level}>{level} - {label}</option>)}</select></label>
+                  ) : (
+                    <label><span className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-2">Participation Level <span className="normal-case font-normal text-slate-400">(not required for {draft.status})</span></span><select disabled value={draft.participation_level} onChange={event => updateDraft(student.id, { participation_level: event.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-400"><option value="">—</option>{Object.entries(participationLabels).map(([level, label]) => <option key={level} value={level}>{level} - {label}</option>)}</select></label>
+                  )}
                 </div>
               </div>
               <aside className="border-t md:border-t-0 md:border-l border-slate-200 pt-5 md:pt-0 md:pl-6 space-y-6">
