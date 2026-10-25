@@ -66,7 +66,7 @@ export const AssessmentFilterBar: React.FC<AssessmentFilterBarProps> = ({
       <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
         {/* Assessment Year Filter */}
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+          <label className="text-[11px] font-bold text-red-600 flex items-center gap-1">
             Assessment Year <span className="text-rose-500">*</span>
           </label>
           <div className="relative inline-flex items-center">
@@ -97,7 +97,7 @@ export const AssessmentFilterBar: React.FC<AssessmentFilterBarProps> = ({
 
         {/* Centre Filter */}
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+          <label className="text-[11px] font-bold text-red-600 flex items-center gap-1">
             Centre <span className="text-rose-500">*</span>
           </label>
           <div className="relative inline-flex items-center">
@@ -122,7 +122,7 @@ export const AssessmentFilterBar: React.FC<AssessmentFilterBarProps> = ({
 
         {/* Class Filter */}
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+          <label className="text-[11px] font-bold text-red-600 flex items-center gap-1">
             Class <span className="text-rose-500">*</span>
           </label>
           <div className="relative inline-flex items-center">
@@ -147,7 +147,7 @@ export const AssessmentFilterBar: React.FC<AssessmentFilterBarProps> = ({
 
         {/* Exam Filter (replacing Assessment Type & Term) */}
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+          <label className="text-[11px] font-bold text-red-600 flex items-center gap-1">
             Exam <span className="text-rose-500">*</span>
           </label>
           <div className="relative inline-flex items-center">

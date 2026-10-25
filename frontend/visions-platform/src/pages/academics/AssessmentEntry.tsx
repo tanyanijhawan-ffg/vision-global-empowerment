@@ -242,7 +242,7 @@ export default function AssessmentEntry() {
       const submittedMatch = submittedAssessments[0];
       if (submittedMatch) {
         const examName = submittedMatch.assessmentType || types.find((t) => t.id === Number(targetTypeId))?.name || 'Exam';
-        const className = submittedMatch.class ? `Class ${submittedMatch.class}` : `Class ${targetClassId}`;
+        const className = submittedMatch.class || `Class ${targetClassId}`;
         const centreName = currentCentre?.name || '';
         const matchLabel = [examName, className, centreName].filter(Boolean).join(' · ');
 
@@ -312,7 +312,7 @@ export default function AssessmentEntry() {
         }
 
         const examName = backendDraft.assessmentType || types.find((t) => t.id === Number(targetTypeId))?.name || 'Exam';
-        const className = backendDraft.class ? `Class ${backendDraft.class}` : `Class ${targetClassId}`;
+        const className = backendDraft.class || `Class ${targetClassId}`;
         const centreName = currentCentre?.name || '';
         const draftParts = [examName, className, centreName].filter(Boolean).join(' · ');
         setDraftInfo({

@@ -354,9 +354,9 @@ class UserRBACAPITests(TestCase):
         client = APIClient()
         client.force_authenticate(user=self.super_user)
         workbook = build_workbook('Centres', [
-            'region_name', 'district_name', 'centre_name', 'centre_type', 'block', 'village',
+            'region_name', 'district_name', 'centre_name', 'block', 'village',
             'gps_location', 'facilitator_name', 'start_date', 'status',
-        ], [['Central Region', 'Central District', 'Central Centre', 'Learning', 'Block A', 'Village A', '12.1,77.1', 'Asha', '2026-01-15', 'active']])
+        ], [['Central Region', 'Central District', 'Central Centre', 'Block A', 'Village A', '12.1,77.1', 'Asha', '2026-01-15', 'active']])
 
         response = client.post('/api/masters/centres/bulk-upload/', {'file': SimpleUploadedFile('centres.xlsx', workbook)}, format='multipart')
 

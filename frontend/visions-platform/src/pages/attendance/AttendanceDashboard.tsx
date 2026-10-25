@@ -6,7 +6,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Too
 import { AttendanceAlertRecipients, AttendanceCentre, AttendanceIntelligenceSetting, AttendanceRecord, StudentListItem, fetchAttendance, fetchAttendanceAlertRecipients, fetchAttendanceCentres, fetchAttendanceIntelligence, fetchStudents, sendAttendanceDefaultingEmail, saveAttendanceIntelligence } from '../../lib/api';
 import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
 
-const selectClass = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none shadow-sm';
+const selectClass = 'w-full appearance-none px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none shadow-sm';
 type View = 'region' | 'district' | 'centre' | 'class';
 type FilterableStudent = StudentListItem & { centre: string };
 
@@ -116,7 +116,7 @@ export default function AttendanceDashboard() {
     (!filterCentre || String(student.centreId) === filterCentre) &&
     (!filterClass || student.class === filterClass),
   ), [scopedStudents, filterRegion, filterDistrict, filterCentre, filterClass]);
-  const classOptions = useMemo(() => [...new Set(filteredStudents.map(student => student.class).filter(Boolean))].sort((a, b) => Number(a) - Number(b)), [filteredStudents]);
+  const classOptions = useMemo(() => [...new Set(filteredStudents.map(student => student.class).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [filteredStudents]);
 
   const selectedStudentIds = useMemo(() => new Set(filteredStudents.map(student => Number(student.id))), [filteredStudents]);
   const selectedRecords = useMemo(() => records.filter(record =>
@@ -153,7 +153,7 @@ export default function AttendanceDashboard() {
     const keyFor = (student: StudentListItem) => view === 'region' ? student.region
       : view === 'district' ? student.district
         : view === 'centre' ? student.centre
-          : `Class ${student.class}`;
+          : student.class;
     const groups = new Map<string, { total: number; rates: number[] }>();
     filteredStudents.forEach(student => {
       const name = keyFor(student) || 'Unassigned';
@@ -246,7 +246,7 @@ export default function AttendanceDashboard() {
             <span className="relative mt-1 block"><select className={selectClass} value={filterCentre} onChange={event => setFilterCentre(event.target.value)}><option value="">All Centres</option>{filteredCentres.map(centre => <option key={centre.id} value={centre.id}>{centre.name}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
           </label>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Class
-            <span className="relative mt-1 block"><select className={selectClass} value={filterClass} onChange={event => setFilterClass(event.target.value)}><option value="">All Classes</option>{classOptions.map(className => <option key={className} value={className}>Class {className}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
+            <span className="relative mt-1 block"><select className={selectClass} value={filterClass} onChange={event => setFilterClass(event.target.value)}><option value="">All Classes</option>{classOptions.map(className => <option key={className} value={className}>{className}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
           </label>
         </div>
         <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
@@ -263,7 +263,7 @@ export default function AttendanceDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Notification format</span><select value={intelligence.notification_mode} onChange={event => updateIntelligence({ notification_mode: event.target.value as AttendanceIntelligenceSetting['notification_mode'] })} className={selectClass}><option value="separate">Separate notifications</option><option value="combined">Combined notification</option></select></label>
           <fieldset><legend className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Notification medium</legend><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={intelligence.notification_channels.includes('email')} onChange={() => toggleIntelligenceValue('notification_channels', 'email')} />Email only</label><p className="text-xs text-slate-500 mt-1">SMS and WhatsApp are not enabled.</p></fieldset>
-          <fieldset><legend className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Alert students</legend><div className="flex flex-wrap gap-4 mb-3 text-sm">{(['individual', 'combined'] as const).map(mode => <label key={mode} className="flex items-center gap-1.5"><input type="radio" name="dashboard-alert-mode" checked={intelligence.alert_student_mode === mode} onChange={() => updateIntelligence({ alert_student_mode: mode, ...(mode === 'combined' ? { alert_student_ids: scopedStudents.map(student => Number(student.id)) } : {}) })} />{mode === 'individual' ? 'Individual student' : 'All students'}</label>)}</div>{intelligence.alert_student_mode === 'individual' ? <select value={String(intelligence.alert_student_ids[0] || '')} onChange={event => updateIntelligence({ alert_student_ids: event.target.value ? [Number(event.target.value)] : [] })} className={selectClass}><option value="">Select a student</option>{scopedStudents.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}</select> : <p className="text-sm text-slate-600">All {scopedStudents.length} students are selected.</p>}</fieldset>
+          <fieldset><legend className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Alert students</legend><div className="flex flex-wrap gap-4 mb-3 text-sm">{(['individual', 'combined'] as const).map(mode => <label key={mode} className="flex items-center gap-1.5"><input type="radio" name="dashboard-alert-mode" checked={intelligence.alert_student_mode === mode} onChange={() => updateIntelligence({ alert_student_mode: mode, ...(mode === 'combined' ? { alert_student_ids: filteredStudents.map(student => Number(student.id)) } : {}) })} />{mode === 'individual' ? 'Individual student' : 'All students'}</label>)}</div>{intelligence.alert_student_mode === 'individual' ? <select value={String(intelligence.alert_student_ids[0] || '')} onChange={event => updateIntelligence({ alert_student_ids: event.target.value ? [Number(event.target.value)] : [] })} className={selectClass}><option value="">Select a student</option>{filteredStudents.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}</select> : <p className="text-sm text-slate-600">All {filteredStudents.length} students are selected.</p>}</fieldset>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 border-t border-slate-100 pt-5">
           <fieldset><legend className="text-sm font-semibold text-slate-800 mb-2"><label className="flex items-center gap-2"><input type="checkbox" checked={intelligence.absence_alert_enabled} onChange={event => updateIntelligence({ absence_alert_enabled: event.target.checked })} />Alert after</label></legend><div className="flex flex-wrap items-center gap-3 pl-6"><input type="number" min={1} max={30} value={intelligence.absence_alert_days} onChange={event => updateIntelligence({ absence_alert_days: Number(event.target.value) })} className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm" aria-label="Consecutive absent days" /><span className="text-sm text-slate-600">consecutive absent days</span>{[['facilitator', 'Community Educator'], ['admin', 'Admin']].map(([value, label]) => <label key={value} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={intelligence.absence_alert_recipients.includes(value)} onChange={() => toggleIntelligenceValue('absence_alert_recipients', value)} />{label}</label>)}</div></fieldset>

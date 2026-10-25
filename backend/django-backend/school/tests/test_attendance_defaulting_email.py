@@ -6,6 +6,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from school.models.attendance import Attendance
+from school.models.assessment import SchoolClass
 from school.models.center import Center, District, Program, Region
 from school.models.role import Role
 from school.models.student import Student
@@ -24,7 +25,6 @@ class AttendanceDefaultingEmailTests(TestCase):
             district=cls.district,
             region=cls.region,
             centre_name='Green Centre',
-            centre_type='Community',
             block='Block A',
             village='Village A',
             facilitator_name='Community Educator One',
@@ -36,7 +36,7 @@ class AttendanceDefaultingEmailTests(TestCase):
         UserProfile.objects.create(user=cls.admin, role=admin_role, region=cls.region, full_name='Admin One')
         cls.educator = User.objects.create_user(username='educator', email='educator@example.org', password='test-password')
         UserProfile.objects.create(user=cls.educator, role=educator_role, region=cls.region, full_name='Community Educator One')
-        cls.student = Student.objects.create(centre=cls.centre, full_name='Student One', class_grade='5')
+        cls.student = Student.objects.create(centre=cls.centre, full_name='Student One', school_class=SchoolClass.objects.create(name='5', code='CLASS_5'))
 
         today = date(2026, 10, 13)
         for day_offset, status in enumerate(['Present', 'Absent', 'Absent', 'Absent']):

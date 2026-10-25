@@ -177,10 +177,11 @@ class AssessmentTypeMetadataListCreateView(generics.ListCreateAPIView):
         ay_id = payload.get('academicYearId')
 
         if code:
-            existing_query = AssessmentType.objects.filter(code__iexact=code, is_active=True)
-            if ay_id:
-                existing_query = existing_query.filter(academic_year_id=ay_id)
-            existing = existing_query.first()
+            # Dedupe globally by code+name regardless of academic year, so we never
+            # create two exam types with the same name (the duplicate 'Annual' bug).
+            existing = AssessmentType.objects.filter(code__iexact=code, is_active=True).first()
+            if not existing:
+                existing = AssessmentType.objects.filter(name__iexact=name, is_active=True).first()
             if existing:
                 serializer = self.get_serializer(existing)
                 return Response(serializer.data, status=status.HTTP_200_OK)

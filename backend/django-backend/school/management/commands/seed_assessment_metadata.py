@@ -34,14 +34,16 @@ class Command(BaseCommand):
             )
 
         # Seed student class records for existing students for current academic year only
+        from school.services.classes import resolve_school_class
         current_ay = next((ay for ay in ay_instances if ay.is_current), None) or ay_instances[0]
         all_students = Student.objects.all()
         for student in all_students:
-            if student.class_grade:
+            klass = student.school_class
+            if klass:
                 StudentClassRecord.objects.get_or_create(
                     student=student,
                     academic_year=current_ay,
-                    defaults={'class_grade': student.class_grade, 'is_active': True},
+                    defaults={'school_class': klass, 'is_active': True},
                 )
 
         assessment_types = [

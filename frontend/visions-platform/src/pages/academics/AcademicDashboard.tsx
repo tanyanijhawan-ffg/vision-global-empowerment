@@ -323,6 +323,12 @@ export default function AcademicDashboard() {
     return academicYears.find(ay => ay.id === selectedAcademicYearId);
   }, [academicYears, selectedAcademicYearId]);
 
+  // filterClass holds the SchoolClass PK (e.g. '2' for 'Class 9'). Resolve the display
+  // name from the master list so the promote modal shows the real class, not the id.
+  const selectedClassObj = useMemo(() => {
+    return classes.find(c => String(c.id) === String(filterClass));
+  }, [classes, filterClass]);
+
   const availableRegions = useMemo(() => {
     const set = new Set<string>();
     centres.forEach(c => { if (c.region) set.add(c.region); });
@@ -926,8 +932,8 @@ export default function AcademicDashboard() {
           academicYearId={selectedAcademicYearId ?? undefined}
           centreName={selectedCentreObj?.name || filterCentre}
           centreId={selectedCentreObj?.id}
-          className={filterClass ? `Class ${normalizeClass(filterClass)}` : ''}
-          classId={normalizeClass(filterClass)}
+          className={selectedClassObj?.name || (filterClass ? `Class ${normalizeClass(filterClass)}` : '')}
+          classId={selectedClassObj?.id ?? normalizeClass(filterClass)}
           onSuccess={() => {
             // Re-fetch scoped students to immediately reflect updated class records
             if (filterClass && selectedCentreObj?.id) {

@@ -36,9 +36,9 @@ from .models import (
 
 @admin.register(Center)
 class CenterAdmin(admin.ModelAdmin):
-    list_display = ('centre_id', 'centre_name', 'centre_type', 'block', 'village', 'status')
+    list_display = ('centre_id', 'centre_name', 'block', 'village', 'status')
     search_fields = ('centre_name', 'block', 'village')
-    list_filter = ('centre_type', 'status', 'region', 'district')
+    list_filter = ('status', 'region', 'district')
 
 
 @admin.register(Role)
@@ -56,8 +56,8 @@ class UserProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ('student_id', 'full_name', 'gender', 'age', 'class_grade', 'centre')
-    list_filter = ('gender', 'class_grade', 'centre')
+    list_display = ('student_id', 'full_name', 'gender', 'age', 'school_class', 'centre')
+    list_filter = ('gender', 'school_class', 'centre')
     search_fields = ('full_name', 'nick_name', 'school_name')
 
 
@@ -103,9 +103,14 @@ class AssessmentSubjectAdmin(admin.ModelAdmin):
 
 @admin.register(Assessment)
 class AssessmentAdmin(admin.ModelAdmin):
-    list_display = ('assessment_id', 'assessment_type', 'academic_year_id', 'class_id', 'assessment_date', 'status')
+    list_display = ('assessment_id', 'assessment_type', 'academic_year_id', 'class_name', 'assessment_date', 'status')
     list_filter = ('status', 'assessment_type', 'class_id')
     search_fields = ('assessment_type__name',)
+
+    @admin.display(ordering='class_id', description='Class')
+    def class_name(self, obj):
+        from school.models.assessment import SchoolClass
+        return SchoolClass.objects.filter(class_id=obj.class_id).values_list('name', flat=True).first() or f'Class {obj.class_id}'
 
 
 @admin.register(AssessmentScore)
@@ -155,9 +160,9 @@ class AssessmentSubmissionAdmin(admin.ModelAdmin):
 
 @admin.register(StudentClassRecord)
 class StudentClassRecordAdmin(admin.ModelAdmin):
-    list_display = ('student_class_record_id', 'student', 'academic_year', 'class_grade', 'is_active', 'promoted')
-    list_filter = ('academic_year', 'class_grade', 'is_active', 'promoted')
-    search_fields = ('student__full_name', 'class_grade')
+    list_display = ('student_class_record_id', 'student', 'academic_year', 'school_class', 'is_active', 'promoted')
+    list_filter = ('academic_year', 'school_class', 'is_active', 'promoted')
+    search_fields = ('student__full_name', 'school_class__name')
 
 
 admin.site.register(Program)

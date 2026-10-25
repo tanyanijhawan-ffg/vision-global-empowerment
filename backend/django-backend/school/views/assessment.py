@@ -108,8 +108,14 @@ class AssessmentTypeListView(AssessmentAPIView):
             # Include exams explicitly linked to this year OR exams with no year (legacy/global)
             queryset = queryset.filter(Q(academic_year_id=academic_year_id) | Q(academic_year__isnull=True))
         elif academic_year:
+            # Match the year by name tolerating dash/space differences, since the
+            # frontend may send '2025 - 2026' while the DB stores '2025-2026'.
+            clean_year = academic_year.strip()
+            normalized = clean_year.replace(' ', '')
             queryset = queryset.filter(
-                Q(academic_year__name__iexact=academic_year.strip()) | Q(academic_year__isnull=True)
+                Q(academic_year__name__iexact=clean_year)
+                | Q(academic_year__name__iregex=re.escape(normalized).replace(r'\-', r'\s*-\s*'))
+                | Q(academic_year__isnull=True)
             )
         else:
             current_ay = AcademicYear.objects.filter(is_current=True).first()
@@ -249,6 +255,11 @@ class AssessmentCreateView(AssessmentAPIView):
 
         ay_map = {y.academic_year_id: y.name for y in AcademicYear.objects.all()}
         exam_map = {e.assessment_type_id: e for e in AssessmentType.objects.all()}
+        # class_id is the SchoolClass PK (1, 2...), NOT the grade number. Resolve the
+        # display name from the master so the UI shows the real class (e.g. Class 9).
+        class_map = {c.class_id: c.name for c in SchoolClass.objects.all()}
+        def class_name(cid):
+            return class_map.get(cid) or (f'Class {cid}' if cid is not None else '')
 
         seen_keys = set()
         seen_ids = set()
@@ -371,7 +382,7 @@ class AssessmentCreateView(AssessmentAPIView):
                 'status': a_obj.status if a_obj else 'DRAFT',
                 'academicYear': year_name,
                 'academicYearId': resolved_ay_id,
-                'class': f'Class {group["class_id"]}',
+                'class': class_name(group["class_id"]),
                 'classId': group['class_id'],
                 'assessmentType': exam_obj.name,
                 'assessmentTypeId': group['exam_id'],
@@ -427,7 +438,7 @@ class AssessmentCreateView(AssessmentAPIView):
                 'status': a.status,
                 'academicYear': year_name,
                 'academicYearId': a.academic_year_id,
-                'class': f'Class {a.class_id}',
+                'class': class_name(a.class_id),
                 'classId': a.class_id,
                 'assessmentType': a.assessment_type.name if a.assessment_type else '',
                 'assessmentTypeId': a.assessment_type_id,
@@ -709,7 +720,7 @@ class AssessmentDetailView(AssessmentAPIView):
             'assessmentTypeId': assessment.assessment_type_id,
             'academicYear': _format_year(assessment.academic_year_id),
             'academicYearId': assessment.academic_year_id,
-            'class': f'Class {assessment.class_id}',
+            'class': (SchoolClass.objects.filter(class_id=assessment.class_id).values_list('name', flat=True).first()) or f'Class {assessment.class_id}',
             'classId': assessment.class_id,
             'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
             'centreId': assessment.centre_id,
@@ -948,7 +959,7 @@ class AssessmentDetailView(AssessmentAPIView):
             'assessmentTypeId': assessment.assessment_type_id,
             'academicYear': _format_year(assessment.academic_year_id),
             'academicYearId': assessment.academic_year_id,
-            'class': f'Class {assessment.class_id}',
+            'class': (SchoolClass.objects.filter(class_id=assessment.class_id).values_list('name', flat=True).first()) or f'Class {assessment.class_id}',
             'classId': assessment.class_id,
             'assessmentDate': str(assessment.assessment_date) if assessment.assessment_date else '',
             'centreId': assessment.centre_id,
@@ -1155,9 +1166,15 @@ class AssessmentBehaviourView(AssessmentAPIView):
         saved = 0
         for item in request.data.get('students', []):
             student = Student.objects.filter(student_id=item.get('studentId')).first()
-            behaviour = LearningBehaviourOption.objects.filter(code=item.get('behaviour')).first()
-            if not student or not behaviour:
+            code = (item.get('behaviour') or '').strip()
+            if not student or not code:
                 continue
+            # Auto-create the option from the dropdown value if it isn't in the DB yet,
+            # so whatever the user selects is saved without needing pre-seeded rows.
+            behaviour, _ = LearningBehaviourOption.objects.get_or_create(
+                code=code,
+                defaults={'name': code.replace('_', ' ').title(), 'is_active': True},
+            )
             StudentLearningBehaviour.objects.update_or_create(
                 assessment=assessment,
                 student=student,
@@ -1313,17 +1330,25 @@ class AssessmentSubmitView(AssessmentAPIView):
             diagnostics = AssessmentDiagnostic.objects.filter(assessment=assessment)
 
         if not behaviours.exists() and student_ids:
-            default_behaviour = LearningBehaviourOption.objects.filter(code='INDEPENDENT').first() or LearningBehaviourOption.objects.first()
-            if default_behaviour:
-                for sid in student_ids:
-                    st = Student.objects.filter(student_id=sid).first()
-                    if st:
-                        StudentLearningBehaviour.objects.get_or_create(
-                            assessment=assessment,
-                            student=st,
-                            defaults={'behaviour_option': default_behaviour}
-                        )
-                behaviours = StudentLearningBehaviour.objects.filter(assessment=assessment)
+            default_behaviour = (
+                LearningBehaviourOption.objects.filter(code='INDEPENDENT').first()
+                or LearningBehaviourOption.objects.first()
+            )
+            if not default_behaviour:
+                # No options in the DB yet (e.g. fresh DB) — create the default so the
+                # submit can always attach a behaviour.
+                default_behaviour = LearningBehaviourOption.objects.create(
+                    code='INDEPENDENT', name='Independent', is_active=True
+                )
+            for sid in student_ids:
+                st = Student.objects.filter(student_id=sid).first()
+                if st:
+                    StudentLearningBehaviour.objects.get_or_create(
+                        assessment=assessment,
+                        student=st,
+                        defaults={'behaviour_option': default_behaviour}
+                    )
+            behaviours = StudentLearningBehaviour.objects.filter(assessment=assessment)
 
         # Check narrative observations - mandatory for all assessed students
         obs_map = {
@@ -1883,15 +1908,10 @@ class AssessmentCentrePerformanceView(AssessmentAPIView):
             if cid:
                 centre_scores_map.setdefault(cid, []).append(score)
 
-        # Build class filter for student counts
-        class_str = str(class_id_int)
+        # Build class filter for student counts. class_id_int is the SchoolClass PK.
         class_q = (
-            Q(class_grade__iexact=class_str) |
-            Q(class_grade__iexact=f'Class {class_str}') |
-            Q(class_grade__iexact=f'Grade {class_str}') |
-            Q(class_grade__iexact=f'Class {class_id_int:02d}') |
-            Q(class_grade__iexact=f'Grade {class_id_int:02d}') |
-            Q(class_grade__iexact=f'{class_id_int:02d}')
+            Q(school_class_id=class_id_int) |
+            Q(class_records__school_class_id=class_id_int, class_records__is_active=True)
         )
 
         centre_report_items = []

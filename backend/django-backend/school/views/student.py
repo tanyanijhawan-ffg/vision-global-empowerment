@@ -13,7 +13,7 @@ def get_latest_class_subquery():
     return Subquery(
         StudentClassRecord.objects.filter(
             student=OuterRef('pk')
-        ).order_by('-student_class_record_id').values('class_grade')[:1]
+        ).order_by('-student_class_record_id').values('school_class_id')[:1]
     )
 
 
@@ -25,7 +25,9 @@ class StudentListView(generics.ListCreateAPIView):
     filterset_fields = ['centre__centre_id', 'gender', 'school_name']
 
     def get_queryset(self):
-        queryset = super().get_queryset().annotate(latest_class_grade=get_latest_class_subquery())
+        from school.services.classes import resolve_school_class
+
+        queryset = super().get_queryset().annotate(latest_class_id=get_latest_class_subquery())
         centre_id = self.request.query_params.get('centreId') or self.request.query_params.get('center_id')
         gender = self.request.query_params.get('gender')
         class_grade = self.request.query_params.get('classGrade') or self.request.query_params.get('class_grade')
@@ -36,6 +38,9 @@ class StudentListView(generics.ListCreateAPIView):
             queryset = queryset.filter(centre__centre_id=centre_id)
         if gender is not None:
             queryset = queryset.filter(gender__iexact=gender)
+
+        # Resolve the requested class (string or id) to the SchoolClass master row.
+        target_class = resolve_school_class(class_grade, create=False) if class_grade else None
 
         # Resolve target academic year if provided
         target_ay = None
@@ -53,40 +58,18 @@ class StudentListView(generics.ListCreateAPIView):
             # Academic year is present: filter out records from the StudentClassRecord table
             if target_ay:
                 scr_qs = StudentClassRecord.objects.filter(academic_year=target_ay, is_active=True)
-                if class_grade is not None:
-                    clean_grade = class_grade.strip()
-                    if clean_grade.isdigit():
-                        grade_match = (
-                            models.Q(class_grade__iexact=clean_grade) |
-                            models.Q(class_grade__iexact=f'Class {clean_grade}') |
-                            models.Q(class_grade__iexact=f'Grade {clean_grade}')
-                        )
-                    else:
-                        grade_match = models.Q(class_grade__iexact=clean_grade)
-                    scr_qs = scr_qs.filter(grade_match)
+                if target_class is not None:
+                    scr_qs = scr_qs.filter(school_class=target_class)
                 student_ids = scr_qs.values_list('student_id', flat=True)
                 queryset = queryset.filter(student_id__in=student_ids).distinct()
             else:
                 queryset = queryset.none()
-        elif class_grade is not None:
-            clean_grade = class_grade.strip()
-            if clean_grade.isdigit():
-                grade_match = (
-                    models.Q(latest_class_grade__iexact=clean_grade) |
-                    models.Q(latest_class_grade__iexact=f'Class {clean_grade}') |
-                    models.Q(latest_class_grade__iexact=f'Grade {clean_grade}')
-                )
-                fallback_match = (
-                    models.Q(class_grade__iexact=clean_grade) |
-                    models.Q(class_grade__iexact=f'Class {clean_grade}') |
-                    models.Q(class_grade__iexact=f'Grade {clean_grade}')
-                )
-            else:
-                grade_match = models.Q(latest_class_grade__iexact=clean_grade)
-                fallback_match = models.Q(class_grade__iexact=clean_grade)
-
+        elif target_class is not None:
+            # Match students whose latest class record is this class, or whose own
+            # school_class FK is this class when they have no class records yet.
             queryset = queryset.filter(
-                grade_match | (models.Q(latest_class_grade__isnull=True) & fallback_match)
+                models.Q(latest_class_id=target_class.class_id) |
+                (models.Q(latest_class_id__isnull=True) & models.Q(school_class=target_class))
             ).distinct()
 
         return queryset

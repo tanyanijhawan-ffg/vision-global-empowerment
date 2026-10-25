@@ -9,6 +9,7 @@ from school.models.socio_economic import SocioEconomic
 from school.models.student import Student
 from school.models.vulnerability import StudentVulnerability, VulnerabilityMaster
 from school.serializers.center import CenterSerializer
+from school.services.classes import resolve_school_class
 
 
 class StudentSerializer(serializers.ModelSerializer):
@@ -28,6 +29,10 @@ class StudentSerializer(serializers.ModelSerializer):
     motivations = serializers.SerializerMethodField()
     aspirations_data = serializers.JSONField(required=False, write_only=True)
     aspirations = serializers.SerializerMethodField()
+    # Class arrives as a grade string (e.g. 'Class 8'); it is resolved to the
+    # SchoolClass master and stored via the school_class FK. Reads come from the
+    # Student.class_grade property (current class name). Not a model column anymore.
+    class_grade = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Student
@@ -158,14 +163,18 @@ class StudentSerializer(serializers.ModelSerializer):
         if class_grade:
             from school.models.assessment import AcademicYear
             from school.models.student import StudentClassRecord
+            klass = resolve_school_class(class_grade)
+            if klass:
+                student.school_class = klass
+                student.save(update_fields=['school_class'])
             current_ay = AcademicYear.objects.filter(is_current=True).first()
             if not current_ay:
                 current_ay = AcademicYear.objects.order_by('-start_date').first()
-            if current_ay:
+            if current_ay and klass:
                 StudentClassRecord.objects.create(
                     student=student,
                     academic_year=current_ay,
-                    class_grade=str(class_grade).strip(),
+                    school_class=klass,
                     is_active=True,
                 )
 
@@ -206,6 +215,9 @@ class StudentSerializer(serializers.ModelSerializer):
         if class_grade is not None:
             from school.models.assessment import AcademicYear
             from school.models.student import StudentClassRecord
+            klass = resolve_school_class(class_grade)
+            student.school_class = klass
+            student.save(update_fields=['school_class'])
             current_ay = AcademicYear.objects.filter(is_current=True).first()
             if not current_ay:
                 current_ay = AcademicYear.objects.order_by('-start_date').first()
@@ -214,7 +226,7 @@ class StudentSerializer(serializers.ModelSerializer):
                     student=student,
                     academic_year=current_ay,
                     defaults={
-                        'class_grade': str(class_grade).strip(),
+                        'school_class': klass,
                         'is_active': True,
                     }
                 )

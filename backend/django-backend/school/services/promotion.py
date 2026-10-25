@@ -10,9 +10,11 @@ from school.models.assessment import (
     AssessmentScore,
     AssessmentSubject,
     AssessmentType,
+    SchoolClass,
 )
 from school.models.center import Center
 from school.models.student import Student, StudentClassRecord
+from school.services.classes import next_school_class
 
 
 def _subject_max_marks(assessment, subject_id):
@@ -190,38 +192,31 @@ def process_class_promotion_and_rollover(assessment):
     next_ay = get_or_create_next_academic_year(current_ay)
 
     # 5. Fetch class records for this class & centre in the current academic year.
-    # We query StudentClassRecord directly so that new students (whose Student.class_grade
-    # is null) are included alongside legacy students.
-    class_str = str(class_id)
-    cr_grade_q = (
-        Q(class_grade__iexact=class_str) |
-        Q(class_grade__iexact=f'Class {class_str}') |
-        Q(class_grade__iexact=f'Grade {class_str}')
-    )
-    cr_filter = Q(academic_year=current_ay, is_active=True) & cr_grade_q
+    # class_id here is the SchoolClass primary key (assessments store the FK id).
+    current_class = SchoolClass.objects.filter(class_id=class_id).first()
+
+    cr_filter = Q(academic_year=current_ay, is_active=True)
+    if current_class:
+        cr_filter &= Q(school_class=current_class)
     if centre_id:
-        cr_filter = cr_filter & Q(student__centre_id=centre_id)
+        cr_filter &= Q(student__centre_id=centre_id)
     class_records = list(StudentClassRecord.objects.filter(cr_filter).select_related('student'))
 
-    # Safety-net: also pick up legacy students whose grade is still only on Student.class_grade
-    # (e.g. students that pre-date the migration and have no StudentClassRecord yet).
-    legacy_grade_q = (
-        Q(class_grade__iexact=class_str) |
-        Q(class_grade__iexact=f'Class {class_str}') |
-        Q(class_grade__iexact=f'Grade {class_str}')
-    )
-    legacy_student_filter = legacy_grade_q
-    if centre_id:
-        legacy_student_filter = legacy_student_filter & Q(centre_id=centre_id)
-    already_have_record_ids = {r.student_id for r in class_records}
-    legacy_students = Student.objects.filter(legacy_student_filter).exclude(student_id__in=already_have_record_ids)
-    for st in legacy_students:
-        rec, _ = StudentClassRecord.objects.get_or_create(
-            student=st,
-            academic_year=current_ay,
-            defaults={'class_grade': st.class_grade or f"Class {class_id}", 'is_active': True}
-        )
-        class_records.append(rec)
+    # Safety-net: also pick up students whose class is set on the Student FK but who
+    # have no StudentClassRecord for the current year yet.
+    if current_class:
+        already_have_record_ids = {r.student_id for r in class_records}
+        extra_students = Student.objects.filter(school_class=current_class)
+        if centre_id:
+            extra_students = extra_students.filter(centre_id=centre_id)
+        extra_students = extra_students.exclude(student_id__in=already_have_record_ids)
+        for st in extra_students:
+            rec, _ = StudentClassRecord.objects.get_or_create(
+                student=st,
+                academic_year=current_ay,
+                defaults={'school_class': current_class, 'is_active': True}
+            )
+            class_records.append(rec)
 
     # 6. Promotion evaluation for each student
     promoted_count = 0
@@ -265,18 +260,22 @@ def process_class_promotion_and_rollover(assessment):
         else:
             retained_count += 1
 
-        next_grade_str = calculate_next_class_grade(rec.class_grade, is_promoted)
+        next_class = next_school_class(rec.school_class, is_promoted)
 
         # Store in StudentClassRecord for next_ay
         StudentClassRecord.objects.update_or_create(
             student=student,
             academic_year=next_ay,
             defaults={
-                'class_grade': next_grade_str,
+                'school_class': next_class,
                 'is_active': True,
                 'promoted': is_promoted,
             }
         )
+        # Keep the student's current class FK in sync so lists/dashboards reflect it.
+        if next_class and student.school_class_id != next_class.class_id:
+            student.school_class = next_class
+            student.save(update_fields=['school_class'])
 
     # 7. Check if all classes across all centres have finished to roll over current_ay
     rollover_done = False
@@ -344,39 +343,38 @@ def evaluate_and_promote_class(academic_year_id, centre_id, class_id):
     # 4. Ensure Next Academic Year exists
     next_ay = get_or_create_next_academic_year(current_ay)
 
-    # 5. Fetch all SUBMITTED assessments for this class, centre, and academic year
+    # 5. Fetch all SUBMITTED assessments for this class, centre, and academic year.
+    # Include centre-unassigned assessments too: marks are often recorded against a
+    # class/exam without a centre set, so a submitted assessment must still count
+    # when evaluating the students at the selected centre.
     submitted_assessments = list(Assessment.objects.filter(
+        Q(centre_id=centre.centre_id) | Q(centre_id__isnull=True),
         class_id=class_num,
-        centre_id=centre.centre_id,
         academic_year_id=current_ay.academic_year_id,
         status=Assessment.STATUS_SUBMITTED
     ))
 
     # 6. Fetch students in this class and centre for current_ay
-    class_str = str(class_num)
-    cr_grade_q = (
-        Q(class_grade__iexact=class_str) |
-        Q(class_grade__iexact=f'Class {class_str}') |
-        Q(class_grade__iexact=f'Grade {class_str}')
-    )
-    cr_filter = Q(academic_year=current_ay, is_active=True) & cr_grade_q & Q(student__centre_id=centre.centre_id)
+    # class_num is the SchoolClass primary key (from the assessment/dashboard selection).
+    current_class = SchoolClass.objects.filter(class_id=class_num).first()
+
+    cr_filter = Q(academic_year=current_ay, is_active=True) & Q(student__centre_id=centre.centre_id)
+    if current_class:
+        cr_filter &= Q(school_class=current_class)
     class_records = list(StudentClassRecord.objects.filter(cr_filter).select_related('student'))
 
-    # Safety-net: include legacy students whose grade is only on Student.class_grade
-    legacy_grade_q = (
-        Q(class_grade__iexact=class_str) |
-        Q(class_grade__iexact=f'Class {class_str}') |
-        Q(class_grade__iexact=f'Grade {class_str}')
-    )
-    already_have_record_ids = {r.student_id for r in class_records}
-    legacy_students = Student.objects.filter(legacy_grade_q, centre_id=centre.centre_id).exclude(student_id__in=already_have_record_ids)
-    for st in legacy_students:
-        rec, _ = StudentClassRecord.objects.get_or_create(
-            student=st,
-            academic_year=current_ay,
-            defaults={'class_grade': st.class_grade or f"Class {class_num}", 'is_active': True}
-        )
-        class_records.append(rec)
+    # Safety-net: include students whose class is on the Student FK but who have no
+    # StudentClassRecord for the current year yet.
+    if current_class:
+        already_have_record_ids = {r.student_id for r in class_records}
+        extra_students = Student.objects.filter(school_class=current_class, centre_id=centre.centre_id).exclude(student_id__in=already_have_record_ids)
+        for st in extra_students:
+            rec, _ = StudentClassRecord.objects.get_or_create(
+                student=st,
+                academic_year=current_ay,
+                defaults={'school_class': current_class, 'is_active': True}
+            )
+            class_records.append(rec)
 
     if not class_records:
         return {
@@ -433,24 +431,28 @@ def evaluate_and_promote_class(academic_year_id, centre_id, class_id):
         else:
             retained_count += 1
 
-        next_grade_str = calculate_next_class_grade(rec.class_grade, is_promoted)
+        next_class = next_school_class(rec.school_class, is_promoted)
 
         # Store in StudentClassRecord for next_ay
         StudentClassRecord.objects.update_or_create(
             student=student,
             academic_year=next_ay,
             defaults={
-                'class_grade': next_grade_str,
+                'school_class': next_class,
                 'is_active': True,
                 'promoted': is_promoted,
             }
         )
+        # Keep the student's current class FK in sync so lists/dashboards reflect it.
+        if next_class and student.school_class_id != next_class.class_id:
+            student.school_class = next_class
+            student.save(update_fields=['school_class'])
 
         evaluated_students.append({
             'studentId': student.student_id,
             'studentName': student.full_name or f"Student #{student.student_id}",
             'currentClass': rec.class_grade,
-            'nextClass': next_grade_str,
+            'nextClass': next_class.name if next_class else rec.class_grade,
             'isPromoted': is_promoted,
             'subjectAverages': subject_details,
         })

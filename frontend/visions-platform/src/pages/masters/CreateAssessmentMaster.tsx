@@ -432,7 +432,7 @@ export default function CreateAssessmentMaster() {
       {/* Academic Year Selector Bar */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">Academic Year *</label>
+          <label className="text-xs font-bold text-red-600 uppercase tracking-wider">Academic Year *</label>
           <button
             type="button"
             onClick={() => setAddYearModalOpen(true)}
@@ -463,7 +463,7 @@ export default function CreateAssessmentMaster() {
         {/* SECTION 1: CLASSES */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+            <label className="text-xs font-bold text-red-600 uppercase tracking-wider">
               CLASSES * ({selectedClassIds.length} OF {classes.length} SELECTED)
             </label>
             <div className="flex items-center gap-2 text-xs">
@@ -521,7 +521,7 @@ export default function CreateAssessmentMaster() {
         {/* SECTION 2: EXAMS / ASSESSMENT TYPES */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+            <label className="text-xs font-bold text-red-600 uppercase tracking-wider">
               EXAMS / ASSESSMENT TYPES * ({selectedExamIds.length} OF {exams.length} SELECTED)
             </label>
             <div className="flex items-center gap-3 text-xs">
@@ -734,7 +734,7 @@ export default function CreateAssessmentMaster() {
 
             <form onSubmit={handleAddSubjectSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Name *</label>
+                <label className="font-semibold text-red-600">Name *</label>
                 <input
                   type="text"
                   required
@@ -746,7 +746,7 @@ export default function CreateAssessmentMaster() {
               </div>
 
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Code *</label>
+                <label className="font-semibold text-red-600">Code *</label>
                 <input
                   type="text"
                   required
@@ -787,7 +787,7 @@ export default function CreateAssessmentMaster() {
 
             <form onSubmit={handleAddExamSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Name *</label>
+                <label className="font-semibold text-red-600">Name *</label>
                 <input
                   type="text"
                   required
@@ -799,7 +799,7 @@ export default function CreateAssessmentMaster() {
               </div>
 
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Code *</label>
+                <label className="font-semibold text-red-600">Code *</label>
                 <input
                   type="text"
                   required
@@ -842,7 +842,7 @@ export default function CreateAssessmentMaster() {
 
             <form onSubmit={handleAddYearSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Academic Year Name *</label>
+                <label className="font-semibold text-red-600">Academic Year Name *</label>
                 <input
                   type="text"
                   required
