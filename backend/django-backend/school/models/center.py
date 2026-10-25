@@ -44,7 +44,6 @@ class Center(models.Model):
     district = models.ForeignKey(District, on_delete=models.CASCADE, related_name='centres', blank=True, null=True)
     region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name='centres', blank=True, null=True)
     centre_name = models.CharField(max_length=150)
-    centre_type = models.CharField(max_length=50, blank=True, null=True)
     block = models.CharField(max_length=100, blank=True, null=True)
     village = models.CharField(max_length=100, blank=True, null=True)
     gps_location = models.CharField(max_length=255, blank=True, null=True)

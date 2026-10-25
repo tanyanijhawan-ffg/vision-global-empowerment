@@ -15,7 +15,7 @@ from school.services.xlsx import build_workbook, read_first_sheet
 
 REGION_COLUMNS = ['region_name', 'state', 'status']
 DISTRICT_COLUMNS = ['region_name', 'district_name']
-CENTRE_COLUMNS = ['region_name', 'district_name', 'centre_name', 'centre_type', 'block', 'village', 'gps_location', 'facilitator_name', 'start_date', 'status']
+CENTRE_COLUMNS = ['region_name', 'district_name', 'centre_name', 'block', 'village', 'gps_location', 'facilitator_name', 'start_date', 'status']
 
 
 class MasterDataView(APIView):
@@ -114,7 +114,7 @@ class MasterCentreListCreateView(MasterDataView):
             centre.region = region
             centre.district = district
             centre.centre_name = centre_name
-            update_fields(centre, request.data, ('centre_type', 'block', 'village', 'gps_location', 'facilitator_name', 'status'))
+            update_fields(centre, request.data, ('block', 'village', 'gps_location', 'facilitator_name', 'status'))
             start_date = clean(request.data.get('start_date'))
             centre.start_date = date.fromisoformat(start_date) if start_date else None
             centre.save()
@@ -177,7 +177,7 @@ class MasterExportView(MasterDataView):
                 centre.region.region_name if centre.region else '',
                 centre.district.district_name if centre.district else '',
                 centre.centre_name,
-                centre.centre_type or '', centre.block or '', centre.village or '', centre.gps_location or '',
+                centre.block or '', centre.village or '', centre.gps_location or '',
                 centre.facilitator_name or '', centre.start_date.isoformat() if centre.start_date else '', centre.status or '',
             ] for centre in Center.objects.select_related('region', 'district').order_by('centre_name')]
             filename = 'centres.xlsx'
@@ -258,7 +258,7 @@ def upsert_centre(record):
     region, _ = Region.objects.get_or_create(region_name=region_name)
     district, _ = District.objects.get_or_create(region=region, district_name=district_name)
     centre, created = Center.objects.get_or_create(region=region, district=district, centre_name=centre_name)
-    changed = update_fields(centre, record, ('centre_type', 'block', 'village', 'gps_location', 'facilitator_name', 'status'))
+    changed = update_fields(centre, record, ('block', 'village', 'gps_location', 'facilitator_name', 'status'))
     start_date = clean(record.get('start_date'))
     if start_date:
         try:
@@ -310,7 +310,7 @@ def serialize_centre(centre):
     return {
         'id': centre.centre_id, 'region_name': centre.region.region_name if centre.region else '',
         'district_name': centre.district.district_name if centre.district else '', 'centre_name': centre.centre_name,
-        'centre_type': centre.centre_type, 'block': centre.block, 'village': centre.village,
+        'block': centre.block, 'village': centre.village,
         'gps_location': centre.gps_location, 'facilitator_name': centre.facilitator_name,
         'start_date': centre.start_date.isoformat() if centre.start_date else '', 'status': centre.status,
     }

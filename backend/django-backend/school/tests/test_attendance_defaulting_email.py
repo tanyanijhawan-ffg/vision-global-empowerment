@@ -25,7 +25,6 @@ class AttendanceDefaultingEmailTests(TestCase):
             district=cls.district,
             region=cls.region,
             centre_name='Green Centre',
-            centre_type='Community',
             block='Block A',
             village='Village A',
             facilitator_name='Community Educator One',

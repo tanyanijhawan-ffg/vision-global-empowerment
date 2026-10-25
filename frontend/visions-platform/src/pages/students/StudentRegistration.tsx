@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, User, GraduationCap, Users, Briefcase, HeartPulse, BrainCircuit, Target, MapPin } from 'lucide-react';
-import { createStudent, fetchAttendanceCentres, fetchSchoolClasses, fetchStudent, updateStudent, type AttendanceCentre, type SchoolClass, type StudentCreateInput } from '../../lib/api';
+import { createStudent, fetchAttendanceCentres, fetchStudent, updateStudent, type AttendanceCentre, type StudentCreateInput } from '../../lib/api';
 import { getAuthHeaders } from '../../lib/auth';
 
 const STEPS = [
@@ -138,15 +138,15 @@ function Step1({ data, onChange, studentId, existingPhoto, invalidFields }: { da
   );
 }
 
-function Step2({ data, onChange, invalidFields, schoolClasses = [] }: { data: RegistrationData; onChange: FieldChange; invalidFields: Set<string>; schoolClasses?: SchoolClass[] }) {
+function Step2({ data, onChange, invalidFields }: { data: RegistrationData; onChange: FieldChange; invalidFields: Set<string> }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field label="Current Class / Grade *" invalid={invalidFields.has('class_grade')}>
           <select value={data.class_grade} onChange={e => onChange('class_grade', e.target.value)} className={`${inputCls} ${invalidFields.has('class_grade') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : ''}`}>
             <option value="">Select class</option>
-            {schoolClasses.map(c => (
-              <option key={c.id} value={c.name}>{c.name}</option>
+            {[1,2,3,4,5,6,7,8,9,10,11,12].map(c => (
+              <option key={c}>Class {c}</option>
             ))}
             <option>Dropped Out</option>
             <option>Not Enrolled</option>
@@ -507,7 +507,6 @@ export default function StudentRegistration() {
   const [data, setData] = useState<RegistrationData>(initialRegistrationData);
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
   const [tribalCommunities, setTribalCommunities] = useState<string[]>([]);
-  const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>([]);
   const [error, setError] = useState('');
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -517,7 +516,6 @@ export default function StudentRegistration() {
 
   useEffect(() => {
     fetchAttendanceCentres().then(setCentres).catch(() => setError('Unable to load centres. Please try again.'));
-    fetchSchoolClasses().then(setSchoolClasses).catch(() => setSchoolClasses([]));
     fetch('/api/masters/tribal-communities/', { headers: { ...getAuthHeaders(), Accept: 'application/json' } })
       .then(response => (response.ok ? response.json() : []))
       .then((items: Array<{ name: string }>) => setTribalCommunities(items.map(item => item.name).filter(Boolean)))
@@ -547,7 +545,7 @@ export default function StudentRegistration() {
 
   const renderStep = () => {
     if (currentStep === 1) return <Step1 data={data} onChange={updateField} studentId={id} existingPhoto={existingPhoto} invalidFields={invalidFields} />;
-    if (currentStep === 2) return <Step2 data={data} onChange={updateField} invalidFields={invalidFields} schoolClasses={schoolClasses} />;
+    if (currentStep === 2) return <Step2 data={data} onChange={updateField} invalidFields={invalidFields} />;
     if (currentStep === 8) return <Step8 data={data} centres={centres} onChange={updateField} invalidFields={invalidFields} />;
     if (currentStep === 3) return <Step3 data={data} onChange={updateField} />;
     if (currentStep === 4) return <Step4 data={data} onChange={updateField} tribalCommunities={tribalCommunities} />;

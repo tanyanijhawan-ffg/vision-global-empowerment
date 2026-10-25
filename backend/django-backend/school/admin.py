@@ -36,9 +36,9 @@ from .models import (
 
 @admin.register(Center)
 class CenterAdmin(admin.ModelAdmin):
-    list_display = ('centre_id', 'centre_name', 'centre_type', 'block', 'village', 'status')
+    list_display = ('centre_id', 'centre_name', 'block', 'village', 'status')
     search_fields = ('centre_name', 'block', 'village')
-    list_filter = ('centre_type', 'status', 'region', 'district')
+    list_filter = ('status', 'region', 'district')
 
 
 @admin.register(Role)
