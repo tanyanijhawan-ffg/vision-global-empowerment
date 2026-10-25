@@ -341,7 +341,7 @@ class StudentReportView(APIView):
                 'toilet': socio_bool('toilet'),
                 'study_space': socio_bool('study_space'),
             },
-            'class_grade': _breakdown(students, 'class_grade'),
+            'class_grade': _breakdown(students, 'school_class__name'),
             'school_type': _breakdown(students, 'school_type'),
             'medium_of_instruction': _breakdown(students, 'medium_of_instruction'),
             'attendance_pattern': _breakdown(students, 'attendance_pattern'),
