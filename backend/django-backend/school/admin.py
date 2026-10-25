@@ -103,9 +103,14 @@ class AssessmentSubjectAdmin(admin.ModelAdmin):
 
 @admin.register(Assessment)
 class AssessmentAdmin(admin.ModelAdmin):
-    list_display = ('assessment_id', 'assessment_type', 'academic_year_id', 'class_id', 'assessment_date', 'status')
+    list_display = ('assessment_id', 'assessment_type', 'academic_year_id', 'class_name', 'assessment_date', 'status')
     list_filter = ('status', 'assessment_type', 'class_id')
     search_fields = ('assessment_type__name',)
+
+    @admin.display(ordering='class_id', description='Class')
+    def class_name(self, obj):
+        from school.models.assessment import SchoolClass
+        return SchoolClass.objects.filter(class_id=obj.class_id).values_list('name', flat=True).first() or f'Class {obj.class_id}'
 
 
 @admin.register(AssessmentScore)
