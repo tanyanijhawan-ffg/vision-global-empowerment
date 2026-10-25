@@ -262,6 +262,10 @@ def process_class_promotion_and_rollover(assessment):
 
         next_class = next_school_class(rec.school_class, is_promoted)
 
+        # Deactivate the old class record (student has moved to a new class)
+        rec.is_active = False
+        rec.save(update_fields=['is_active'])
+
         # Store in StudentClassRecord for next_ay
         StudentClassRecord.objects.update_or_create(
             student=student,
@@ -432,6 +436,10 @@ def evaluate_and_promote_class(academic_year_id, centre_id, class_id):
             retained_count += 1
 
         next_class = next_school_class(rec.school_class, is_promoted)
+
+        # Deactivate the old class record (student has moved to a new class)
+        rec.is_active = False
+        rec.save(update_fields=['is_active'])
 
         # Store in StudentClassRecord for next_ay
         StudentClassRecord.objects.update_or_create(

@@ -55,7 +55,7 @@ class StudentListView(generics.ListCreateAPIView):
             )
 
         if has_ay_filter:
-            # Academic year is present: filter out records from the StudentClassRecord table
+            # Academic year is present: filter by the student's class record for that year
             if target_ay:
                 scr_qs = StudentClassRecord.objects.filter(academic_year=target_ay, is_active=True)
                 if target_class is not None:

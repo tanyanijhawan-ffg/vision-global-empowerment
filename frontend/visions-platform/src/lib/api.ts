@@ -110,6 +110,7 @@ export interface StudentRecord extends Omit<StudentCreateInput, 'photo' | 'centr
   vulnerabilities?: Array<{ name: string; remarks?: string | null }>;
   motivations?: Array<{ category: string; reason: string; narrative?: string | null }>;
   aspirations?: Array<{ career_goal?: string | null; interests?: string | null; strengths?: string | null }>;
+  class_history?: Array<{ academic_year: string; class_name: string; is_active: boolean; promoted: boolean | null }>;
   attendancePercent?: number;
   academicScore?: number;
 }
