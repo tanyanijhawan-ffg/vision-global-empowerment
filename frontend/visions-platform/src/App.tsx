@@ -27,6 +27,7 @@ import AttendanceEntry from './pages/attendance/AttendanceEntry';
 import AcademicDashboard from './pages/academics/AcademicDashboard';
 import AssessmentEntry from './pages/academics/AssessmentEntry';
 import AcademicProfile from './pages/academics/AcademicProfile';
+import ClassHistory from './pages/academics/ClassHistory';
 import LeadershipDashboard from './pages/leadership/LeadershipDashboard';
 import LeadershipTrainingEntry from './pages/leadership/LeadershipTrainingEntry';
 import UsersList from './pages/users/UsersList';
@@ -68,6 +69,7 @@ function App() {
             
             <Route path="/academics" element={<ProtectedRoute><AcademicDashboard /></ProtectedRoute>} />
             <Route path="/academics/entry" element={<ProtectedRoute><AssessmentEntry /></ProtectedRoute>} />
+            <Route path="/academics/history" element={<ProtectedRoute><ClassHistory /></ProtectedRoute>} />
             <Route path="/academics/:studentId" element={<ProtectedRoute><AcademicProfile /></ProtectedRoute>} />
 
             <Route path="/leadership" element={<ProtectedRoute minimumRole="REGIONAL_ADMIN"><LeadershipDashboard /></ProtectedRoute>} />

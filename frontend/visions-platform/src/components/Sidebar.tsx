@@ -51,7 +51,8 @@ const navItems = [
     icon: GraduationCap, 
     children: [
       { name: 'Dashboard', path: '/academics' },
-      { name: 'Entry', path: '/academics/entry' }
+      { name: 'Entry', path: '/academics/entry' },
+      { name: 'Class History', path: '/academics/history' }
     ]
   },
   { name: 'Users', icon: ShieldAlert, path: '/users' },

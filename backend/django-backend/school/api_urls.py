@@ -24,6 +24,7 @@ from school.views.assessment import (
     AssessmentStatisticsView,
     AssessmentSubmitView,
     AssessmentTypeListView,
+    ClassHistoryView,
     ComparisonView,
     DiagnosticOptionsView,
     LearningBehaviourOptionListView,
@@ -105,4 +106,5 @@ urlpatterns = [
     path('assessments/<int:assessment_id>/centre-performance/', AssessmentCentrePerformanceView.as_view(), name='assessment-centre-performance'),
     path('assessments/centre-performance/', AssessmentCentrePerformanceView.as_view(), name='assessment-centre-performance-query'),
     path('academics/promote-class/', AcademicClassPromotionView.as_view(), name='academic-class-promotion'),
+    path('students/class-history/', ClassHistoryView.as_view(), name='class-history'),
 ]

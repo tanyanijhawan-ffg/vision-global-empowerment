@@ -2059,3 +2059,46 @@ class AssessmentCentrePerformanceView(AssessmentAPIView):
             'centres': centre_report_items,
             'regions': region_report_items,
         })
+
+
+class ClassHistoryView(AssessmentAPIView):
+    """Get class history for all students, filterable by year, class, and centre."""
+    
+    def get(self, request):
+        from school.models.student import StudentClassRecord
+        
+        academic_year = request.query_params.get('academicYear') or request.query_params.get('academic_year')
+        class_id = request.query_params.get('classId') or request.query_params.get('class_id')
+        centre_id = request.query_params.get('centreId') or request.query_params.get('centre_id')
+        
+        # Start with all class records
+        records = StudentClassRecord.objects.select_related(
+            'student', 'student__centre', 'academic_year', 'school_class'
+        ).all().order_by('-academic_year__start_date', 'student__full_name')
+        
+        # Apply filters
+        if academic_year:
+            records = records.filter(academic_year__name__iexact=academic_year.strip())
+        if class_id:
+            try:
+                records = records.filter(school_class_id=int(class_id))
+            except (ValueError, TypeError):
+                pass
+        if centre_id:
+            try:
+                records = records.filter(student__centre_id=int(centre_id))
+            except (ValueError, TypeError):
+                pass
+        
+        return Response([
+            {
+                'student_id': rec.student.student_id,
+                'student_name': rec.student.full_name,
+                'centre_name': rec.student.centre.centre_name if rec.student.centre else '',
+                'academic_year': rec.academic_year.name,
+                'class_name': rec.school_class.name if rec.school_class else '',
+                'is_active': rec.is_active,
+                'promoted': rec.promoted,
+            }
+            for rec in records
+        ])
