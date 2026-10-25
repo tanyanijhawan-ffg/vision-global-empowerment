@@ -22,7 +22,54 @@ export interface StudentGradebookTabProps {
   filteredStudentsWithScores: StudentListItem[];
   /** Map of student ID to score object containing subject breakdown */
   studentScoresMap: Map<number, StudentScoreRecord>;
+  /** Diagnostics data containing understanding level per student/subject */
+  diagnosticsData?: Array<{ studentId: number; subjectId?: number; understandingLevel?: string }>;
 }
+
+/**
+ * Returns understanding badge label and styling based on diagnostic understanding level,
+ * falling back to 75% total percentage if no diagnostic understanding level is entered.
+ */
+export const getUnderstandingBadge = (
+  rawUnderstanding: string | undefined | null,
+  percentage: number | string
+) => {
+  if (rawUnderstanding && rawUnderstanding.trim()) {
+    const val = rawUnderstanding.trim();
+    const upper = val.toUpperCase().replace(/\s+/g, '_');
+
+    if (upper === 'CLEAR' || upper === 'UNDERSTANDS_CLEARLY' || upper === 'UNDERSTANDS') {
+      return {
+        label: 'Understands clearly',
+        className: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
+      };
+    }
+    if (upper === 'REPETITION' || upper === 'NEEDS_REPETITION') {
+      return {
+        label: 'Needs repetition',
+        className: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+      };
+    }
+    if (upper === 'NOT_UNDERSTAND' || upper === 'DOES_NOT_UNDERSTAND') {
+      return {
+        label: 'Does not understand',
+        className: 'bg-rose-50 text-rose-700 border border-rose-200/60',
+      };
+    }
+
+    return {
+      label: val,
+      className: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60',
+    };
+  }
+
+  // Fallback: 75% method
+  const isHigh = typeof percentage === 'number' && percentage >= 75;
+  return {
+    label: isHigh ? 'Understands' : 'Needs Support',
+    className: isHigh ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700',
+  };
+};
 
 /**
  * StudentGradebookTab Component
@@ -31,15 +78,30 @@ export interface StudentGradebookTabProps {
  * - Top-right search bar for filtering students by name or centre.
  * - Fixed height & scrollable subject-wise gradebook table.
  * - Maps individual student scores across all registered subjects.
- * - Computes total score percentage and assigns understanding badges ('Understands' vs 'Needs Support').
+ * - Displays understanding level from assessment diagnostic entry (with 75% threshold fallback).
  */
 export const StudentGradebookTab: React.FC<StudentGradebookTabProps> = ({
   filterClass,
   displaySubjects,
   filteredStudentsWithScores,
   studentScoresMap,
+  diagnosticsData,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Map student ID to understanding level from diagnostics
+  const studentUnderstandingMap = useMemo(() => {
+    const map = new Map<number, string>();
+    if (diagnosticsData && diagnosticsData.length > 0) {
+      diagnosticsData.forEach((d) => {
+        const sId = Number(d.studentId);
+        if (sId && d.understandingLevel && d.understandingLevel.trim() && !map.has(sId)) {
+          map.set(sId, d.understandingLevel.trim());
+        }
+      });
+    }
+    return map;
+  }, [diagnosticsData]);
 
   // Filter gradebook students by search query (name or centre)
   const filteredStudents = useMemo(() => {
@@ -102,6 +164,9 @@ export const StudentGradebookTab: React.FC<StudentGradebookTabProps> = ({
               {filteredStudents.map((s) => {
                 const scoreRecord = studentScoresMap.get(Number(s.id));
                 const percentage = scoreRecord?.percentage ?? s.academicScore ?? '-';
+                const understandingLevel = studentUnderstandingMap.get(Number(s.id));
+                const understandingBadge = getUnderstandingBadge(understandingLevel, percentage);
+
                 return (
                   <div key={s.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
                     <div className="flex items-start justify-between gap-3">
@@ -109,8 +174,8 @@ export const StudentGradebookTab: React.FC<StudentGradebookTabProps> = ({
                         <div className="font-bold text-slate-900 truncate">{s.name}</div>
                         <div className="text-xs text-slate-500 mt-0.5">{s.centre}</div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${typeof percentage === 'number' && percentage >= 75 ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'}`}>
-                        {typeof percentage === 'number' && percentage >= 75 ? 'Understands' : 'Needs Support'}
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${understandingBadge.className}`}>
+                        {understandingBadge.label}
                       </span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
@@ -153,6 +218,8 @@ export const StudentGradebookTab: React.FC<StudentGradebookTabProps> = ({
                 {filteredStudents.map((s) => {
                   const scoreRecord = studentScoresMap.get(Number(s.id));
                   const percentage = scoreRecord?.percentage ?? s.academicScore ?? '-';
+                  const understandingLevel = studentUnderstandingMap.get(Number(s.id));
+                  const understandingBadge = getUnderstandingBadge(understandingLevel, percentage);
 
                   return (
                     <tr key={s.id} className="hover:bg-slate-50/70 transition">
@@ -171,15 +238,9 @@ export const StudentGradebookTab: React.FC<StudentGradebookTabProps> = ({
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            typeof percentage === 'number' && percentage >= 75
-                              ? 'bg-indigo-50 text-indigo-700'
-                              : 'bg-amber-50 text-amber-700'
-                          }`}
+                          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${understandingBadge.className}`}
                         >
-                          {typeof percentage === 'number' && percentage >= 75
-                            ? 'Understands'
-                            : 'Needs Support'}
+                          {understandingBadge.label}
                         </span>
                       </td>
                     </tr>
