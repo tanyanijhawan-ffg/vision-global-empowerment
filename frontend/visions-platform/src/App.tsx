@@ -17,9 +17,11 @@ import CentresList from './pages/masters/CentresList';
 import DistrictsList from './pages/masters/DistrictsList';
 import AssessmentsList from './pages/masters/AssessmentsList';
 import CreateAssessmentMaster from './pages/masters/CreateAssessmentMaster';
+import TribalCommunitiesList from './pages/masters/TribalCommunitiesList';
 import StudentsList from './pages/students/StudentsList';
 import StudentRegistration from './pages/students/StudentRegistration';
 import StudentProfile from './pages/students/StudentProfile';
+import StudentReports from './pages/students/StudentReports';
 import AttendanceDashboard from './pages/attendance/AttendanceDashboard';
 import AttendanceEntry from './pages/attendance/AttendanceEntry';
 import AcademicDashboard from './pages/academics/AcademicDashboard';
@@ -53,8 +55,10 @@ function App() {
             <Route path="/masters/centres" element={<ProtectedRoute><CentresList /></ProtectedRoute>} />
             <Route path="/masters/assessments" element={<ProtectedRoute><AssessmentsList /></ProtectedRoute>} />
             <Route path="/masters/assessments/new" element={<ProtectedRoute><CreateAssessmentMaster /></ProtectedRoute>} />
+            <Route path="/masters/tribal-communities" element={<ProtectedRoute><TribalCommunitiesList /></ProtectedRoute>} />
             
             <Route path="/students" element={<ProtectedRoute><StudentsList /></ProtectedRoute>} />
+            <Route path="/students/reports" element={<ProtectedRoute><StudentReports /></ProtectedRoute>} />
             <Route path="/students/new" element={<ProtectedRoute><StudentRegistration /></ProtectedRoute>} />
             <Route path="/students/:id" element={<ProtectedRoute><StudentProfile /></ProtectedRoute>} />
             <Route path="/students/:id/edit" element={<ProtectedRoute><StudentRegistration /></ProtectedRoute>} />

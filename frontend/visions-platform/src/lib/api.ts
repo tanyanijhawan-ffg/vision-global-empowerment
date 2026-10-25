@@ -240,13 +240,13 @@ export async function updateStudent(id: string, input: Partial<StudentCreateInpu
       body.append(key, value instanceof File ? value : typeof value === 'object' ? JSON.stringify(value) : String(value));
     }
   });
-  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'PATCH', headers: { Accept: 'application/json' }, body });
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'PATCH', headers: { Accept: 'application/json', ...getAuthHeaders() }, body });
   if (!response.ok) throw new Error(`Failed to update student (${response.status})`);
   return response.json() as Promise<StudentRecord>;
 }
 
 export async function deleteStudent(id: string): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'DELETE' });
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { method: 'DELETE', headers: { ...getAuthHeaders() } });
   if (!response.ok) throw new Error(`Failed to delete student (${response.status})`);
 }
 
@@ -273,7 +273,7 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentA
 
   const response = await fetch(`${getApiBaseUrl()}/students/`, {
     method: 'POST',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
     body,
   });
   if (!response.ok) {
@@ -682,6 +682,24 @@ export interface SchoolClass {
 }
 
 export const fetchSchoolClasses = () => apiRequest<SchoolClass[]>("/v1/classes/");
+
+export interface MasterRegion {
+  id: number;
+  region_name: string;
+  state?: string | null;
+  status?: string | null;
+}
+
+export interface MasterCentre {
+  id: number;
+  region_name: string;
+  district_name: string;
+  centre_name: string;
+  status?: string | null;
+}
+
+export const fetchMasterRegions = () => apiRequest<MasterRegion[]>("/masters/regions/");
+export const fetchMasterCentres = () => apiRequest<MasterCentre[]>("/masters/centres/");
 export const fetchAllSubjects = () => apiRequest<Subject[]>("/v1/metadata/subjects/");
 export const createSubjectMetadata = (payload: { name: string; code: string }) =>
   apiRequest<Subject>("/v1/metadata/subjects/", { method: "POST", body: JSON.stringify(payload) });

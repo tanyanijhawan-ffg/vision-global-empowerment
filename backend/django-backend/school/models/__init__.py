@@ -20,6 +20,7 @@ from .assessment import (
 )
 from .family import Family
 from .socio_economic import SocioEconomic
+from .tribal_community import TribalCommunity
 from .vulnerability import VulnerabilityMaster, StudentVulnerability
 from .motivation import Motivation
 from .aspiration import Aspiration
@@ -52,6 +53,7 @@ __all__ = [
     'Subject',
     'Family',
     'SocioEconomic',
+    'TribalCommunity',
     'VulnerabilityMaster',
     'StudentVulnerability',
     'Motivation',

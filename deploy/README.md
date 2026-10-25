@@ -126,6 +126,13 @@ sudo certbot --nginx -d visionseducation.in -d www.visionseducation.in
 
 Certbot will rewrite the config to listen on 443 and redirect HTTP -> HTTPS automatically.
 
+**Security headers (ZAP remediation):** the site config already sends security
+headers on the HTTP block. Certbot's rewrite creates a separate 443 block, so
+copy the `add_header` lines — plus the `Strict-Transport-Security` line — from
+the commented HTTPS reference block at the bottom of
+`deploy/nginx/visionseducation.in.conf` into the certbot-generated 443 block,
+then `sudo nginx -t && sudo systemctl reload nginx`.
+
 Open `https://visionseducation.in` -> you should see the login page.
 API: `https://visionseducation.in/api/`.
 

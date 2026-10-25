@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from school.models.center import Center, District, Region
+from school.models.tribal_community import TribalCommunity
 from school.permissions import IsSuperAdmin
 from school.services.xlsx import build_workbook, read_first_sheet
 
@@ -123,6 +124,33 @@ class MasterCentreListCreateView(MasterDataView):
 
     def delete(self, request, pk, *args, **kwargs):
         deleted, _ = Center.objects.filter(pk=pk).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT if deleted else status.HTTP_404_NOT_FOUND)
+
+
+class MasterTribalCommunityListCreateView(MasterDataView):
+
+    def get(self, request, *args, **kwargs):
+        return Response([serialize_tribal_community(item) for item in TribalCommunity.objects.order_by('name')])
+
+    def post(self, request, *args, **kwargs):
+        name = clean(request.data.get('name'))
+        if not name:
+            return Response({'name': ['Community name is required.']}, status=status.HTTP_400_BAD_REQUEST)
+        item, created = TribalCommunity.objects.get_or_create(name=name)
+        return Response(serialize_tribal_community(item), status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    def patch(self, request, pk, *args, **kwargs):
+        item = TribalCommunity.objects.filter(pk=pk).first()
+        if item is None:
+            return Response({'detail': 'Community not found.'}, status=status.HTTP_404_NOT_FOUND)
+        name = clean(request.data.get('name'))
+        if name:
+            item.name = name
+            item.save(update_fields=['name'])
+        return Response(serialize_tribal_community(item))
+
+    def delete(self, request, pk, *args, **kwargs):
+        deleted, _ = TribalCommunity.objects.filter(pk=pk).delete()
         return Response(status=status.HTTP_204_NO_CONTENT if deleted else status.HTTP_404_NOT_FOUND)
 
 
@@ -264,6 +292,10 @@ def clean(value):
 
 def serialize_region(region):
     return {'id': region.region_id, 'region_name': region.region_name, 'state': region.state, 'status': region.status}
+
+
+def serialize_tribal_community(item):
+    return {'id': item.tribal_community_id, 'name': item.name}
 
 
 def serialize_district(district):

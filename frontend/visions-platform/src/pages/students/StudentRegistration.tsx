@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, User, GraduationCap, Users, Briefcase, HeartPulse, BrainCircuit, Target, MapPin } from 'lucide-react';
 import { createStudent, fetchAttendanceCentres, fetchStudent, updateStudent, type AttendanceCentre, type StudentCreateInput } from '../../lib/api';
+import { getAuthHeaders } from '../../lib/auth';
 
 const STEPS = [
   { id: 1, name: 'Identification', icon: User },
@@ -17,6 +18,39 @@ const STEPS = [
 const inputCls = 'w-full min-w-0 h-10 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm';
 const labelBaseCls = 'block text-sm font-medium mb-1';
 const sectionTitle = 'text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 mt-6 first:mt-0';
+
+const CASTE_CATEGORIES = [
+  'Scheduled Tribe (ST)',
+  'Scheduled Caste (SC)',
+  'Most Backward Class (MBC)',
+  'Backward Class (BC)',
+  'Other Backward Class (OBC)',
+  'General / Other',
+  'Prefer Not to Disclose',
+];
+
+const RELIGIONS = [
+  'Hinduism',
+  'Christianity',
+  'Islam',
+  'Buddhism',
+  'Jainism',
+  'Sikhism',
+  'Other Religion',
+  'Atheist / No Religion',
+  'Prefer Not to Disclose',
+];
+
+const HOUSING_CONDITIONS = [
+  'Permanent House – Concrete Roof',
+  'Permanent House – Tiled Roof',
+  'Thatched House',
+  'Metal Sheet Roof',
+  'Asbestos Sheet Roof',
+  'Other',
+];
+
+const HOUSING_OWNERSHIP = ['Own House', 'Rented House', 'Leased House', 'Other'];
 
 type RegistrationData = Omit<StudentCreateInput, 'photo' | 'centre_id'> & {
   photo: File | null;
@@ -142,6 +176,8 @@ function Step2({ data, onChange, invalidFields }: { data: RegistrationData; onCh
             <option value="">Select pattern</option>
             <option>Regular</option>
             <option>Irregular</option>
+            <option>Correspondence / Open Schooling</option>
+            <option>Any Other</option>
           </select>
         </Field>
       </div>
@@ -167,9 +203,13 @@ function Step3({ data, onChange }: { data: RegistrationData; onChange: FieldChan
           <select value={data.family_data.father_education ?? ''} onChange={e => onChange('family_data', { ...data.family_data, father_education: e.target.value })} className={inputCls}>
             <option value="">Select</option>
             <option>Primary</option>
-            <option>Upper Primary</option>
-            <option>Graduation</option>
-            <option>Post graduation</option>
+            <option>Middle</option>
+            <option>High School</option>
+            <option>Higher Secondary School</option>
+            <option>Diploma</option>
+            <option>UG</option>
+            <option>PG</option>
+            <option>Above PG</option>
           </select>
         </Field>
       </div>
@@ -184,9 +224,13 @@ function Step3({ data, onChange }: { data: RegistrationData; onChange: FieldChan
           <select value={data.family_data.mother_education ?? ''} onChange={e => onChange('family_data', { ...data.family_data, mother_education: e.target.value })} className={inputCls}>
             <option value="">Select</option>
             <option>Primary</option>
-            <option>Upper Primary</option>
-            <option>Graduation</option>
-            <option>Post graduation</option>
+            <option>Middle</option>
+            <option>High School</option>
+            <option>Higher Secondary School</option>
+            <option>Diploma</option>
+            <option>UG</option>
+            <option>PG</option>
+            <option>Above PG</option>
           </select>
         </Field>
       </div>
@@ -214,20 +258,30 @@ function Step3({ data, onChange }: { data: RegistrationData; onChange: FieldChan
   );
 }
 
-function Step4({ data, onChange }: { data: RegistrationData; onChange: FieldChange }) {
+function Step4({ data, onChange, tribalCommunities = [] }: { data: RegistrationData; onChange: FieldChange; tribalCommunities?: string[] }) {
   const setSocio = (field: string, value: string | boolean) => onChange('socio_economic_data', { ...data.socio_economic_data, [field]: value });
   const booleanValue = (field: string) => data.socio_economic_data[field] === true ? 'Yes' : data.socio_economic_data[field] === false ? 'No' : '';
+  const stringValue = (field: string) => typeof data.socio_economic_data[field] === 'string' ? data.socio_economic_data[field] as string : '';
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Caste Category">
-          <input value={typeof data.socio_economic_data.caste_category === 'string' ? data.socio_economic_data.caste_category : ''} onChange={e => setSocio('caste_category', e.target.value)} placeholder="SC, ST, BC, General" className={inputCls} />
+          <select value={stringValue('caste_category')} onChange={e => setSocio('caste_category', e.target.value)} className={inputCls}>
+            <option value="">Select</option>
+            {CASTE_CATEGORIES.map(option => <option key={option}>{option}</option>)}
+          </select>
         </Field>
-        <Field label="Tribe Name (if applicable)">
-          <input value={typeof data.socio_economic_data.tribe_name === 'string' ? data.socio_economic_data.tribe_name : ''} onChange={e => setSocio('tribe_name', e.target.value)} placeholder="Tribe name" className={inputCls} />
+        <Field label="Tribal Community / Sub-Caste">
+          <select value={stringValue('tribe_name')} onChange={e => setSocio('tribe_name', e.target.value)} className={inputCls}>
+            <option value="">Select (if applicable)</option>
+            {tribalCommunities.map(option => <option key={option}>{option}</option>)}
+          </select>
         </Field>
         <Field label="Religion">
-          <input value={typeof data.socio_economic_data.religion === 'string' ? data.socio_economic_data.religion : ''} onChange={e => setSocio('religion', e.target.value)} placeholder="Religion" className={inputCls} />
+          <select value={stringValue('religion')} onChange={e => setSocio('religion', e.target.value)} className={inputCls}>
+            <option value="">Select</option>
+            {RELIGIONS.map(option => <option key={option}>{option}</option>)}
+          </select>
         </Field>
         <Field label="Monthly Household Income (₹)">
           <select value={typeof data.socio_economic_data.income_range === 'string' ? data.socio_economic_data.income_range : ''} onChange={e => setSocio('income_range', e.target.value)} className={inputCls}>
@@ -240,18 +294,15 @@ function Step4({ data, onChange }: { data: RegistrationData; onChange: FieldChan
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Housing Condition">
-          <select value={typeof data.socio_economic_data.house_type === 'string' ? data.socio_economic_data.house_type : ''} onChange={e => setSocio('house_type', e.target.value)} className={inputCls}>
+          <select value={stringValue('house_type')} onChange={e => setSocio('house_type', e.target.value)} className={inputCls}>
             <option value="">Select</option>
-            <option>Permanent (Pucca)</option>
-            <option>Semi-permanent (Semi-Pucca)</option>
-            <option>Temporary (Kutcha)</option>
+            {HOUSING_CONDITIONS.map(option => <option key={option}>{option}</option>)}
           </select>
         </Field>
-        <Field label="Ownership">
-          <select value={typeof data.socio_economic_data.ownership === 'string' ? data.socio_economic_data.ownership : ''} onChange={e => setSocio('ownership', e.target.value)} className={inputCls}>
+        <Field label="Housing Ownership">
+          <select value={stringValue('ownership')} onChange={e => setSocio('ownership', e.target.value)} className={inputCls}>
             <option value="">Select</option>
-            <option>Own</option>
-            <option>Rent</option>
+            {HOUSING_OWNERSHIP.map(option => <option key={option}>{option}</option>)}
           </select>
         </Field>
       </div>
@@ -455,6 +506,7 @@ export default function StudentRegistration() {
   const [currentStep, setCurrentStep] = useState(1);
   const [data, setData] = useState<RegistrationData>(initialRegistrationData);
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
+  const [tribalCommunities, setTribalCommunities] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -464,6 +516,10 @@ export default function StudentRegistration() {
 
   useEffect(() => {
     fetchAttendanceCentres().then(setCentres).catch(() => setError('Unable to load centres. Please try again.'));
+    fetch('/api/masters/tribal-communities/', { headers: { ...getAuthHeaders(), Accept: 'application/json' } })
+      .then(response => (response.ok ? response.json() : []))
+      .then((items: Array<{ name: string }>) => setTribalCommunities(items.map(item => item.name).filter(Boolean)))
+      .catch(() => setTribalCommunities([]));
   }, []);
 
   useEffect(() => {
@@ -492,7 +548,7 @@ export default function StudentRegistration() {
     if (currentStep === 2) return <Step2 data={data} onChange={updateField} invalidFields={invalidFields} />;
     if (currentStep === 8) return <Step8 data={data} centres={centres} onChange={updateField} invalidFields={invalidFields} />;
     if (currentStep === 3) return <Step3 data={data} onChange={updateField} />;
-    if (currentStep === 4) return <Step4 data={data} onChange={updateField} />;
+    if (currentStep === 4) return <Step4 data={data} onChange={updateField} tribalCommunities={tribalCommunities} />;
     if (currentStep === 5) return <Step5 data={data} onChange={updateField} />;
     if (currentStep === 6) return <Step6 data={data} onChange={updateField} invalidFields={invalidFields} />;
     return <Step7 data={data} onChange={updateField} />;

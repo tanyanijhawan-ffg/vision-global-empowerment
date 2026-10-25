@@ -881,6 +881,7 @@ export default function AcademicDashboard() {
               displaySubjects={displaySubjects}
               filteredStudentsWithScores={filteredStudentsWithScores}
               studentScoresMap={studentScoresMap}
+              diagnosticsData={diagnosticsData as any}
             />
           )}
         </>
@@ -899,8 +900,9 @@ export default function AcademicDashboard() {
           onSuccess={() => {
             // Re-fetch scoped students to immediately reflect updated class records
             if (filterClass && selectedCentreObj?.id) {
-              const classNum = Number(normalizeClass(filterClass));
-              fetchStudents(classNum, selectedCentreObj.id)
+              const classNum = normalizeClass(filterClass);
+              const selectedYearName = selectedAcademicYearObj?.name;
+              fetchStudents(classNum, selectedCentreObj.id, selectedYearName)
                 .then(setStudents)
                 .catch(() => {});
             }
