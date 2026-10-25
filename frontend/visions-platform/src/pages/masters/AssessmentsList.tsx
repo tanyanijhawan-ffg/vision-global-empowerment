@@ -918,7 +918,7 @@ export default function AssessmentsList() {
 
                 {/* Class */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-semibold text-red-600 uppercase tracking-wider mb-1.5">
                     Class *
                   </label>
                   <select
@@ -938,7 +938,7 @@ export default function AssessmentsList() {
 
                 {/* Exam */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-semibold text-red-600 uppercase tracking-wider mb-1.5">
                     Exam *
                   </label>
                   <select
@@ -1284,7 +1284,7 @@ export default function AssessmentsList() {
               </button>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
                 Subject Name *
               </label>
               <input
@@ -1297,7 +1297,7 @@ export default function AssessmentsList() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
                 Subject Code *
               </label>
               <input
@@ -1346,7 +1346,7 @@ export default function AssessmentsList() {
               </button>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
                 Exam Name *
               </label>
               <input
@@ -1359,7 +1359,7 @@ export default function AssessmentsList() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
                 Exam Code *
               </label>
               <input
@@ -1409,7 +1409,7 @@ export default function AssessmentsList() {
               </button>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
                 Academic Year Name *
               </label>
               <input
