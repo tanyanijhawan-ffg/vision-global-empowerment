@@ -17,7 +17,6 @@ class AttendanceValidationTests(TestCase):
             district=district,
             region=region,
             centre_name='Centre A',
-            centre_type='Community',
             block='Block A',
             village='Village A',
             status='active',
