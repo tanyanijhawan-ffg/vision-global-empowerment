@@ -159,11 +159,8 @@ class AssessmentTypeMetadataListCreateView(generics.ListCreateAPIView):
             ay_obj = AcademicYear.objects.filter(name__iexact=str(ay_val).strip()).first()
             if ay_obj:
                 payload['academicYearId'] = ay_obj.academic_year_id
-        # Auto-assign current academic year if still not set
-        if not payload.get('academicYearId'):
-            current_ay = AcademicYear.objects.filter(is_current=True).first()
-            if current_ay:
-                payload['academicYearId'] = current_ay.academic_year_id
+        # NOTE: Do NOT auto-assign current year — exam types should be year-agnostic
+        # so they appear for all academic years. academicYearId stays None if not set.
 
         if 'maxMarks' in payload:
             payload.pop('maxMarks')
@@ -183,6 +180,10 @@ class AssessmentTypeMetadataListCreateView(generics.ListCreateAPIView):
             if not existing:
                 existing = AssessmentType.objects.filter(name__iexact=name, is_active=True).first()
             if existing:
+                # Make the existing exam type year-agnostic so it works for all years
+                if existing.academic_year_id is not None:
+                    existing.academic_year = None
+                    existing.save(update_fields=['academic_year'])
                 serializer = self.get_serializer(existing)
                 return Response(serializer.data, status=status.HTTP_200_OK)
 

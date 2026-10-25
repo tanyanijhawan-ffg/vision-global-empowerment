@@ -544,10 +544,10 @@ export default function AssessmentsList() {
       return;
     }
     try {
+      // Do NOT send academicYearId — exam types are year-agnostic
       const newExam = await createExamMetadata({
         name: examForm.name.trim(),
         code: examForm.code.trim().toUpperCase(),
-        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
       });
       setExams((prev) => [...prev, newExam]);
       setSelectedExamIds((prev) => [...prev, newExam.id]);
