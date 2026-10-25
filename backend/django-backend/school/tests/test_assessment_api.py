@@ -361,3 +361,48 @@ class AssessmentSubmissionMandatoryNarrativeTests(TestCase):
 
 
 
+class SubmittedAssessmentCentreFilterTests(TestCase):
+    """Regression test: a SUBMITTED assessment saved with centre_id=NULL (marks
+    entered against a class/exam without a centre) must still appear when the
+    dashboard filters by centre — otherwise 'publish to dashboard' looks broken."""
+
+    def setUp(self):
+        from datetime import date
+        from decimal import Decimal
+        from school.models.assessment import AcademicYear, AssessmentType, Assessment, AssessmentScore, Subject
+        from school.models.center import Center, District, Program, Region
+        from school.models.student import Student
+
+        self.program = Program.objects.create(program_name='P1')
+        self.region = Region.objects.create(program=self.program, region_name='R1', state='TN')
+        self.district = District.objects.create(region=self.region, district_name='D1')
+        self.centre = Center.objects.create(district=self.district, region=self.region, centre_name='C1')
+
+        self.ay = AcademicYear.objects.create(name='2025 - 2026', start_date=date(2025, 6, 1), end_date=date(2026, 5, 31), is_current=True)
+        self.exam_type = AssessmentType.objects.create(code='Q1', name='Quarterly 1')
+        self.sub = Subject.objects.create(name='Math', code='MATH_1')
+
+        # Published assessment with NO centre set — the reported bug scenario.
+        self.assessment = Assessment.objects.create(
+            centre=None,
+            academic_year_id=self.ay.academic_year_id,
+            class_id=1,
+            assessment_type=self.exam_type,
+            assessment_date=date(2025, 9, 15),
+            status=Assessment.STATUS_SUBMITTED,
+        )
+        self.student = Student.objects.create(full_name='Ananth', centre=self.centre, class_grade='Class 1')
+        AssessmentScore.objects.create(assessment=self.assessment, student=self.student, subject=self.sub, obtained_marks=Decimal('10.00'))
+
+        self.client = APIClient()
+
+    def test_null_centre_submitted_assessment_appears_for_centre_filter(self):
+        response = self.client.get('/api/v1/assessments/', {
+            'classId': 1,
+            'centreId': self.centre.centre_id,
+            'status': 'SUBMITTED',
+            'academicYearId': self.ay.academic_year_id,
+        })
+        self.assertEqual(response.status_code, 200)
+        ids = [item['id'] for item in response.json()]
+        self.assertIn(self.assessment.assessment_id, ids)

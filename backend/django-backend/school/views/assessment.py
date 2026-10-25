@@ -397,7 +397,10 @@ class AssessmentCreateView(AssessmentAPIView):
                 cid = None
             if cid is not None:
                 if status_param and status_param.upper() == 'SUBMITTED':
-                    a_qs = a_qs.filter(Q(centre_id=cid) | Q(scores__student__centre_id=cid)).distinct()
+                    # Include centre-unassigned (centre_id IS NULL) submitted assessments too.
+                    # Marks are often recorded against a class/exam with no centre set, so a
+                    # published assessment must still surface for the centre being viewed.
+                    a_qs = a_qs.filter(Q(centre_id=cid) | Q(centre_id__isnull=True) | Q(scores__student__centre_id=cid)).distinct()
                 else:
                     a_qs = a_qs.filter(Q(centre_id=cid) | Q(centre_id__isnull=True) | Q(scores__student__centre_id=cid)).distinct()
         if assessment_type_id:
