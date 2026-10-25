@@ -889,7 +889,7 @@ export default function AssessmentsList() {
                 {/* Academic Year */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    <label className="text-xs font-semibold text-red-600 uppercase tracking-wider">
                       Academic Year *
                     </label>
                     <button
@@ -963,7 +963,7 @@ export default function AssessmentsList() {
                   {/* Academic Year */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      <label className="text-xs font-semibold text-red-600 uppercase tracking-wider">
                         Academic Year *
                       </label>
                       <button
@@ -994,7 +994,7 @@ export default function AssessmentsList() {
                 {/* SECTION 1: CLASSES */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    <label className="text-xs font-bold text-red-600 uppercase tracking-wider">
                       CLASSES * ({selectedClassIds.length} OF {classes.length} SELECTED)
                     </label>
                     <div className="flex items-center gap-2 text-xs">
@@ -1052,7 +1052,7 @@ export default function AssessmentsList() {
                 {/* SECTION 2: EXAMS / ASSESSMENT TYPES */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    <label className="text-xs font-bold text-red-600 uppercase tracking-wider">
                       EXAMS / ASSESSMENT TYPES * ({selectedExamIds.length} OF {exams.length} SELECTED)
                     </label>
                     <div className="flex items-center gap-3 text-xs">
