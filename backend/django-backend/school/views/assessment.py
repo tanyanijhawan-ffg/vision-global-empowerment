@@ -1160,9 +1160,15 @@ class AssessmentBehaviourView(AssessmentAPIView):
         saved = 0
         for item in request.data.get('students', []):
             student = Student.objects.filter(student_id=item.get('studentId')).first()
-            behaviour = LearningBehaviourOption.objects.filter(code=item.get('behaviour')).first()
-            if not student or not behaviour:
+            code = (item.get('behaviour') or '').strip()
+            if not student or not code:
                 continue
+            # Auto-create the option from the dropdown value if it isn't in the DB yet,
+            # so whatever the user selects is saved without needing pre-seeded rows.
+            behaviour, _ = LearningBehaviourOption.objects.get_or_create(
+                code=code,
+                defaults={'name': code.replace('_', ' ').title(), 'is_active': True},
+            )
             StudentLearningBehaviour.objects.update_or_create(
                 assessment=assessment,
                 student=student,
@@ -1318,17 +1324,25 @@ class AssessmentSubmitView(AssessmentAPIView):
             diagnostics = AssessmentDiagnostic.objects.filter(assessment=assessment)
 
         if not behaviours.exists() and student_ids:
-            default_behaviour = LearningBehaviourOption.objects.filter(code='INDEPENDENT').first() or LearningBehaviourOption.objects.first()
-            if default_behaviour:
-                for sid in student_ids:
-                    st = Student.objects.filter(student_id=sid).first()
-                    if st:
-                        StudentLearningBehaviour.objects.get_or_create(
-                            assessment=assessment,
-                            student=st,
-                            defaults={'behaviour_option': default_behaviour}
-                        )
-                behaviours = StudentLearningBehaviour.objects.filter(assessment=assessment)
+            default_behaviour = (
+                LearningBehaviourOption.objects.filter(code='INDEPENDENT').first()
+                or LearningBehaviourOption.objects.first()
+            )
+            if not default_behaviour:
+                # No options in the DB yet (e.g. fresh DB) — create the default so the
+                # submit can always attach a behaviour.
+                default_behaviour = LearningBehaviourOption.objects.create(
+                    code='INDEPENDENT', name='Independent', is_active=True
+                )
+            for sid in student_ids:
+                st = Student.objects.filter(student_id=sid).first()
+                if st:
+                    StudentLearningBehaviour.objects.get_or_create(
+                        assessment=assessment,
+                        student=st,
+                        defaults={'behaviour_option': default_behaviour}
+                    )
+            behaviours = StudentLearningBehaviour.objects.filter(assessment=assessment)
 
         # Check narrative observations - mandatory for all assessed students
         obs_map = {
