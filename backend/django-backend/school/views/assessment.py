@@ -108,8 +108,14 @@ class AssessmentTypeListView(AssessmentAPIView):
             # Include exams explicitly linked to this year OR exams with no year (legacy/global)
             queryset = queryset.filter(Q(academic_year_id=academic_year_id) | Q(academic_year__isnull=True))
         elif academic_year:
+            # Match the year by name tolerating dash/space differences, since the
+            # frontend may send '2025 - 2026' while the DB stores '2025-2026'.
+            clean_year = academic_year.strip()
+            normalized = clean_year.replace(' ', '')
             queryset = queryset.filter(
-                Q(academic_year__name__iexact=academic_year.strip()) | Q(academic_year__isnull=True)
+                Q(academic_year__name__iexact=clean_year)
+                | Q(academic_year__name__iregex=re.escape(normalized).replace(r'\-', r'\s*-\s*'))
+                | Q(academic_year__isnull=True)
             )
         else:
             current_ay = AcademicYear.objects.filter(is_current=True).first()
