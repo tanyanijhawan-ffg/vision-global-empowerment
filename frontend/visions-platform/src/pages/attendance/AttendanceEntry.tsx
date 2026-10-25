@@ -50,6 +50,7 @@ export default function AttendanceEntry() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
   const [search, setSearch] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, AttendanceDraft>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -97,6 +98,13 @@ export default function AttendanceEntry() {
     (!selectedClass || normalizeClassGrade(student.class) === selectedClass) &&
     student.name.toLowerCase().includes(search.toLowerCase()),
   );
+  // Autocomplete suggestions respect the same centre + class filters as the list.
+  const searchSuggestions = search.trim()
+    ? students.filter(student =>
+        student.centreId === Number(selectedCentre) &&
+        (!selectedClass || normalizeClassGrade(student.class) === selectedClass) &&
+        student.name.toLowerCase().includes(search.toLowerCase()))
+    : [];
   const updateDraft = (id: string, changes: Partial<AttendanceDraft>) => {
     setDrafts(previous => ({ ...previous, [id]: { ...previous[id], ...changes } }));
     setMessage('');
@@ -133,7 +141,7 @@ export default function AttendanceEntry() {
       </div></div>
       {message && <p className={`text-sm ${message.includes('successfully') ? 'text-emerald-600' : 'text-red-600'}`}>{message}</p>}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-4 bg-slate-50/50"><div className="relative w-full max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search students..." className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm" /></div><span className="text-sm text-slate-500">Showing <b className="text-slate-900">{filteredStudents.length}</b> students</span></div>
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-4 bg-slate-50/50"><div className="relative w-full max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} /><input value={search} onChange={event => setSearch(event.target.value)} onFocus={() => setSearchFocused(true)} onBlur={() => setTimeout(() => setSearchFocused(false), 150)} placeholder="Search students..." disabled={!selectedCentre} className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm disabled:bg-slate-50 disabled:text-slate-400" />{searchFocused && searchSuggestions.length > 0 ? <ul className="absolute left-0 right-0 top-full mt-1 z-20 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">{searchSuggestions.map(s => <li key={s.id}><button type="button" onMouseDown={() => { setSearch(s.name); setSearchFocused(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700">{s.name}{s.class ? <span className="text-slate-400"> · {s.class}</span> : null}</button></li>)}</ul> : null}</div><span className="text-sm text-slate-500">Showing <b className="text-slate-900">{filteredStudents.length}</b> students</span></div>
         {loading ? <p className="p-8 text-center text-slate-500">Loading students...</p> : <div className="divide-y divide-slate-100">
           {filteredStudents.map(student => { const draft = drafts[student.id] || emptyDraft(); return <section key={student.id} className="p-5 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_280px] gap-6">
