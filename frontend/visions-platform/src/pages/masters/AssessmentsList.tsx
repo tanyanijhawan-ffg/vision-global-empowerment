@@ -143,15 +143,12 @@ export default function AssessmentsList() {
           .toLowerCase()
           .includes(search.toLowerCase());
 
-      const normFilterClass = normalizeClass(filterClass);
-      const normItemClass = normalizeClass(item.class);
-      const normItemClassId = normalizeClass(item.classId);
-
+      // filterClass holds the SchoolClass PK. Compare PK-to-PK first; only fall
+      // back to grade-number matching when the filter is not a pure PK.
       const matchesClass =
         filterClass === 'All' ||
-        (normFilterClass !== '' && (normItemClass === normFilterClass || normItemClassId === normFilterClass)) ||
-        item.class === filterClass ||
-        String(item.classId) === String(filterClass);
+        String(item.classId) === String(filterClass) ||
+        item.class === filterClass;
 
       const itemYearStart = String(item.academicYear || '').match(/\d{4}/)?.[0];
 
