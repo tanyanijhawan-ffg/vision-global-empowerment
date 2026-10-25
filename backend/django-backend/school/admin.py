@@ -97,8 +97,8 @@ class SubjectAdmin(admin.ModelAdmin):
 
 @admin.register(AssessmentSubject)
 class AssessmentSubjectAdmin(admin.ModelAdmin):
-    list_display = ('assessment_subject_id', 'academic_year_id', 'centre_id', 'class_id', 'exam_id', 'subject_ids', 'max_marks', 'is_active')
-    list_filter = ('academic_year_id', 'class_id', 'exam_id', 'centre_id', 'is_active')
+    list_display = ('assessment_subject_id', 'academic_year_id', 'class_id', 'exam_id', 'subject_ids', 'max_marks', 'is_active')
+    list_filter = ('academic_year_id', 'class_id', 'exam_id', 'is_active')
 
 
 @admin.register(Assessment)

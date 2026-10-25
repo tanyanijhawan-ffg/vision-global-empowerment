@@ -48,7 +48,6 @@ class AssessmentType(models.Model):
 class AssessmentSubject(models.Model):
     assessment_subject_id = models.AutoField(primary_key=True)
     academic_year_id = models.IntegerField(null=True, blank=True)
-    centre_id = models.IntegerField(null=True, blank=True)
     class_id = models.IntegerField(null=True, blank=True)
     exam_id = models.IntegerField(null=True, blank=True)
     subject_ids = models.JSONField(default=list, blank=True)
@@ -62,7 +61,7 @@ class AssessmentSubject(models.Model):
         unique_together = [['class_id', 'exam_id', 'subject_ids', 'academic_year_id']]
 
     def __str__(self):
-        return f'Class:{self.class_id} Exam:{self.exam_id} Centre:{self.centre_id} Subjects:{self.subject_ids}'
+        return f'Class:{self.class_id} Exam:{self.exam_id} Subjects:{self.subject_ids}'
 
     @property
     def assessment_type_id(self):

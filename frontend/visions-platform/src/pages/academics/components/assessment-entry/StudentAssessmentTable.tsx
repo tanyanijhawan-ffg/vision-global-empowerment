@@ -189,9 +189,19 @@ export const StudentAssessmentTable: React.FC<StudentAssessmentTableProps> = ({
               const val = data?.scores?.[s.id];
               return typeof val === 'number' && val >= 0;
             });
-            const hasBehaviour = !!data?.behaviour && data.behaviour !== '';
-            const hasRemarks = !!(data?.keyImprovements || data?.comments);
-            const isComplete = allScoresFilled && hasBehaviour && hasRemarks;
+            const firstSubId = (subjects || [])[0]?.id;
+            const diag = (firstSubId && data?.diagnostics?.[firstSubId]) || Object.values(data?.diagnostics || {})[0];
+            const understandingVal = diag?.understanding !== undefined ? diag.understanding : 'CLEAR';
+            const applicationVal = diag?.application !== undefined ? diag.application : 'APPLIES';
+            const interestVal = diag?.interest !== undefined ? diag.interest : 'INTERESTED';
+            const behaviourVal = data?.behaviour !== undefined ? data.behaviour : 'INDEPENDENT';
+
+            const hasUnderstanding = understandingVal.trim() !== '';
+            const hasApplication = applicationVal.trim() !== '';
+            const hasInterest = interestVal.trim() !== '';
+            const hasBehaviour = behaviourVal.trim() !== '';
+            const hasRemarks = Boolean((data?.keyImprovements || data?.comments || '').trim());
+            const isComplete = allScoresFilled && hasUnderstanding && hasApplication && hasInterest && hasBehaviour && hasRemarks;
             const hasAnyData = Object.values(data?.scores || {}).some((v) => typeof v === 'number' && v >= 0);
 
             const displaySubjects: Subject[] = subjects || [];

@@ -881,6 +881,7 @@ export default function AcademicDashboard() {
               displaySubjects={displaySubjects}
               filteredStudentsWithScores={filteredStudentsWithScores}
               studentScoresMap={studentScoresMap}
+              diagnosticsData={diagnosticsData as any}
             />
           )}
         </>

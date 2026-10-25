@@ -17,10 +17,15 @@ import { AssessmentFilterBar } from './components/assessment-entry/AssessmentFil
 import { StudentAssessmentTable, type StatusFilter } from './components/assessment-entry/StudentAssessmentTable';
 import { type StudentAssessmentData } from './components/assessment-entry/ExpandedStudentCard';
 
+export const DEFAULT_UNDERSTANDING = 'CLEAR';
+export const DEFAULT_APPLICATION = 'APPLIES';
+export const DEFAULT_INTEREST = 'INTERESTED';
+export const DEFAULT_BEHAVIOUR = 'INDEPENDENT';
+
 const newStudentData = (): StudentAssessmentData => ({
   scores: {},
   diagnostics: {},
-  behaviour: 'INDEPENDENT',
+  behaviour: DEFAULT_BEHAVIOUR,
   keyImprovements: '',
   subjectsNeedingSupport: '',
   interventionPlan: '',
@@ -225,12 +230,19 @@ export default function AssessmentEntry() {
 
     // 1. Check for SUBMITTED/PUBLISHED assessments first
     try {
-      const submittedAssessments = await fetchAssessments({
+      let submittedAssessments = await fetchAssessments({
         classId: targetClassId,
         centreId: targetCentreId || selectedCentreId || undefined,
         assessmentTypeId: targetTypeId || undefined,
         status: 'SUBMITTED',
       });
+      if (!submittedAssessments.length) {
+        submittedAssessments = await fetchAssessments({
+          classId: targetClassId,
+          assessmentTypeId: targetTypeId || undefined,
+          status: 'SUBMITTED',
+        });
+      }
 
       const submittedMatch = submittedAssessments[0];
       if (submittedMatch) {
@@ -272,12 +284,19 @@ export default function AssessmentEntry() {
 
     // 3. Check backend draft
     try {
-      const allAssessments = await fetchAssessments({
+      let allAssessments = await fetchAssessments({
         classId: targetClassId,
         centreId: targetCentreId || selectedCentreId || undefined,
         assessmentTypeId: targetTypeId || undefined,
         status: 'DRAFT',
       });
+      if (!allAssessments.length) {
+        allAssessments = await fetchAssessments({
+          classId: targetClassId,
+          assessmentTypeId: targetTypeId || undefined,
+          status: 'DRAFT',
+        });
+      }
 
       const backendDraft = allAssessments[0];
 
@@ -486,6 +505,28 @@ export default function AssessmentEntry() {
     });
   }, [students, selectedCentreId, centres]);
 
+  const checkIsStudentComplete = (sData?: StudentAssessmentData) => {
+    if (!sData) return false;
+    const allScoresFilled = subjects.length > 0 && subjects.every((s) => {
+      const val = sData.scores?.[s.id];
+      return typeof val === 'number' && val >= 0;
+    });
+    const firstSubId = subjects[0]?.id;
+    const diag = (firstSubId && sData.diagnostics?.[firstSubId]) || Object.values(sData.diagnostics || {})[0];
+    const understandingVal = diag?.understanding !== undefined ? diag.understanding : DEFAULT_UNDERSTANDING;
+    const applicationVal = diag?.application !== undefined ? diag.application : DEFAULT_APPLICATION;
+    const interestVal = diag?.interest !== undefined ? diag.interest : DEFAULT_INTEREST;
+    const behaviourVal = sData.behaviour !== undefined ? sData.behaviour : DEFAULT_BEHAVIOUR;
+
+    const hasUnderstanding = understandingVal.trim() !== '';
+    const hasApplication = applicationVal.trim() !== '';
+    const hasInterest = interestVal.trim() !== '';
+    const hasBehaviour = behaviourVal.trim() !== '';
+    const hasRemarks = Boolean((sData.keyImprovements || sData.comments || '').trim());
+
+    return allScoresFilled && hasUnderstanding && hasApplication && hasInterest && hasBehaviour && hasRemarks;
+  };
+
   const filteredStudents = useMemo(() => {
     return centreStudents.filter((s) => {
       if (searchQuery.trim()) {
@@ -496,26 +537,24 @@ export default function AssessmentEntry() {
       }
 
       const sData = studentData[s.id];
-      const hasScores = sData && Object.values(sData.scores).some((v) => typeof v === 'number' && v > 0);
-
-      if (statusFilter === 'Completed') return hasScores;
-      if (statusFilter === 'Incomplete') return !hasScores;
+      if (statusFilter === 'Completed') return checkIsStudentComplete(sData);
+      if (statusFilter === 'Incomplete') return !checkIsStudentComplete(sData);
       return true;
     });
-  }, [centreStudents, searchQuery, statusFilter, studentData]);
+  }, [centreStudents, searchQuery, statusFilter, studentData, subjects]);
 
   const stats = useMemo(() => {
     const total = centreStudents.length;
     let completed = 0;
     centreStudents.forEach((s) => {
       const sData = studentData[s.id];
-      if (sData && Object.values(sData.scores).some((v) => typeof v === 'number' && v > 0)) {
+      if (checkIsStudentComplete(sData)) {
         completed += 1;
       }
     });
     const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { total, completed, percentage };
-  }, [centreStudents, studentData]);
+  }, [centreStudents, studentData, subjects]);
 
   const updateScore = (studentId: string, subjectId: number, value: number | '') => {
     setStudentData((prev) => ({
@@ -582,7 +621,7 @@ export default function AssessmentEntry() {
     const behavioursPayload = centreStudents
       .map((s) => ({
         studentId: Number(s.id),
-        behaviour: studentData[s.id]?.behaviour || 'INDEPENDENT',
+        behaviour: studentData[s.id]?.behaviour || DEFAULT_BEHAVIOUR,
       }))
       .filter((s) => Boolean(s.behaviour));
 
@@ -594,16 +633,16 @@ export default function AssessmentEntry() {
     const diagPayload: Array<Record<string, number | string>> = [];
     centreStudents.forEach((s) => {
       const sDiag = studentData[s.id]?.diagnostics || {};
-      Object.entries(sDiag).forEach(([subId, d]) => {
-        if (d.understanding || d.application || d.interest) {
-          diagPayload.push({
-            studentId: Number(s.id),
-            subjectId: Number(subId),
-            understandingLevel: d.understanding || 'GOOD',
-            applicationAbility: d.application || 'GOOD',
-            interestLevel: d.interest || 'HIGH',
-          });
-        }
+      const firstDiag = Object.values(sDiag)[0];
+      subjects.forEach((sub) => {
+        const d = sDiag[sub.id] || firstDiag || {};
+        diagPayload.push({
+          studentId: Number(s.id),
+          subjectId: Number(sub.id),
+          understandingLevel: d.understanding || DEFAULT_UNDERSTANDING,
+          applicationAbility: d.application || DEFAULT_APPLICATION,
+          interestLevel: d.interest || DEFAULT_INTEREST,
+        });
       });
     });
 
@@ -638,15 +677,25 @@ export default function AssessmentEntry() {
 
       let id = assessmentId;
       if (!id) {
-        const result = await createAssessment({
-          academicYearId: new Date().getFullYear(),
+        const existing = await fetchAssessments({
           classId: Number(classId),
           assessmentTypeId: Number(assessmentTypeId || 1),
-          assessmentDate,
-          centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
         });
-        id = result.id;
-        setAssessmentId(id);
+        if (existing && existing.length > 0) {
+          id = existing[0].id;
+          setAssessmentId(id);
+        } else {
+          const ayId = academicYears.find((y) => y.name === selectedAcademicYear)?.id || 1;
+          const result = await createAssessment({
+            academicYearId: ayId,
+            classId: Number(classId),
+            assessmentTypeId: Number(assessmentTypeId || 1),
+            assessmentDate,
+            centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
+          });
+          id = result.id;
+          setAssessmentId(id);
+        }
       }
 
       // Save scores
@@ -709,15 +758,25 @@ export default function AssessmentEntry() {
     try {
       let id = assessmentId;
       if (!id) {
-        const result = await createAssessment({
-          academicYearId: new Date().getFullYear(),
+        const existing = await fetchAssessments({
           classId: Number(classId),
           assessmentTypeId: Number(assessmentTypeId),
-          assessmentDate,
-          centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
         });
-        id = result.id;
-        setAssessmentId(id);
+        if (existing && existing.length > 0) {
+          id = existing[0].id;
+          setAssessmentId(id);
+        } else {
+          const ayId = academicYears.find((y) => y.name === selectedAcademicYear)?.id || 1;
+          const result = await createAssessment({
+            academicYearId: ayId,
+            classId: Number(classId),
+            assessmentTypeId: Number(assessmentTypeId),
+            assessmentDate,
+            centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
+          });
+          id = result.id;
+          setAssessmentId(id);
+        }
       }
 
       await persistAllData(id);
@@ -778,20 +837,50 @@ export default function AssessmentEntry() {
       return;
     }
 
+    // Check understanding level, application ability, interest level, and learning behaviour are selected
+    const missingDiagnosticStudents = studentsWithMarks.filter((s) => {
+      const sData = studentData[s.id];
+      const firstSubId = subjects[0]?.id;
+      const diag = (firstSubId && sData?.diagnostics?.[firstSubId]) || Object.values(sData?.diagnostics || {})[0];
+      const understandingVal = diag?.understanding !== undefined ? diag.understanding : DEFAULT_UNDERSTANDING;
+      const applicationVal = diag?.application !== undefined ? diag.application : DEFAULT_APPLICATION;
+      const interestVal = diag?.interest !== undefined ? diag.interest : DEFAULT_INTEREST;
+      const behaviourVal = sData?.behaviour !== undefined ? sData.behaviour : DEFAULT_BEHAVIOUR;
+      return !understandingVal.trim() || !applicationVal.trim() || !interestVal.trim() || !behaviourVal.trim();
+    });
+
+    if (missingDiagnosticStudents.length > 0) {
+      const missingNames = missingDiagnosticStudents.map((s) => s.name).join(', ');
+      setError(
+        `Cannot publish to dashboard: Understanding level, Application ability, Interest level, and Learning behaviour must be selected for: ${missingNames}.`
+      );
+      return;
+    }
+
     setSaving(true);
 
     try {
       let id = assessmentId;
       if (!id) {
-        const result = await createAssessment({
-          academicYearId: new Date().getFullYear(),
+        const existing = await fetchAssessments({
           classId: Number(classId),
           assessmentTypeId: Number(assessmentTypeId || 1),
-          assessmentDate,
-          centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
         });
-        id = result.id;
-        setAssessmentId(id);
+        if (existing && existing.length > 0) {
+          id = existing[0].id;
+          setAssessmentId(id);
+        } else {
+          const ayId = academicYears.find((y) => y.name === selectedAcademicYear)?.id || 1;
+          const result = await createAssessment({
+            academicYearId: ayId,
+            classId: Number(classId),
+            assessmentTypeId: Number(assessmentTypeId || 1),
+            assessmentDate,
+            centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
+          });
+          id = result.id;
+          setAssessmentId(id);
+        }
       }
 
       await persistAllData(id);

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Edit2, Search, Trash2, X, Plus, Filter, ChevronDown, AlertCircle } from 'lucide-react';
+import { Edit2, Search, Trash2, X, Plus, Filter, ChevronDown, AlertCircle, Check, AlertTriangle } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import { getCurrentUser } from '../../lib/auth';
 import {
@@ -45,14 +45,23 @@ export default function AssessmentsList() {
   // Form Modal state
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editHasScores, setEditHasScores] = useState<boolean>(false);
+  const [editScoresCount, setEditScoresCount] = useState<number>(0);
+  const [scoredSubjectIds, setScoredSubjectIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+  const [subjectToRemoveWithScores, setSubjectToRemoveWithScores] = useState<number | null>(null);
+  const [assessmentToDelete, setAssessmentToDelete] = useState<number | null>(null);
+  const [showEditMarksWarningModal, setShowEditMarksWarningModal] = useState<boolean>(false);
 
   // Form fields
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<number | ''>('');
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
   const [selectedExamIds, setSelectedExamIds] = useState<number[]>([]);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<number[]>([]);
+  const [initialSubjectIds, setInitialSubjectIds] = useState<number[]>([]);
   const [maxMarks, setMaxMarks] = useState<number>(100);
+  const [subjectMaxMarks, setSubjectMaxMarks] = useState<Record<number, number>>({});
+  const [initialSubjectMarks, setInitialSubjectMarks] = useState<Record<number, number>>({});
   const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
 
   // Sub-modals for inline creation
@@ -119,7 +128,15 @@ export default function AssessmentsList() {
     );
     const selYearStart = selYearObj?.name?.match(/\d{4}/)?.[0] || String(filterYear);
 
+    const seenKeys = new Set<string>();
+
     return data.filter((item) => {
+      const dedupKey = `${item.academicYearId || item.academicYear}_${item.classId || item.class}_${item.assessmentTypeId || item.assessmentType}`;
+      if (seenKeys.has(dedupKey)) {
+        return false;
+      }
+      seenKeys.add(dedupKey);
+
       const matchesSearch =
         [item.assessmentType, item.academicYear, item.class, item.centreName]
           .join(' ')
@@ -150,8 +167,80 @@ export default function AssessmentsList() {
     });
   }, [data, search, filterClass, filterYear, academicYears, normalizeClass]);
 
+  const totalMaxMarks = useMemo(() => {
+    return selectedSubjectIds.reduce((sum, subId) => {
+      const mark = Number(subjectMaxMarks[subId]);
+      return sum + (isNaN(mark) ? 0 : mark);
+    }, 0);
+  }, [selectedSubjectIds, subjectMaxMarks]);
+
+  const handleSubjectMarkChange = (subjectId: number, value: number) => {
+    setSubjectMaxMarks((prev) => ({
+      ...prev,
+      [subjectId]: value,
+    }));
+  };
+
+  const existingCombinationsWarning = useMemo(() => {
+    if (editingId || selectedClassIds.length === 0 || selectedExamIds.length === 0) {
+      return [];
+    }
+    const selectedYearNum = Number(selectedAcademicYearId);
+    const conflicting: string[] = [];
+
+    for (const cid of selectedClassIds) {
+      for (const eid of selectedExamIds) {
+        const exists = data.some((item) => {
+          const matchYear =
+            !selectedYearNum ||
+            !item.academicYearId ||
+            Number(item.academicYearId) === selectedYearNum ||
+            String(item.academicYear) === String(selectedYearNum);
+          const matchClass =
+            (item.classId && Number(item.classId) === Number(cid)) ||
+            normalizeClass(item.class) === normalizeClass(cid);
+          const matchExam =
+            (item.assessmentTypeId && Number(item.assessmentTypeId) === Number(eid)) ||
+            String(item.assessmentTypeId) === String(eid);
+          return matchYear && matchClass && matchExam;
+        });
+
+        if (exists) {
+          const clsName = classes.find((c) => c.id === cid)?.name || `Class ${cid}`;
+          const examName = exams.find((e) => e.id === eid)?.name || `Exam ${eid}`;
+          conflicting.push(`${clsName} - ${examName}`);
+        }
+      }
+    }
+    return conflicting;
+  }, [editingId, selectedClassIds, selectedExamIds, selectedAcademicYearId, data, classes, exams, normalizeClass]);
+
+  const isSubmitDisabled = Boolean(
+    saving ||
+    !selectedAcademicYearId ||
+    selectedClassIds.length === 0 ||
+    selectedExamIds.length === 0 ||
+    selectedSubjectIds.length === 0 ||
+    (!editingId && existingCombinationsWarning.length > 0)
+  );
+
+  const submitDisabledReason = useMemo(() => {
+    if (saving) return 'Saving in progress...';
+    if (!selectedAcademicYearId) return 'Please select an academic year';
+    if (selectedClassIds.length === 0) return 'Please select at least one class';
+    if (selectedExamIds.length === 0) return 'Please select at least one exam';
+    if (selectedSubjectIds.length === 0) return 'Please select at least one subject';
+    if (!editingId && existingCombinationsWarning.length > 0) {
+      return `Cannot create assessment: combination already exists (${existingCombinationsWarning.join(', ')})`;
+    }
+    return undefined;
+  }, [saving, selectedAcademicYearId, selectedClassIds.length, selectedExamIds.length, selectedSubjectIds.length, editingId, existingCombinationsWarning]);
+
   const openAddForm = () => {
     setEditingId(null);
+    setEditHasScores(false);
+    setEditScoresCount(0);
+    setScoredSubjectIds([]);
     setError('');
     setNotice('');
 
@@ -163,6 +252,12 @@ export default function AssessmentsList() {
     setSelectedClassIds(defaultClassIds);
     setSelectedSubjectIds(availableSubjects.map((s) => s.id));
     setMaxMarks(100);
+
+    const initialMarks: Record<number, number> = {};
+    availableSubjects.forEach((s) => {
+      initialMarks[s.id] = 100;
+    });
+    setSubjectMaxMarks(initialMarks);
 
     if (defaultYearId) {
       fetchAssessmentTypes({ academicYearId: Number(defaultYearId) }).then((examList) => {
@@ -190,6 +285,12 @@ export default function AssessmentsList() {
     setSelectedClassIds(classId ? [Number(classId)] : []);
     setMaxMarks(item.maxMarks || 100);
 
+    let hasScoresVal = Boolean(item.hasScores);
+    let scoresCountVal = item.scoresCount || 0;
+    let scoredIdsVal: number[] = Array.isArray(item.scoredSubjectIds)
+      ? item.scoredSubjectIds.map(Number)
+      : [];
+
     if (yearId) {
       const examList = await fetchAssessmentTypes({ academicYearId: Number(yearId) }).catch(() => []);
       setExams(examList);
@@ -197,34 +298,86 @@ export default function AssessmentsList() {
       setSelectedExamIds(matchExam ? [matchExam.id] : (item.assessmentTypeId ? [item.assessmentTypeId] : []));
     }
 
-    // Try fetching detailed subject IDs and maxMarks if available
+    // Try fetching detailed subject IDs, subjectMarks and hasScores
     try {
       const detail = await fetchAssessmentDetail(item.id);
       if (detail) {
         if (detail.maxMarks) setMaxMarks(detail.maxMarks);
-        if (Array.isArray(detail.subjectIds) && detail.subjectIds.length > 0) {
-          setSelectedSubjectIds(detail.subjectIds);
+
+        if (detail.subjectMarks && Object.keys(detail.subjectMarks).length > 0) {
+          const subIds = Object.keys(detail.subjectMarks).map(Number);
+          setSelectedSubjectIds(subIds);
+          setSubjectMaxMarks(detail.subjectMarks);
+          setInitialSubjectIds(subIds);
+          setInitialSubjectMarks({ ...detail.subjectMarks });
+        } else if (item.subjectMarks && Object.keys(item.subjectMarks).length > 0) {
+          const subIds = Object.keys(item.subjectMarks).map(Number);
+          setSelectedSubjectIds(subIds);
+          setSubjectMaxMarks(item.subjectMarks);
+          setInitialSubjectIds(subIds);
+          setInitialSubjectMarks({ ...item.subjectMarks });
         } else {
-          setSelectedSubjectIds(availableSubjects.map((s) => s.id));
+          const resolvedIds = (Array.isArray(detail.subjectIds) && detail.subjectIds.length > 0)
+            ? detail.subjectIds
+            : (Array.isArray(item.subjectIds) && item.subjectIds.length > 0
+                ? item.subjectIds
+                : availableSubjects.map((s) => s.id));
+          setSelectedSubjectIds(resolvedIds);
+
+          const initialMarks: Record<number, number> = {};
+          resolvedIds.forEach((sid) => {
+            initialMarks[sid] = Number(detail.maxMarks) || 100;
+          });
+          setSubjectMaxMarks(initialMarks);
+          setInitialSubjectIds(resolvedIds);
+          setInitialSubjectMarks(initialMarks);
+        }
+
+        if (typeof detail.hasScores === 'boolean') {
+          hasScoresVal = detail.hasScores;
+        } else if (typeof detail.scoresCount === 'number') {
+          hasScoresVal = detail.scoresCount > 0;
+        }
+        if (typeof detail.scoresCount === 'number') {
+          scoresCountVal = detail.scoresCount;
+        }
+        if (Array.isArray(detail.scoredSubjectIds)) {
+          scoredIdsVal = detail.scoredSubjectIds.map(Number);
         }
       }
     } catch {
-      setSelectedSubjectIds(availableSubjects.map((s) => s.id));
+      const fallbackIds = item.subjectIds || availableSubjects.map((s) => s.id);
+      setSelectedSubjectIds(fallbackIds);
+      setInitialSubjectIds(fallbackIds);
+      if (item.subjectMarks) {
+        setSubjectMaxMarks(item.subjectMarks);
+        setInitialSubjectMarks({ ...item.subjectMarks });
+      }
     }
+
+    setEditHasScores(hasScoresVal);
+    setEditScoresCount(scoresCountVal);
+    setScoredSubjectIds(scoredIdsVal);
   };
 
   const closeForm = () => {
     setIsFormOpen(false);
     setEditingId(null);
+    setEditHasScores(false);
+    setEditScoresCount(0);
+    setScoredSubjectIds([]);
     setError('');
     setSubjectDropdownOpen(false);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this assessment? All recorded scores and entries for this assessment will be deleted.')) {
-      return;
-    }
+  const handleDelete = (id: number) => {
+    setAssessmentToDelete(id);
+  };
 
+  const confirmDelete = async () => {
+    if (!assessmentToDelete) return;
+    const id = assessmentToDelete;
+    setAssessmentToDelete(null);
     try {
       await deleteAssessment(id);
       setNotice('Assessment deleted successfully.');
@@ -234,41 +387,71 @@ export default function AssessmentsList() {
     }
   };
 
-  const handleFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedClassIds.length === 0) {
-      setError('Please select at least one class.');
-      return;
-    }
-    if (selectedExamIds.length === 0) {
-      setError('Please select at least one exam.');
-      return;
-    }
-
+  const performSave = async (shouldDeleteScoresExplicit?: boolean) => {
     setSaving(true);
     setError('');
     setNotice('');
 
     const defaultDate = new Date().toISOString().split('T')[0];
+    const subjectMarksPayload: Record<number, number> = {};
+    selectedSubjectIds.forEach((id) => {
+      subjectMarksPayload[id] = Number(subjectMaxMarks[id]) || 100;
+    });
 
     try {
       if (editingId) {
+        const isAddingNewSubjects = selectedSubjectIds.some((sid) => !initialSubjectIds.includes(sid));
+        const hasRemovedScoredSubject = initialSubjectIds.some(
+          (sid) => !selectedSubjectIds.includes(sid) && (scoredSubjectIds.includes(sid) || editHasScores)
+        );
+
+        const shouldDeleteScores = shouldDeleteScoresExplicit ?? hasRemovedScoredSubject;
+
         await updateAssessment(editingId, {
           academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
           classId: Number(selectedClassIds[0]),
           assessmentTypeId: Number(selectedExamIds[0]),
           subjectIds: selectedSubjectIds,
-          maxMarks: Number(maxMarks),
+          maxMarks: totalMaxMarks,
+          subjectMarks: subjectMarksPayload,
+          deleteScores: shouldDeleteScores,
         });
-        setNotice('Assessment updated successfully!');
+
+        // Also update subject metadata
+        if (selectedSubjectIds.length > 0) {
+          await createAssessmentSubjectMetadata({
+            academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+            classIds: selectedClassIds,
+            examIds: selectedExamIds,
+            subjectIds: selectedSubjectIds,
+            maxMarks: totalMaxMarks,
+            subjectMarks: subjectMarksPayload,
+            isActive: true,
+          }).catch(() => null);
+        }
+
+        if (isAddingNewSubjects) {
+          setNotice('Assessment updated! Marks entry demoted to draft for new subject entry.');
+        } else {
+          setNotice('Assessment updated successfully!');
+        }
       } else {
+        if (existingCombinationsWarning.length > 0) {
+          setError(
+            `New assessment cannot be created as the same exam and class combination already exists (${existingCombinationsWarning.join(', ')}).`
+          );
+          setSaving(false);
+          return;
+        }
+
         await createAssessment({
           academicYearId: Number(selectedAcademicYearId),
           classIds: selectedClassIds,
           assessmentTypeIds: selectedExamIds,
           assessmentDate: defaultDate,
           subjectIds: selectedSubjectIds,
-          maxMarks: Number(maxMarks),
+          maxMarks: totalMaxMarks,
+          subjectMarks: subjectMarksPayload,
         });
 
         // Also save subject metadata
@@ -278,7 +461,8 @@ export default function AssessmentsList() {
             classIds: selectedClassIds,
             examIds: selectedExamIds,
             subjectIds: selectedSubjectIds,
-            maxMarks: Number(maxMarks),
+            maxMarks: totalMaxMarks,
+            subjectMarks: subjectMarksPayload,
             isActive: true,
           }).catch(() => null);
         }
@@ -294,6 +478,41 @@ export default function AssessmentsList() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedClassIds.length === 0) {
+      setError('Please select at least one class.');
+      return;
+    }
+    if (selectedExamIds.length === 0) {
+      setError('Please select at least one exam.');
+      return;
+    }
+
+    if (editingId && editHasScores) {
+      const subjectMarksPayload: Record<number, number> = {};
+      selectedSubjectIds.forEach((id) => {
+        subjectMarksPayload[id] = Number(subjectMaxMarks[id]) || 100;
+      });
+
+      const isEditingExistingMarks = initialSubjectIds.some(
+        (sid) =>
+          selectedSubjectIds.includes(sid) &&
+          subjectMarksPayload[sid] !== undefined &&
+          initialSubjectMarks[sid] !== undefined &&
+          subjectMarksPayload[sid] !== initialSubjectMarks[sid] &&
+          (scoredSubjectIds.includes(sid) || editHasScores)
+      );
+
+      if (isEditingExistingMarks) {
+        setShowEditMarksWarningModal(true);
+        return;
+      }
+    }
+
+    await performSave();
   };
 
   // Inline Subject Creation
@@ -392,6 +611,18 @@ export default function AssessmentsList() {
     setSelectedSubjectIds((prev) =>
       prev.includes(id) ? prev.filter((sId) => sId !== id) : [...prev, id]
     );
+  };
+
+  const handleRemoveSubject = (subId: number) => {
+    if (
+      editingId &&
+      (scoredSubjectIds.includes(subId) ||
+        (editHasScores && (scoredSubjectIds.length === 0 || initialSubjectIds.includes(subId))))
+    ) {
+      setSubjectToRemoveWithScores(subId);
+      return;
+    }
+    toggleSubjectSelect(subId);
   };
 
   const unselectedSubjects = useMemo(() => {
@@ -590,32 +821,71 @@ export default function AssessmentsList() {
 
       {/* Add / Edit Assessment Modal */}
       {isFormOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 sm:p-4">
           <form
             onSubmit={handleFormSubmit}
-            className="w-full max-w-2xl bg-white rounded-2xl p-6 shadow-2xl space-y-5 my-8"
+            className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
+                <h2 className="text-base font-bold text-slate-900 leading-tight">
                   {editingId ? 'Edit Assessment' : 'Create New Assessment'}
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
                   {editingId ? 'Modify assessment exam, class, and subject configuration.' : 'Define exam schedule, class, and subjects.'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeForm}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
               >
                 <X size={18} />
               </button>
             </div>
 
+            <div className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto">
+            {/* Error display inside modal */}
+            {error ? (
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start justify-between gap-2.5 text-rose-800 text-xs sm:text-sm">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={17} className="text-rose-600 flex-shrink-0 mt-0.5" />
+                  <span className="font-medium leading-relaxed">{error}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError('')}
+                  className="text-rose-600 hover:text-rose-900 cursor-pointer shrink-0"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : null}
+
+            {/* Warning when existing combination is selected during creation */}
+            {!editingId && existingCombinationsWarning.length > 0 ? (
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-amber-800 text-xs sm:text-sm">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Combination already exists:</span> An assessment already exists for{' '}
+                  <span className="font-semibold underline">{existingCombinationsWarning.join(', ')}</span>. New assessment cannot be created with this combination.
+                </div>
+              </div>
+            ) : null}
+
+            {/* Disclaimer when editing assessment */}
+            {editingId && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-amber-800 text-xs sm:text-sm">
+                <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Disclaimer:</span> Editing marks or removing subjects will only delete entries made for the modified subjects.
+                </div>
+              </div>
+            )}
+
             {/* When Editing: show single selects */}
             {editingId ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {/* Academic Year */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -719,34 +989,19 @@ export default function AssessmentsList() {
                       ))}
                     </select>
                   </div>
-
-                  {/* Max Marks */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Max Marks (subject)*
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={1000}
-                      value={maxMarks}
-                      onChange={(e) => setMaxMarks(Number(e.target.value))}
-                      required
-                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                    />
-                  </div>
                 </div>
-                {/* Class Multi-Select */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                      Classes * ({selectedClassIds.length} of {classes.length} selected)
+
+                {/* SECTION 1: CLASSES */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      CLASSES * ({selectedClassIds.length} OF {classes.length} SELECTED)
                     </label>
                     <div className="flex items-center gap-2 text-xs">
                       <button
                         type="button"
                         onClick={() => setSelectedClassIds(classes.map((c) => c.id))}
-                        className="font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                        className="font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
                       >
                         Select All
                       </button>
@@ -754,7 +1009,7 @@ export default function AssessmentsList() {
                       <button
                         type="button"
                         onClick={() => setSelectedClassIds([])}
-                        className="font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+                        className="font-semibold text-slate-500 hover:text-slate-700 transition cursor-pointer"
                       >
                         Clear
                       </button>
@@ -762,7 +1017,7 @@ export default function AssessmentsList() {
                   </div>
 
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
-                    <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
+                    <div className="flex flex-wrap gap-2">
                       {classes.map((cls) => {
                         const isSelected = selectedClassIds.includes(cls.id);
                         return (
@@ -776,9 +1031,11 @@ export default function AssessmentsList() {
                                 : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
                             }`}
                           >
-                            <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
-                              isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
-                            }`}>
+                            <span
+                              className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                                isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
+                              }`}
+                            >
                               {isSelected ? '✓' : ''}
                             </span>
                             {cls.name}
@@ -792,17 +1049,17 @@ export default function AssessmentsList() {
                   </div>
                 </div>
 
-                {/* Exam Multi-Select */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                      Exams / Assessment Types * ({selectedExamIds.length} of {exams.length} selected)
+                {/* SECTION 2: EXAMS / ASSESSMENT TYPES */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      EXAMS / ASSESSMENT TYPES * ({selectedExamIds.length} OF {exams.length} SELECTED)
                     </label>
                     <div className="flex items-center gap-3 text-xs">
                       <button
                         type="button"
                         onClick={() => setSelectedExamIds(exams.map((e) => e.id))}
-                        className="font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                        className="font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
                       >
                         Select All
                       </button>
@@ -810,7 +1067,7 @@ export default function AssessmentsList() {
                       <button
                         type="button"
                         onClick={() => setSelectedExamIds([])}
-                        className="font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+                        className="font-semibold text-slate-500 hover:text-slate-700 transition cursor-pointer"
                       >
                         Clear
                       </button>
@@ -818,9 +1075,9 @@ export default function AssessmentsList() {
                       <button
                         type="button"
                         onClick={() => setAddExamModalOpen(true)}
-                        className="font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 cursor-pointer"
+                        className="font-bold text-indigo-600 hover:text-indigo-800 transition cursor-pointer inline-flex items-center gap-0.5"
                       >
-                        <Plus size={13} />
+                        <Plus size={13} className="stroke-[2.5]" />
                         New Exam
                       </button>
                     </div>
@@ -828,9 +1085,11 @@ export default function AssessmentsList() {
 
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
                     {exams.length === 0 ? (
-                      <p className="text-xs text-slate-500 py-1">No exams configured for this academic year yet. Click &quot;+ New Exam&quot; to create one.</p>
+                      <p className="text-xs text-slate-500 py-1">
+                        No exams configured for this academic year yet. Click &quot;+ New Exam&quot; to create one.
+                      </p>
                     ) : (
-                      <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
+                      <div className="flex flex-wrap gap-2">
                         {exams.map((ex) => {
                           const isSelected = selectedExamIds.includes(ex.id);
                           return (
@@ -844,15 +1103,23 @@ export default function AssessmentsList() {
                                   : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
                               }`}
                             >
-                              <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
-                                isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
-                              }`}>
+                              <span
+                                className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                                  isSelected ? 'bg-white text-indigo-600 font-bold' : 'border border-slate-400'
+                                }`}
+                              >
                                 {isSelected ? '✓' : ''}
                               </span>
                               {ex.name}
-                              <span className={isSelected ? 'text-indigo-200 text-[10px]' : 'text-slate-400 text-[10px]'}>
-                                ({ex.code})
-                              </span>
+                              {ex.code && (
+                                <span
+                                  className={`text-[10px] ${
+                                    isSelected ? 'text-indigo-200 font-normal' : 'text-slate-400'
+                                  }`}
+                                >
+                                  ({ex.code})
+                                </span>
+                              )}
                             </button>
                           );
                         })}
@@ -866,96 +1133,125 @@ export default function AssessmentsList() {
               </div>
             )}
 
-            {/* Subjects Selection */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                  Configured Subjects ({selectedSubjectIds.length})
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setAddSubjectModalOpen(true)}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <Plus size={13} />
-                  New Subject
-                </button>
+            {/* SECTION 3: CONFIGURED SUBJECTS */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                    CONFIGURED SUBJECTS ({selectedSubjectIds.length})
+                  </label>
+                  <p className="text-xs text-slate-400 font-normal mt-0.5">
+                    Each subject has its own maximum marks field.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {unselectedSubjects.length > 0 && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        Add Existing
+                        <ChevronDown size={13} />
+                      </button>
+                      {subjectDropdownOpen && (
+                        <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 z-20 max-h-48 overflow-y-auto">
+                          {unselectedSubjects.map((sub) => (
+                            <button
+                              key={sub.id}
+                              type="button"
+                              onClick={() => {
+                                toggleSubjectSelect(sub.id);
+                                setSubjectDropdownOpen(false);
+                              }}
+                              className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 text-xs font-medium text-slate-700 hover:text-indigo-700 cursor-pointer"
+                            >
+                              {sub.name} ({sub.code || `SUB${sub.id}`})
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAddSubjectModalOpen(true)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition cursor-pointer inline-flex items-center gap-0.5"
+                  >
+                    <Plus size={13} className="stroke-[2.5]" />
+                    New Subject
+                  </button>
+                </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
-                {/* Selected Subject Badges */}
-                <div className="flex flex-wrap gap-2">
-                  {selectedSubjectIds.map((subId) => {
-                    const sub = availableSubjects.find((s) => s.id === subId);
-                    if (!sub) return null;
-                    return (
-                      <span
-                        key={subId}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800 font-semibold text-xs rounded-lg"
-                      >
-                        {sub.name}
-                        <button
-                          type="button"
-                          onClick={() => toggleSubjectSelect(subId)}
-                          className="text-indigo-400 hover:text-indigo-700 cursor-pointer"
-                        >
-                          <X size={14} />
-                        </button>
-                      </span>
-                    );
-                  })}
-                  {selectedSubjectIds.length === 0 ? (
-                    <p className="text-xs text-slate-400 py-1">No subjects selected.</p>
-                  ) : null}
-                </div>
+              <div className="border border-slate-200/90 rounded-2xl p-4 bg-white space-y-3">
+                {selectedSubjectIds.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-3 text-center">
+                    No subjects configured. Add existing or create a new subject.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {selectedSubjectIds.map((subId) => {
+                      const sub = availableSubjects.find((s) => s.id === subId);
+                      const currentMax = subjectMaxMarks[subId] ?? 100;
+                      return (
+                        <div key={subId} className="flex items-center gap-3">
+                          <div className="flex-1 bg-indigo-50/70 border border-indigo-100/50 text-indigo-950 font-semibold text-xs sm:text-sm py-2.5 px-4 rounded-xl truncate">
+                            {sub?.name || `Subject ${subId}`}
+                          </div>
 
-                {/* Add Subject Dropdown button */}
-                {unselectedSubjects.length > 0 ? (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 font-semibold text-xs rounded-lg hover:bg-slate-100 transition cursor-pointer"
-                    >
-                      <Plus size={14} />
-                      Add Subject...
-                      <ChevronDown size={14} />
-                    </button>
+                          <input
+                            type="number"
+                            min="1"
+                            max="1000"
+                            value={currentMax}
+                            onChange={(e) => handleSubjectMarkChange(subId, Number(e.target.value))}
+                            className="w-24 sm:w-32 h-10 px-3 text-center bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-2xs"
+                          />
 
-                    {subjectDropdownOpen ? (
-                      <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-20 max-h-48 overflow-y-auto py-1">
-                        {unselectedSubjects.map((sub) => (
                           <button
-                            key={sub.id}
                             type="button"
-                            onClick={() => {
-                              toggleSubjectSelect(sub.id);
-                              setSubjectDropdownOpen(false);
-                            }}
-                            className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-indigo-50 hover:text-indigo-700 transition cursor-pointer"
+                            onClick={() => handleRemoveSubject(subId)}
+                            title="Remove Subject"
+                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
                           >
-                            {sub.name} ({sub.code})
+                            <X size={16} />
                           </button>
-                        ))}
-                      </div>
-                    ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
-                ) : null}
+                )}
+
+                {/* Total Maximum Marks Footer */}
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between px-3 bg-indigo-50/40 rounded-xl py-3">
+                  <span className="text-indigo-700 font-bold text-xs sm:text-sm">
+                    Total Maximum Marks
+                  </span>
+                  <span className="text-indigo-600 font-black text-lg sm:text-xl">
+                    {totalMaxMarks}
+                  </span>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            {/* Footer */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={closeForm}
-                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl hover:bg-white transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={saving || (!editingId && (selectedClassIds.length === 0 || selectedExamIds.length === 0))}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                disabled={isSubmitDisabled}
+                title={submitDisabledReason}
+                className="px-5 py-2 font-medium text-xs rounded-xl shadow-xs transition-all bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer"
               >
                 {saving
                   ? 'Saving...'
@@ -1179,6 +1475,126 @@ export default function AssessmentsList() {
           </form>
         </div>
       ) : null}
+
+      {/* In-app confirmation modal for deleting a subject with submitted marks */}
+      {subjectToRemoveWithScores !== null && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Submitted Marks?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Subject Removal Confirmation</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-700 leading-relaxed font-medium">
+              Marks are already submitted for that subject, do you want to delete them?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setSubjectToRemoveWithScores(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                No, Keep Subject
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  toggleSubjectSelect(subjectToRemoveWithScores);
+                  setSubjectToRemoveWithScores(null);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
+              >
+                OK, Delete Marks
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-app confirmation modal for deleting an assessment */}
+      {assessmentToDelete !== null && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Assessment?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Permanent Deletion Confirmation</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-700 leading-relaxed font-medium">
+              Delete this assessment? All recorded scores and entries for this assessment will be deleted.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setAssessmentToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition cursor-pointer"
+              >
+                Delete Assessment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-app confirmation modal for editing maximum marks on scored subjects */}
+      {showEditMarksWarningModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Update Maximum Marks?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Existing Scores Detected</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-700 leading-relaxed font-medium">
+              Marks entry has been made for the edited subject(s). Do you want to delete those entries?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowEditMarksWarningModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowEditMarksWarningModal(false);
+                  await performSave(true);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-sm transition cursor-pointer"
+              >
+                OK, Delete Entries & Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

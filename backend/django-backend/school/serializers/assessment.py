@@ -45,7 +45,6 @@ class AssessmentTypeSerializer(serializers.ModelSerializer):
 class AssessmentSubjectSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='assessment_subject_id', read_only=True)
     academicYearId = serializers.IntegerField(source='academic_year_id', required=False, allow_null=True)
-    centreId = serializers.IntegerField(source='centre_id', required=False, allow_null=True)
     classId = serializers.IntegerField(source='class_id', required=False, allow_null=True)
     examId = serializers.IntegerField(source='exam_id', required=False, allow_null=True)
     assessmentTypeId = serializers.IntegerField(source='exam_id', required=False, allow_null=True)
@@ -56,7 +55,7 @@ class AssessmentSubjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AssessmentSubject
-        fields = ['id', 'academicYearId', 'centreId', 'classId', 'examId', 'assessmentTypeId', 'subjectIds', 'assessmentTypeName', 'maxMarks', 'isActive']
+        fields = ['id', 'academicYearId', 'classId', 'examId', 'assessmentTypeId', 'subjectIds', 'assessmentTypeName', 'maxMarks', 'isActive']
 
     def get_assessmentTypeName(self, obj):
         if not obj.exam_id:
@@ -123,13 +122,9 @@ class AssessmentScoreSerializer(serializers.ModelSerializer):
             exam_id=assessment.assessment_type_id,
             is_active=True,
         )
-        if assessment.centre_id:
-            c_cfg = configs.filter(centre_id=assessment.centre_id).order_by('-assessment_subject_id').first()
-            if c_cfg and obj.subject_id in (c_cfg.subject_ids or []):
-                return float(c_cfg.max_marks)
-        cfg = configs.order_by('-assessment_subject_id').first()
-        if cfg and cfg.max_marks is not None and obj.subject_id in (cfg.subject_ids or []):
-            return float(cfg.max_marks)
+        for cfg in configs.order_by('-assessment_subject_id'):
+            if cfg.max_marks is not None and obj.subject_id in (cfg.subject_ids or []):
+                return float(cfg.max_marks)
         return 100.0
 
 
