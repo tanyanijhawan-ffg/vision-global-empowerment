@@ -56,8 +56,8 @@ class UserProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ('student_id', 'full_name', 'gender', 'age', 'class_grade', 'centre')
-    list_filter = ('gender', 'class_grade', 'centre')
+    list_display = ('student_id', 'full_name', 'gender', 'age', 'school_class', 'centre')
+    list_filter = ('gender', 'school_class', 'centre')
     search_fields = ('full_name', 'nick_name', 'school_name')
 
 
@@ -155,9 +155,9 @@ class AssessmentSubmissionAdmin(admin.ModelAdmin):
 
 @admin.register(StudentClassRecord)
 class StudentClassRecordAdmin(admin.ModelAdmin):
-    list_display = ('student_class_record_id', 'student', 'academic_year', 'class_grade', 'is_active', 'promoted')
-    list_filter = ('academic_year', 'class_grade', 'is_active', 'promoted')
-    search_fields = ('student__full_name', 'class_grade')
+    list_display = ('student_class_record_id', 'student', 'academic_year', 'school_class', 'is_active', 'promoted')
+    list_filter = ('academic_year', 'school_class', 'is_active', 'promoted')
+    search_fields = ('student__full_name', 'school_class__name')
 
 
 admin.site.register(Program)

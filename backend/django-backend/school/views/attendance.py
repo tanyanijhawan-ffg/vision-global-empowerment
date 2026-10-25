@@ -106,7 +106,7 @@ class AttendanceDefaultingEmailView(APIView):
             raise serializers.ValidationError({'admin_email': 'Your admin account needs an email address before sending.'})
 
         requested_ids = set(values['student_ids'])
-        students = list(Student.objects.filter(student_id__in=requested_ids, centre=centre).order_by('class_grade', 'full_name'))
+        students = list(Student.objects.filter(student_id__in=requested_ids, centre=centre).order_by('school_class__name', 'full_name'))
         if len(students) != len(requested_ids):
             raise serializers.ValidationError({'student_ids': 'One or more students do not belong to this centre.'})
         class_grade = values['class_grade'].strip()

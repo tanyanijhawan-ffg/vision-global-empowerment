@@ -116,7 +116,7 @@ export default function AttendanceDashboard() {
     (!filterCentre || String(student.centreId) === filterCentre) &&
     (!filterClass || student.class === filterClass),
   ), [scopedStudents, filterRegion, filterDistrict, filterCentre, filterClass]);
-  const classOptions = useMemo(() => [...new Set(filteredStudents.map(student => student.class).filter(Boolean))].sort((a, b) => Number(a) - Number(b)), [filteredStudents]);
+  const classOptions = useMemo(() => [...new Set(filteredStudents.map(student => student.class).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [filteredStudents]);
 
   const selectedStudentIds = useMemo(() => new Set(filteredStudents.map(student => Number(student.id))), [filteredStudents]);
   const selectedRecords = useMemo(() => records.filter(record =>
@@ -153,7 +153,7 @@ export default function AttendanceDashboard() {
     const keyFor = (student: StudentListItem) => view === 'region' ? student.region
       : view === 'district' ? student.district
         : view === 'centre' ? student.centre
-          : `Class ${student.class}`;
+          : student.class;
     const groups = new Map<string, { total: number; rates: number[] }>();
     filteredStudents.forEach(student => {
       const name = keyFor(student) || 'Unassigned';
@@ -246,7 +246,7 @@ export default function AttendanceDashboard() {
             <span className="relative mt-1 block"><select className={selectClass} value={filterCentre} onChange={event => setFilterCentre(event.target.value)}><option value="">All Centres</option>{filteredCentres.map(centre => <option key={centre.id} value={centre.id}>{centre.name}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
           </label>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Class
-            <span className="relative mt-1 block"><select className={selectClass} value={filterClass} onChange={event => setFilterClass(event.target.value)}><option value="">All Classes</option>{classOptions.map(className => <option key={className} value={className}>Class {className}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
+            <span className="relative mt-1 block"><select className={selectClass} value={filterClass} onChange={event => setFilterClass(event.target.value)}><option value="">All Classes</option>{classOptions.map(className => <option key={className} value={className}>{className}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
           </label>
         </div>
         <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-3">

@@ -159,7 +159,7 @@ class AssessmentSubmissionMandatoryNarrativeTests(TestCase):
             is_active=True,
         )
 
-        self.student = Student.objects.create(full_name='Ravi Kumar', centre=self.centre, class_grade='5')
+        self.student = Student.objects.create(full_name='Ravi Kumar', centre=self.centre)
         AssessmentScore.objects.create(assessment=self.assessment, student=self.student, subject=self.sub, obtained_marks=Decimal('85.00'))
 
         self.behaviour_opt = LearningBehaviourOption.objects.create(code='INDEPENDENT', name='Independent')

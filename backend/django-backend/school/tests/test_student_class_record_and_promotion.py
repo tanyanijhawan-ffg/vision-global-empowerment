@@ -9,6 +9,7 @@ from school.models.assessment import (
     AssessmentScore,
     AssessmentSubject,
     AssessmentType,
+    SchoolClass,
     Subject,
 )
 from school.models.center import Center, District, Program, Region
@@ -44,6 +45,11 @@ class StudentClassRecordAndPromotionTests(TestCase):
         self.sub_tamil = Subject.objects.create(name='Tamil', code='TAM')
         self.sub_math = Subject.objects.create(name='Mathematics', code='MAT')
 
+        self.class6 = SchoolClass.objects.create(name='Class 6', code='CLASS_6')
+        self.class7 = SchoolClass.objects.create(name='Class 7', code='CLASS_7')
+        self.class4 = SchoolClass.objects.create(name='Class 4', code='CLASS_4')
+        self.class5 = SchoolClass.objects.create(name='Class 5', code='CLASS_5')
+
     def test_student_creation_stores_class_in_student_class_record_not_student(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
         photo = SimpleUploadedFile('test.jpg', b'file_content', content_type='image/jpeg')
@@ -57,16 +63,17 @@ class StudentClassRecordAndPromotionTests(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         student = serializer.save()
 
-        # Student model's class_grade should NOT be set (or null)
-        self.assertIsNone(student.class_grade)
+        # Student's school_class FK should point at Class 6
+        self.assertIsNotNone(student.school_class)
+        self.assertEqual(student.school_class.name, 'Class 6')
 
         # StudentClassRecord should be created with the current academic year and Class 6
         record = StudentClassRecord.objects.filter(student=student, academic_year=self.ay_current).first()
         self.assertIsNotNone(record)
-        self.assertEqual(record.class_grade, 'Class 6')
+        self.assertEqual(record.school_class, self.class6)
         self.assertTrue(record.is_active)
 
-        # Serializer representation should return the class from StudentClassRecord
+        # Serializer representation should return the class name from the record
         repr_data = StudentSerializer(student).data
         self.assertEqual(repr_data['class_grade'], 'Class 6')
 
@@ -79,7 +86,7 @@ class StudentClassRecordAndPromotionTests(TestCase):
         StudentClassRecord.objects.create(
             student=student,
             academic_year=self.ay_current,
-            class_grade='Class 6',
+            school_class=self.class6,
             is_active=True,
         )
 
@@ -88,17 +95,17 @@ class StudentClassRecordAndPromotionTests(TestCase):
         serializer.save()
 
         record = StudentClassRecord.objects.get(student=student, academic_year=self.ay_current)
-        self.assertEqual(record.class_grade, 'Class 7')
+        self.assertEqual(record.school_class, self.class7)
         self.assertEqual(student.current_class_grade, 'Class 7')
 
     def test_student_list_filtration_from_student_class_record(self):
         client = APIClient()
 
         s1 = Student.objects.create(centre=self.centre, full_name='Student In Class 6')
-        StudentClassRecord.objects.create(student=s1, academic_year=self.ay_current, class_grade='Class 6', is_active=True)
+        StudentClassRecord.objects.create(student=s1, academic_year=self.ay_current, school_class=self.class6, is_active=True)
 
         s2 = Student.objects.create(centre=self.centre, full_name='Student In Class 7')
-        StudentClassRecord.objects.create(student=s2, academic_year=self.ay_current, class_grade='Class 7', is_active=True)
+        StudentClassRecord.objects.create(student=s2, academic_year=self.ay_current, school_class=self.class7, is_active=True)
 
         # Filter by class_grade=6
         resp = client.get('/api/students/?class_grade=6')
@@ -127,11 +134,11 @@ class StudentClassRecordAndPromotionTests(TestCase):
     def test_promotion_logic_avg_exceeds_33(self):
         # Student 1: passes all subjects (avg > 33%)
         s_pass = Student.objects.create(centre=self.centre, full_name='Passing Student')
-        StudentClassRecord.objects.create(student=s_pass, academic_year=self.ay_current, class_grade='Class 6', is_active=True)
+        StudentClassRecord.objects.create(student=s_pass, academic_year=self.ay_current, school_class=self.class6, is_active=True)
 
         # Student 2: fails Math (avg <= 33%)
         s_fail = Student.objects.create(centre=self.centre, full_name='Failing Student')
-        StudentClassRecord.objects.create(student=s_fail, academic_year=self.ay_current, class_grade='Class 6', is_active=True)
+        StudentClassRecord.objects.create(student=s_fail, academic_year=self.ay_current, school_class=self.class6, is_active=True)
 
         # Create 4 assessments (Q1, HY, Q2, Y)
         assessments = []
@@ -173,17 +180,17 @@ class StudentClassRecordAndPromotionTests(TestCase):
         self.assertIsNotNone(next_ay)
 
         rec_pass = StudentClassRecord.objects.get(student=s_pass, academic_year=next_ay)
-        self.assertEqual(rec_pass.class_grade, 'Class 7')
+        self.assertEqual(rec_pass.school_class.name, 'Class 7')
         self.assertTrue(rec_pass.promoted)
 
         rec_fail = StudentClassRecord.objects.get(student=s_fail, academic_year=next_ay)
-        self.assertEqual(rec_fail.class_grade, 'Class 6')
+        self.assertEqual(rec_fail.school_class, self.class6)
         self.assertFalse(rec_fail.promoted)
 
     def test_academic_year_rollover_when_all_classes_complete(self):
         # Create student and all 4 assessments for Class 6
         s1 = Student.objects.create(centre=self.centre, full_name='Only Student')
-        StudentClassRecord.objects.create(student=s1, academic_year=self.ay_current, class_grade='Class 6', is_active=True)
+        StudentClassRecord.objects.create(student=s1, academic_year=self.ay_current, school_class=self.class6, is_active=True)
 
         assessments = []
         for exam in [self.exam_q1, self.exam_hy, self.exam_q2, self.exam_y]:
@@ -220,13 +227,13 @@ class StudentClassRecordAndPromotionTests(TestCase):
         ay2026 = AcademicYear.objects.create(name='2026 - 2027', start_date=date(2026, 6, 1), end_date=date(2027, 5, 31), is_current=False)
 
         # Student A is in Class 5 in both 2025-2026 and 2026-2027
-        student_a = Student.objects.create(full_name='Student A', centre=self.centre, class_grade='5')
-        StudentClassRecord.objects.create(student=student_a, academic_year=ay2025, class_grade='5', is_active=True)
-        StudentClassRecord.objects.create(student=student_a, academic_year=ay2026, class_grade='5', is_active=True)
+        student_a = Student.objects.create(full_name='Student A', centre=self.centre, school_class=self.class5)
+        StudentClassRecord.objects.create(student=student_a, academic_year=ay2025, school_class=self.class5, is_active=True)
+        StudentClassRecord.objects.create(student=student_a, academic_year=ay2026, school_class=self.class5, is_active=True)
 
         # Student B is only in 2025-2026 (e.g. test student)
-        student_b = Student.objects.create(full_name='Student B', centre=self.centre, class_grade='5')
-        StudentClassRecord.objects.create(student=student_b, academic_year=ay2025, class_grade='5', is_active=True)
+        student_b = Student.objects.create(full_name='Student B', centre=self.centre, school_class=self.class5)
+        StudentClassRecord.objects.create(student=student_b, academic_year=ay2025, school_class=self.class5, is_active=True)
 
         # Query for 2025-2026: both should be returned
         res_2025 = self.client.get(f'/api/students/?classGrade=5&centreId={self.centre.centre_id}&academicYear=2025+-+2026')
@@ -246,9 +253,9 @@ class StudentClassRecordAndPromotionTests(TestCase):
         ay2025 = self.ay_current
         ay2026 = AcademicYear.objects.create(name='2026 - 2027', start_date=date(2026, 6, 1), end_date=date(2027, 5, 31), is_current=False)
 
-        student_x = Student.objects.create(full_name='Student X', centre=self.centre, class_grade='Class 4')
-        rec1 = StudentClassRecord.objects.create(student=student_x, academic_year=ay2025, class_grade='Class 5', is_active=True)
-        rec2 = StudentClassRecord.objects.create(student=student_x, academic_year=ay2026, class_grade='Class 6', is_active=True)
+        student_x = Student.objects.create(full_name='Student X', centre=self.centre, school_class=self.class4)
+        rec1 = StudentClassRecord.objects.create(student=student_x, academic_year=ay2025, school_class=self.class5, is_active=True)
+        rec2 = StudentClassRecord.objects.create(student=student_x, academic_year=ay2026, school_class=self.class6, is_active=True)
 
         self.assertGreater(rec2.student_class_record_id, rec1.student_class_record_id)
 

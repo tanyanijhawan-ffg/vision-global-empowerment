@@ -1883,15 +1883,10 @@ class AssessmentCentrePerformanceView(AssessmentAPIView):
             if cid:
                 centre_scores_map.setdefault(cid, []).append(score)
 
-        # Build class filter for student counts
-        class_str = str(class_id_int)
+        # Build class filter for student counts. class_id_int is the SchoolClass PK.
         class_q = (
-            Q(class_grade__iexact=class_str) |
-            Q(class_grade__iexact=f'Class {class_str}') |
-            Q(class_grade__iexact=f'Grade {class_str}') |
-            Q(class_grade__iexact=f'Class {class_id_int:02d}') |
-            Q(class_grade__iexact=f'Grade {class_id_int:02d}') |
-            Q(class_grade__iexact=f'{class_id_int:02d}')
+            Q(school_class_id=class_id_int) |
+            Q(class_records__school_class_id=class_id_int, class_records__is_active=True)
         )
 
         centre_report_items = []

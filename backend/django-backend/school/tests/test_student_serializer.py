@@ -5,6 +5,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from school.models.center import Center, District, Program, Region
+from school.models.assessment import SchoolClass
 from school.models.student import Student
 from school.serializers.student import StudentSerializer
 
@@ -91,7 +92,7 @@ class StudentSerializerTests(TestCase):
             photo='https://example.com/photo.jpg',
             school_name='Green Valley School',
             school_type='Private',
-            class_grade='7',
+            school_class=SchoolClass.objects.create(name='7', code='CLASS_7'),
             medium_of_instruction='English',
             attendance_pattern='Regular',
             previous_academic_performance='Good',

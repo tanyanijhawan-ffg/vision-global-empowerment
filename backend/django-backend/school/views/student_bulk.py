@@ -153,14 +153,19 @@ def update_related(student, record, row_number=None):
     if class_val:
         from school.models.assessment import AcademicYear
         from school.models.student import StudentClassRecord
+        from school.services.classes import resolve_school_class
+        klass = resolve_school_class(class_val)
+        if klass:
+            student.school_class = klass
+            student.save(update_fields=['school_class'])
         current_ay = AcademicYear.objects.filter(is_current=True).first()
         if not current_ay:
             current_ay = AcademicYear.objects.order_by('-start_date').first()
-        if current_ay:
+        if current_ay and klass:
             StudentClassRecord.objects.update_or_create(
                 student=student,
                 academic_year=current_ay,
-                defaults={'class_grade': class_val, 'is_active': True}
+                defaults={'school_class': klass, 'is_active': True}
             )
 
     family_fields = ('father_name', 'mother_name', 'guardian', 'parent_phone', 'father_occupation', 'mother_occupation', 'father_education', 'mother_education')
