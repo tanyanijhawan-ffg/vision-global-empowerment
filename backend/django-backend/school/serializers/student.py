@@ -33,7 +33,6 @@ class StudentSerializer(serializers.ModelSerializer):
     # SchoolClass master and stored via the school_class FK. Reads come from the
     # Student.class_grade property (current class name). Not a model column anymore.
     class_grade = serializers.CharField(required=False, allow_blank=True)
-    class_history = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
