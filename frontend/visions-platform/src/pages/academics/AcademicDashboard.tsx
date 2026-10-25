@@ -131,6 +131,26 @@ export default function AcademicDashboard() {
       .catch(() => setSubjects([]));
   }, [filterClass]);
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Listen for assessment updates or tab visibility changes to refresh
+  useEffect(() => {
+    const handleAssessmentChange = () => {
+      setRefreshKey(k => k + 1);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setRefreshKey(k => k + 1);
+      }
+    };
+    window.addEventListener('vge-assessment-change', handleAssessmentChange);
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('vge-assessment-change', handleAssessmentChange);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   // 2. Fetch assessment list ONLY when both class and centre have been selected
   useEffect(() => {
     if (!filterClass || !filterCentre) {
@@ -176,7 +196,7 @@ export default function AcademicDashboard() {
         setSelectedAssessmentId(null);
       })
       .finally(() => setRefreshing(false));
-  }, [filterClass, filterCentre, centres, selectedAcademicYearId]);
+  }, [filterClass, filterCentre, centres, selectedAcademicYearId, refreshKey]);
 
   // 3. Fetch scores, statistics, etc. ONLY when selectedAssessmentId changes
   useEffect(() => {
@@ -190,15 +210,18 @@ export default function AcademicDashboard() {
       return;
     }
 
+    const found = centres.find(c => c.name === filterCentre || String(c.id) === filterCentre);
+    const targetCentreId = found ? found.id : undefined;
+
     setRefreshing(true);
     Promise.all([
-      fetchAssessmentStatistics(selectedAssessmentId).catch(() => null),
+      fetchAssessmentStatistics(selectedAssessmentId, targetCentreId).catch(() => null),
       fetchAssessmentComparison(selectedAssessmentId).catch(() => null),
       fetchSubjectComparison(selectedAssessmentId).catch(() => []),
-      fetchAssessmentScores(selectedAssessmentId).catch(() => null),
-      fetchAssessmentDiagnostics(selectedAssessmentId).catch(() => null),
-      fetchAssessmentBehaviours(selectedAssessmentId).catch(() => null),
-      fetchAssessmentObservations(selectedAssessmentId).catch(() => null),
+      fetchAssessmentScores(selectedAssessmentId, targetCentreId).catch(() => null),
+      fetchAssessmentDiagnostics(selectedAssessmentId, targetCentreId).catch(() => null),
+      fetchAssessmentBehaviours(selectedAssessmentId, targetCentreId).catch(() => null),
+      fetchAssessmentObservations(selectedAssessmentId, targetCentreId).catch(() => null),
     ])
       .then(([statsRes, compRes, subjCompRes, scoresRes, diagRes, _behavRes, obsRes]) => {
         setStatistics(statsRes);
@@ -212,7 +235,7 @@ export default function AcademicDashboard() {
         else setObservationsData([]);
       })
       .finally(() => setRefreshing(false));
-  }, [selectedAssessmentId]);
+  }, [selectedAssessmentId, filterCentre, centres, refreshKey]);
 
   // 4. Fetch student data ONLY after Class and Centre are selected
   useEffect(() => {

@@ -581,22 +581,22 @@ export const updateAssessment = (
 ) => apiRequest<Assessment>(`/v1/assessments/${assessmentId}/`, { method: "PATCH", body: JSON.stringify(payload) });
 export const deleteAssessment = (assessmentId: number) =>
   apiRequest<{ message: string }>(`/v1/assessments/${assessmentId}/`, { method: "DELETE" });
-export const fetchAssessmentScores = (assessmentId: number) => apiRequest<{ assessmentId: number; students: AssessmentStudentScores[] }>(`/v1/assessments/${assessmentId}/scores/`);
+export const fetchAssessmentScores = (assessmentId: number, centreId?: number) => apiRequest<{ assessmentId: number; students: AssessmentStudentScores[] }>(`/v1/assessments/${assessmentId}/scores/${centreId ? `?centreId=${centreId}` : ''}`);
 export const saveAssessmentScores = (assessmentId: number, studentsPayload: Array<{ studentId: number; scores: AssessmentScoreInput[] }>) =>
   apiRequest<{ assessmentId: number; students: AssessmentStudentScores[]; savedStudents: number; savedScores: number; status: string }>(`/v1/assessments/${assessmentId}/scores/bulk`, {
     method: "PUT",
     body: JSON.stringify({ students: studentsPayload }),
   });
 export const fetchDiagnosticOptions = () => apiRequest<DiagnosticOptions>("/v1/diagnostic-options/");
-export const fetchAssessmentDiagnostics = (assessmentId: number) => apiRequest<{ assessmentId: number; diagnostics: Array<{ studentId: number; studentName: string; subjectId: number; subject: string; understandingLevel: string; applicationAbility: string; interestLevel: string }> }>(`/v1/assessments/${assessmentId}/diagnostics/`);
+export const fetchAssessmentDiagnostics = (assessmentId: number, centreId?: number) => apiRequest<{ assessmentId: number; diagnostics: Array<{ studentId: number; studentName: string; subjectId: number; subject: string; understandingLevel: string; applicationAbility: string; interestLevel: string }> }>(`/v1/assessments/${assessmentId}/diagnostics/${centreId ? `?centreId=${centreId}` : ''}`);
 export const saveAssessmentDiagnostics = (assessmentId: number, studentsPayload: Array<Record<string, number | string>>) =>
   apiRequest<{ assessmentId: number; saved: number; status: string }>(`/v1/assessments/${assessmentId}/diagnostics/bulk`, {
     method: "PUT",
     body: JSON.stringify({ students: studentsPayload }),
   });
 export const fetchLearningBehaviours = () => apiRequest<LearningBehaviourOption[]>("/v1/learning-behaviours/");
-export const fetchAssessmentBehaviours = (assessmentId: number) => apiRequest<{ assessmentId: number; students: Array<{ studentId: number; studentName: string; behaviour: string }> }>(`/v1/assessments/${assessmentId}/behaviours/`);
-export const fetchAssessmentObservations = (assessmentId: number) => apiRequest<{ assessmentId: number; students: AssessmentObservation[] }>(`/v1/assessments/${assessmentId}/observations/`);
+export const fetchAssessmentBehaviours = (assessmentId: number, centreId?: number) => apiRequest<{ assessmentId: number; students: Array<{ studentId: number; studentName: string; behaviour: string }> }>(`/v1/assessments/${assessmentId}/behaviours/${centreId ? `?centreId=${centreId}` : ''}`);
+export const fetchAssessmentObservations = (assessmentId: number, centreId?: number) => apiRequest<{ assessmentId: number; students: AssessmentObservation[] }>(`/v1/assessments/${assessmentId}/observations/${centreId ? `?centreId=${centreId}` : ''}`);
 export const saveAssessmentBehaviours = (assessmentId: number, studentsPayload: Array<{ studentId: number; behaviour: string }>) =>
   apiRequest<{ assessmentId: number; saved: number; status: string }>(`/v1/assessments/${assessmentId}/behaviours/bulk`, {
     method: "PUT",
@@ -615,7 +615,7 @@ export const saveAssessmentObservation = (assessmentId: number, studentId: numbe
   });
 export const submitAssessment = (assessmentId: number) => apiRequest<{ assessmentId: number; status: string; submittedAt: string }>(`/v1/assessments/${assessmentId}/submit`, { method: "POST" });
 export const reopenAssessment = (assessmentId: number) => apiRequest<{ assessmentId: number; status: string; message: string }>(`/v1/assessments/${assessmentId}/reopen`, { method: "POST" });
-export const fetchAssessmentStatistics = (assessmentId: number) => apiRequest<AssessmentStatistics>(`/v1/assessments/${assessmentId}/statistics`);
+export const fetchAssessmentStatistics = (assessmentId: number, centreId?: number) => apiRequest<AssessmentStatistics>(`/v1/assessments/${assessmentId}/statistics${centreId ? `?centreId=${centreId}` : ''}`);
 export const fetchAssessmentComparison = (assessmentId: number) => apiRequest<Record<string, unknown>>(`/v1/assessments/${assessmentId}/comparison`);
 export const fetchSubjectComparison = (assessmentId: number) => apiRequest<unknown[]>(`/v1/assessments/${assessmentId}/comparison/subjects`);
 export const fetchStudentComparison = (assessmentId: number) => apiRequest<unknown[]>(`/v1/assessments/${assessmentId}/comparison/students`);

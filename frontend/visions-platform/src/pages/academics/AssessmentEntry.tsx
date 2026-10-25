@@ -230,19 +230,12 @@ export default function AssessmentEntry() {
 
     // 1. Check for SUBMITTED/PUBLISHED assessments first
     try {
-      let submittedAssessments = await fetchAssessments({
+      const submittedAssessments = await fetchAssessments({
         classId: targetClassId,
-        centreId: targetCentreId || selectedCentreId || undefined,
+        centreId: targetCentreId || (selectedCentreId ? Number(selectedCentreId) : undefined),
         assessmentTypeId: targetTypeId || undefined,
         status: 'SUBMITTED',
       });
-      if (!submittedAssessments.length) {
-        submittedAssessments = await fetchAssessments({
-          classId: targetClassId,
-          assessmentTypeId: targetTypeId || undefined,
-          status: 'SUBMITTED',
-        });
-      }
 
       const submittedMatch = submittedAssessments[0];
       if (submittedMatch) {
@@ -284,19 +277,12 @@ export default function AssessmentEntry() {
 
     // 3. Check backend draft
     try {
-      let allAssessments = await fetchAssessments({
+      const allAssessments = await fetchAssessments({
         classId: targetClassId,
-        centreId: targetCentreId || selectedCentreId || undefined,
+        centreId: targetCentreId || (selectedCentreId ? Number(selectedCentreId) : undefined),
         assessmentTypeId: targetTypeId || undefined,
         status: 'DRAFT',
       });
-      if (!allAssessments.length) {
-        allAssessments = await fetchAssessments({
-          classId: targetClassId,
-          assessmentTypeId: targetTypeId || undefined,
-          status: 'DRAFT',
-        });
-      }
 
       const backendDraft = allAssessments[0];
 
@@ -677,9 +663,11 @@ export default function AssessmentEntry() {
 
       let id = assessmentId;
       if (!id) {
+        const targetCentre = selectedCentreId ? Number(selectedCentreId) : undefined;
         const existing = await fetchAssessments({
           classId: Number(classId),
           assessmentTypeId: Number(assessmentTypeId || 1),
+          centreId: targetCentre,
         });
         if (existing && existing.length > 0) {
           id = existing[0].id;
@@ -691,7 +679,7 @@ export default function AssessmentEntry() {
             classId: Number(classId),
             assessmentTypeId: Number(assessmentTypeId || 1),
             assessmentDate,
-            centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
+            centreId: targetCentre,
           });
           id = result.id;
           setAssessmentId(id);
@@ -758,9 +746,11 @@ export default function AssessmentEntry() {
     try {
       let id = assessmentId;
       if (!id) {
+        const targetCentre = selectedCentreId ? Number(selectedCentreId) : undefined;
         const existing = await fetchAssessments({
           classId: Number(classId),
           assessmentTypeId: Number(assessmentTypeId),
+          centreId: targetCentre,
         });
         if (existing && existing.length > 0) {
           id = existing[0].id;
@@ -772,7 +762,7 @@ export default function AssessmentEntry() {
             classId: Number(classId),
             assessmentTypeId: Number(assessmentTypeId),
             assessmentDate,
-            centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
+            centreId: targetCentre,
           });
           id = result.id;
           setAssessmentId(id);
@@ -862,9 +852,11 @@ export default function AssessmentEntry() {
     try {
       let id = assessmentId;
       if (!id) {
+        const targetCentre = selectedCentreId ? Number(selectedCentreId) : undefined;
         const existing = await fetchAssessments({
           classId: Number(classId),
           assessmentTypeId: Number(assessmentTypeId || 1),
+          centreId: targetCentre,
         });
         if (existing && existing.length > 0) {
           id = existing[0].id;
@@ -876,7 +868,7 @@ export default function AssessmentEntry() {
             classId: Number(classId),
             assessmentTypeId: Number(assessmentTypeId || 1),
             assessmentDate,
-            centreId: selectedCentreId ? Number(selectedCentreId) : undefined,
+            centreId: targetCentre,
           });
           id = result.id;
           setAssessmentId(id);
@@ -886,6 +878,8 @@ export default function AssessmentEntry() {
       await persistAllData(id);
 
       const result = await submitAssessment(id);
+
+      window.dispatchEvent(new CustomEvent('vge-assessment-change', { detail: { assessmentId: id } }));
 
       const typeObj = types.find((t) => t.id === Number(assessmentTypeId));
       const readableTime = formatReadableDateTime(result.submittedAt);
