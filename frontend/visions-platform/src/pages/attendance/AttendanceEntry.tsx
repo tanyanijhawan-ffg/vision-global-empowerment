@@ -45,7 +45,10 @@ export default function AttendanceEntry() {
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
   const [selectedCentre, setSelectedCentre] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   const [search, setSearch] = useState('');
   const [drafts, setDrafts] = useState<Record<string, AttendanceDraft>>({});
   const [loading, setLoading] = useState(true);
