@@ -228,11 +228,13 @@ export default function AssessmentEntry() {
     setDraftPromptOpen(false);
     setDraftInfo(null);
 
+    const targetCentre = targetCentreId ? Number(targetCentreId) : (selectedCentreId ? Number(selectedCentreId) : undefined);
+
     // 1. Check for SUBMITTED/PUBLISHED assessments first
     try {
       const submittedAssessments = await fetchAssessments({
         classId: targetClassId,
-        centreId: targetCentreId || (selectedCentreId ? Number(selectedCentreId) : undefined),
+        centreId: targetCentre,
         assessmentTypeId: targetTypeId || undefined,
         status: 'SUBMITTED',
       });
@@ -279,7 +281,7 @@ export default function AssessmentEntry() {
     try {
       const allAssessments = await fetchAssessments({
         classId: targetClassId,
-        centreId: targetCentreId || (selectedCentreId ? Number(selectedCentreId) : undefined),
+        centreId: targetCentre,
         assessmentTypeId: targetTypeId || undefined,
         status: 'DRAFT',
       });

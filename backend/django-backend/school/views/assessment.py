@@ -285,7 +285,10 @@ class AssessmentCreateView(AssessmentAPIView):
                 base_qs = base_qs.filter(status__iexact=status_param)
 
             if centre_id:
-                cid = int(centre_id)
+                try:
+                    cid = int(centre_id)
+                except (ValueError, TypeError):
+                    continue
                 a_obj = (
                     base_qs.filter(centre_id=cid)
                     .annotate(scores_cnt=Count('scores'))
@@ -303,13 +306,6 @@ class AssessmentCreateView(AssessmentAPIView):
                     a_obj = (
                         base_qs.filter(centre_id__isnull=True)
                         .annotate(scores_cnt=Count('scores'))
-                        .order_by('-scores_cnt', '-assessment_id')
-                        .first()
-                    )
-                if not a_obj and not status_param:
-                    a_obj = (
-                        base_qs.annotate(scores_cnt=Count('scores'))
-                        .filter(scores_cnt__gt=0)
                         .order_by('-scores_cnt', '-assessment_id')
                         .first()
                     )
@@ -395,11 +391,15 @@ class AssessmentCreateView(AssessmentAPIView):
         if class_id:
             a_qs = a_qs.filter(class_id=class_id)
         if centre_id:
-            cid = int(centre_id)
-            if status_param and status_param.upper() == 'SUBMITTED':
-                a_qs = a_qs.filter(Q(centre_id=cid) | Q(scores__student__centre_id=cid)).distinct()
-            else:
-                a_qs = a_qs.filter(Q(centre_id=cid) | Q(centre_id__isnull=True) | Q(scores__student__centre_id=cid)).distinct()
+            try:
+                cid = int(centre_id)
+            except (ValueError, TypeError):
+                cid = None
+            if cid is not None:
+                if status_param and status_param.upper() == 'SUBMITTED':
+                    a_qs = a_qs.filter(Q(centre_id=cid) | Q(scores__student__centre_id=cid)).distinct()
+                else:
+                    a_qs = a_qs.filter(Q(centre_id=cid) | Q(centre_id__isnull=True) | Q(scores__student__centre_id=cid)).distinct()
         if assessment_type_id:
             a_qs = a_qs.filter(assessment_type_id=assessment_type_id)
         if academic_year_id:
@@ -656,7 +656,10 @@ class AssessmentDetailView(AssessmentAPIView):
         centre_id = request.query_params.get('centreId') or request.query_params.get('centre_id')
         st_qs = Student.objects.filter(assessment_scores__assessment=assessment)
         if centre_id:
-            st_qs = st_qs.filter(centre_id=centre_id)
+            try:
+                st_qs = st_qs.filter(centre_id=int(centre_id))
+            except (ValueError, TypeError):
+                pass
         student_count = st_qs.distinct().count()
         if not student_count:
             student_count = 0

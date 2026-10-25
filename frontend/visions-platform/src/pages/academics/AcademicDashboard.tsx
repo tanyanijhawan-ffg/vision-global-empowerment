@@ -135,19 +135,27 @@ export default function AcademicDashboard() {
 
   // Listen for assessment updates or tab visibility changes to refresh
   useEffect(() => {
+    let hiddenAt: number | null = null;
+    const DEBOUNCE_MS = 5000; // Only refresh if tab was hidden for >5 seconds
+
     const handleAssessmentChange = () => {
       setRefreshKey(k => k + 1);
     };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        setRefreshKey(k => k + 1);
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        if (hiddenAt && Date.now() - hiddenAt >= DEBOUNCE_MS) {
+          setRefreshKey(k => k + 1);
+        }
+        hiddenAt = null;
       }
     };
     window.addEventListener('vge-assessment-change', handleAssessmentChange);
-    window.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       window.removeEventListener('vge-assessment-change', handleAssessmentChange);
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
