@@ -272,6 +272,10 @@ def process_class_promotion_and_rollover(assessment):
                 'promoted': is_promoted,
             }
         )
+        # Keep the student's current class FK in sync so lists/dashboards reflect it.
+        if next_class and student.school_class_id != next_class.class_id:
+            student.school_class = next_class
+            student.save(update_fields=['school_class'])
 
     # 7. Check if all classes across all centres have finished to roll over current_ay
     rollover_done = False
@@ -439,6 +443,10 @@ def evaluate_and_promote_class(academic_year_id, centre_id, class_id):
                 'promoted': is_promoted,
             }
         )
+        # Keep the student's current class FK in sync so lists/dashboards reflect it.
+        if next_class and student.school_class_id != next_class.class_id:
+            student.school_class = next_class
+            student.save(update_fields=['school_class'])
 
         evaluated_students.append({
             'studentId': student.student_id,
