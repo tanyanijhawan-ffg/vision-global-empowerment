@@ -193,9 +193,11 @@ export default function AssessmentsList() {
             !item.academicYearId ||
             Number(item.academicYearId) === selectedYearNum ||
             String(item.academicYear) === String(selectedYearNum);
+          const itemClassId =
+            item.classId ??
+            classes.find((c) => c.name === item.class)?.id;
           const matchClass =
-            (item.classId && Number(item.classId) === Number(cid)) ||
-            normalizeClass(item.class) === normalizeClass(cid);
+            itemClassId != null && Number(itemClassId) === Number(cid);
           const matchExam =
             (item.assessmentTypeId && Number(item.assessmentTypeId) === Number(eid)) ||
             String(item.assessmentTypeId) === String(eid);
