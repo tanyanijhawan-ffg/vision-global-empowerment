@@ -20,6 +20,9 @@ class AbsenceAlertAPITests(TestCase):
         self.region = Region.objects.create(program=program, region_name='North')
         self.centre = Center.objects.create(centre_name='North Centre', region=self.region)
         self.student = Student.objects.create(centre=self.centre, full_name='Test Student')
+        self.south_region = Region.objects.create(program=program, region_name='South')
+        self.south_centre = Center.objects.create(centre_name='South Centre', region=self.south_region)
+        self.south_student = Student.objects.create(centre=self.south_centre, full_name='South Student')
         role = Role.objects.create(name='super_admin')
         user = User.objects.create_user(username='alert-admin', password='TestPass123!')
         UserProfile.objects.create(user=user, role=role, region=self.region, created_by=user)
@@ -37,7 +40,27 @@ class AbsenceAlertAPITests(TestCase):
                 absence_reason='Test reason' if status == 'Absent' else None,
             )
 
-    def test_alert_is_returned_only_after_more_than_three_absent_sessions(self):
+    def record_student_statuses(self, student, statuses):
+        today = timezone.localdate()
+        for days_ago, status in enumerate(reversed(statuses)):
+            Attendance.objects.create(
+                student=student,
+                attendance_date=today - timedelta(days=days_ago),
+                status=status,
+                absence_reason='Test reason' if status == 'Absent' else None,
+            )
+
+    def create_scoped_user(self, username, role_name, region=None, centre=None):
+        role, _ = Role.objects.get_or_create(name=role_name)
+        user = User.objects.create_user(username=username, password='TestPass123!')
+        UserProfile.objects.create(user=user, role=role, region=region, centre=centre, created_by=user)
+        return user
+
+    def test_alert_is_returned_when_configured_absence_threshold_is_reached(self):
+        setting = AttendanceIntelligenceSetting.objects.get(setting_id=1)
+        setting.absence_alert_days = 4
+        setting.save(update_fields=['absence_alert_days'])
+
         self.record_statuses(['Absent', 'Absent', 'Absent'])
         response = self.client.get('/api/attendance/alerts/absence/')
         self.assertEqual(response.status_code, 200)
@@ -71,3 +94,20 @@ class AbsenceAlertAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.data['enabled'])
         self.assertEqual(response.data['alerts'], [])
+
+    def test_alerts_are_scoped_to_the_requesters_student_access(self):
+        self.record_student_statuses(self.student, ['Absent', 'Absent', 'Absent'])
+        self.record_student_statuses(self.south_student, ['Absent', 'Absent', 'Absent'])
+
+        super_response = self.client.get('/api/attendance/alerts/absence/')
+        self.assertEqual({row['student_name'] for row in super_response.data['alerts']}, {'Test Student', 'South Student'})
+
+        regional_admin = self.create_scoped_user('north-admin', 'regional_admin', region=self.region)
+        self.client.force_authenticate(user=regional_admin)
+        region_response = self.client.get('/api/attendance/alerts/absence/')
+        self.assertEqual({row['student_name'] for row in region_response.data['alerts']}, {'Test Student'})
+
+        educator = self.create_scoped_user('north-educator', 'community_educator', region=self.region, centre=self.centre)
+        self.client.force_authenticate(user=educator)
+        educator_response = self.client.get('/api/attendance/alerts/absence/')
+        self.assertEqual({row['student_name'] for row in educator_response.data['alerts']}, {'Test Student'})

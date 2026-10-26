@@ -18,6 +18,7 @@ import {
   type SchoolClass
 } from '../../lib/api';
 import { getCurrentUser } from '../../lib/auth';
+import { getUserScopedCentres } from '../../lib/centreScope';
 
 // Subcomponents for Academic Dashboard
 import AcademicFilterBar from './components/academic-dashboard/AcademicFilterBar';
@@ -312,8 +313,8 @@ export default function AcademicDashboard() {
   }, [filterClass, selectedAssessmentId, selectedAcademicYearId]);
 
   const availableCentres = useMemo(() => {
-    return centres;
-  }, [centres]);
+    return getUserScopedCentres(centres, currentUser);
+  }, [centres, currentUser]);
 
   const selectedCentreObj = useMemo(() => {
     return centres.find(c => c.name === filterCentre || String(c.id) === filterCentre);

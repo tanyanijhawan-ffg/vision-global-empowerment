@@ -33,7 +33,6 @@ import LeadershipTrainingEntry from './pages/leadership/LeadershipTrainingEntry'
 import UsersList from './pages/users/UsersList';
 import SettingsLayout from './pages/settings/SettingsLayout';
 import ProfileSettings from './pages/settings/ProfileSettings';
-import OrgSettings from './pages/settings/OrgSettings';
 import NotificationSettings from './pages/settings/NotificationSettings';
 
 const queryClient = new QueryClient();
@@ -80,7 +79,6 @@ function App() {
             <Route path="/settings" element={<ProtectedRoute><SettingsLayout /></ProtectedRoute>}>
               <Route index element={<Navigate to="profile" replace />} />
               <Route path="profile" element={<ProfileSettings />} />
-              <Route path="organization" element={<ProtectedRoute minimumRole="SUPER_ADMIN"><OrgSettings /></ProtectedRoute>} />
               <Route path="notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
             </Route>
           </Route>

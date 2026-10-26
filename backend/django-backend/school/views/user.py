@@ -11,7 +11,7 @@ User = get_user_model()
 
 
 class UserListCreateView(generics.ListCreateAPIView):
-    queryset = User.objects.select_related('profile__role', 'profile__region').all()
+    queryset = User.objects.select_related('profile__role', 'profile__region', 'profile__centre').all()
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated, CanManageUsers]
 
@@ -22,10 +22,10 @@ class UserListCreateView(generics.ListCreateAPIView):
             return User.objects.none()
 
         if getattr(profile.role, 'name', None) == 'super_admin':
-            return User.objects.select_related('profile__role', 'profile__region').all()
+            return User.objects.select_related('profile__role', 'profile__region', 'profile__centre').all()
 
         if getattr(profile.role, 'name', None) == 'regional_admin':
-            return User.objects.select_related('profile__role', 'profile__region').filter(profile__region_id=profile.region_id)
+            return User.objects.select_related('profile__role', 'profile__region', 'profile__centre').filter(profile__region_id=profile.region_id)
 
         return User.objects.none()
 
@@ -34,13 +34,13 @@ class UserListCreateView(generics.ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        created_user = User.objects.select_related('profile__role', 'profile__region').get(id=user.id)
+        created_user = User.objects.select_related('profile__role', 'profile__region', 'profile__centre').get(id=user.id)
         response_serializer = UserSerializer(created_user)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = User.objects.select_related('profile__role', 'profile__region').all()
+    queryset = User.objects.select_related('profile__role', 'profile__region', 'profile__centre').all()
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated, CanManageUsersOrSelf]
 
@@ -51,7 +51,7 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
             return User.objects.none()
 
         role_name = getattr(profile.role, 'name', None)
-        queryset = User.objects.select_related('profile__role', 'profile__region')
+        queryset = User.objects.select_related('profile__role', 'profile__region', 'profile__centre')
 
         if role_name == 'super_admin':
             return queryset.all()

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PieChart as PieIcon, BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import {
@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { getAuthHeaders, getCurrentUser } from '../../lib/auth';
 import { fetchMasterRegions, fetchMasterCentres, type MasterRegion, type MasterCentre } from '../../lib/api';
+import { getUserScopedCentres } from '../../lib/centreScope';
 
 type Breakdown = { name: string; count: number }[];
 type ReportData = {
@@ -134,6 +135,11 @@ export default function StudentReports() {
   const [filterRegion, setFilterRegion] = useState('');
   const [filterCentre, setFilterCentre] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ demographics: true });
+  const userRole = currentUser?.role;
+  const userRegion = currentUser?.region;
+  const userRegionId = currentUser?.regionId;
+  const userCentreId = currentUser?.centreId;
+  const userCentre = currentUser?.centre;
 
   const toggleSection = (id: string) => setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -142,28 +148,63 @@ export default function StudentReports() {
     fetchMasterCentres().then(setCentres).catch(() => setCentres([]));
   }, []);
 
-  const filteredCentres = centres.filter(c => !filterRegion || c.region_name === regions.find(r => String(r.id) === filterRegion)?.region_name);
+  const scopedCentres = useMemo(() => getUserScopedCentres(centres, currentUser), [centres, userRole, userRegion, userCentreId, userCentre]);
+  const allowedRegions = useMemo(() => {
+    if (userRole === 'SUPER_ADMIN') return regions;
+    return regions.filter(region => userRegionId != null
+      ? region.id === userRegionId
+      : region.region_name.trim().toLocaleLowerCase() === userRegion?.trim().toLocaleLowerCase());
+  }, [regions, userRole, userRegion, userRegionId]);
+  const assignedRegion = userRole === 'SUPER_ADMIN' ? '' : String(allowedRegions[0]?.id ?? '');
+  const effectiveRegion = assignedRegion || filterRegion;
+  const filteredCentres = useMemo(() => scopedCentres.filter(centre => !effectiveRegion ||
+    centre.region_name.trim().toLocaleLowerCase() === regions.find(region => String(region.id) === effectiveRegion)?.region_name.trim().toLocaleLowerCase()),
+  [scopedCentres, effectiveRegion, regions]);
+  const isCommunityEducator = userRole === 'FACILITATOR';
 
   useEffect(() => {
     setLoading(true);
+    if (userRole !== 'SUPER_ADMIN' && !effectiveRegion) {
+      setError('No region is assigned to this account.');
+      setData(null);
+      setLoading(false);
+      return;
+    }
+    if (isCommunityEducator && !filteredCentres.length) {
+      setError('No centre is assigned to this account. Contact an administrator.');
+      setData(null);
+      setLoading(false);
+      return;
+    }
+    setError('');
+    let active = true;
+    const controller = new AbortController();
     const params = new URLSearchParams();
-    if (filterRegion) params.append('region_id', filterRegion);
-    if (filterCentre) params.append('centre_id', filterCentre);
+    // The API scopes community educators to their assigned centre. Avoid an
+    // additional region filter that can exclude centres with inherited regions.
+    if (effectiveRegion && !isCommunityEducator) params.append('region_id', effectiveRegion);
+    if (filterCentre) {
+      params.append('centre_id', filterCentre);
+    }
     const qs = params.toString() ? `?${params.toString()}` : '';
-    fetch(`/api/dashboard/student-report/${qs}`, { headers: { ...getAuthHeaders(), Accept: 'application/json' } })
+    fetch(`/api/dashboard/student-report/${qs}`, { headers: { ...getAuthHeaders(), Accept: 'application/json' }, signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('Unable to load student report.');
-        setData(await response.json());
+        const report = await response.json();
+        if (active) setData(report);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load student report.'))
-      .finally(() => setLoading(false));
-  }, [filterRegion, filterCentre]);
+      .catch((err) => {
+        if (active && err.name !== 'AbortError') setError(err instanceof Error ? err.message : 'Unable to load student report.');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [filterRegion, filterCentre, effectiveRegion, isCommunityEducator, filteredCentres, userRole]);
 
   const filterBar = (
     <div className="flex flex-wrap items-center gap-2">
-      <select value={filterRegion} onChange={(e) => { setFilterRegion(e.target.value); setFilterCentre(''); }} className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm shadow-sm cursor-pointer">
-        <option value="">All Regions</option>
-        {regions.map(r => <option key={r.id} value={String(r.id)}>{r.region_name}</option>)}
+      <select value={effectiveRegion} disabled={userRole !== 'SUPER_ADMIN'} onChange={(e) => { setFilterRegion(e.target.value); setFilterCentre(''); }} className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm shadow-sm cursor-pointer">
+        {userRole === 'SUPER_ADMIN' && <option value="">All Regions</option>}
+        {allowedRegions.map(r => <option key={r.id} value={String(r.id)}>{r.region_name}</option>)}
       </select>
       <select value={filterCentre} onChange={(e) => setFilterCentre(e.target.value)} className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm shadow-sm cursor-pointer">
         <option value="">All Centres</option>

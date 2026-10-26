@@ -2,11 +2,12 @@ from django.db import models
 from django.db.models import Subquery, OuterRef
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 
 from school.models.assessment import AcademicYear
 from school.models.student import Student, StudentClassRecord
 from school.serializers.student import StudentSerializer
+from school.services.scope import scope_students
 
 
 def get_latest_class_subquery():
@@ -18,7 +19,7 @@ def get_latest_class_subquery():
 
 
 class StudentListView(generics.ListCreateAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = Student.objects.select_related('centre').all()
     serializer_class = StudentSerializer
     filter_backends = [DjangoFilterBackend]
@@ -27,7 +28,10 @@ class StudentListView(generics.ListCreateAPIView):
     def get_queryset(self):
         from school.services.classes import resolve_school_class
 
-        queryset = super().get_queryset().annotate(latest_class_id=get_latest_class_subquery())
+        queryset = scope_students(
+            super().get_queryset().annotate(latest_class_id=get_latest_class_subquery()),
+            self.request.user,
+        )
         centre_id = self.request.query_params.get('centreId') or self.request.query_params.get('center_id')
         gender = self.request.query_params.get('gender')
         class_grade = self.request.query_params.get('classGrade') or self.request.query_params.get('class_grade')
@@ -76,10 +80,13 @@ class StudentListView(generics.ListCreateAPIView):
 
 
 class StudentRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = Student.objects.select_related('centre').all()
     serializer_class = StudentSerializer
 
     def get_queryset(self):
-        return super().get_queryset().annotate(latest_class_grade=get_latest_class_subquery())
+        return scope_students(
+            super().get_queryset().annotate(latest_class_grade=get_latest_class_subquery()),
+            self.request.user,
+        )
 

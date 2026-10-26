@@ -77,6 +77,7 @@ export interface AttendanceCentre {
   name: string;
   district?: string;
   region?: string;
+  facilitator_name?: string | null;
 }
 
 export interface StudentCreateInput {
@@ -171,7 +172,7 @@ export async function sendAttendanceDefaultingEmail(input: {
 export async function saveAttendanceBulk(date: string, centre: number, attendance: AttendanceInput[]): Promise<AttendanceRecord[]> {
   const response = await fetch(`${getApiBaseUrl()}/v1/attendance/bulk/`, {
     method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ date, centre, attendance: attendance.map(({ student_id, ...record }) => ({ student: student_id, ...record, reason: record.absence_reason })) }),
   });
   if (!response.ok) throw new Error(`Failed to save attendance (${response.status})`);
@@ -181,7 +182,7 @@ export async function saveAttendanceBulk(date: string, centre: number, attendanc
 }
 
 export async function fetchAttendanceCentres(): Promise<AttendanceCentre[]> {
-  const response = await fetch(`${getApiBaseUrl()}/v1/attendance/centres/`, { headers: { Accept: 'application/json' } });
+  const response = await fetch(`${getApiBaseUrl()}/v1/attendance/centres/`, { headers: { Accept: 'application/json', ...getAuthHeaders() } });
   if (!response.ok) throw new Error(`Failed to load centres (${response.status})`);
   const payload = await response.json() as AttendanceCentre[] | { results?: AttendanceCentre[] };
   return Array.isArray(payload) ? payload : payload.results ?? [];
@@ -420,7 +421,7 @@ export async function fetchAttendance(params: { date?: string; centreId?: string
   const search = new URLSearchParams();
   if (params.date) search.set('attendance_date', params.date);
   if (params.centreId) search.set('centre_id', params.centreId);
-  const response = await fetch(`${getApiBaseUrl()}/attendance/?${search.toString()}`, { headers: { Accept: 'application/json' } });
+  const response = await fetch(`${getApiBaseUrl()}/attendance/?${search.toString()}`, { headers: { Accept: 'application/json', ...getAuthHeaders() } });
   if (!response.ok) throw new Error(`Failed to load attendance (${response.status})`);
   const payload = await response.json() as AttendanceRecord[] | { results?: AttendanceRecord[] };
   return Array.isArray(payload) ? payload : payload.results ?? [];
@@ -437,7 +438,7 @@ export async function fetchAbsenceAlerts(): Promise<AbsenceAlertSummary> {
 export async function saveAttendance(input: AttendanceInput): Promise<AttendanceRecord> {
   const response = await fetch(`${getApiBaseUrl()}/attendance/record/`, {
     method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(input),
   });
   if (!response.ok) {
@@ -698,10 +699,18 @@ export interface MasterCentre {
   region_name: string;
   district_name: string;
   centre_name: string;
+  facilitator_name?: string | null;
   status?: string | null;
 }
 
+export interface MasterDistrict {
+  id: number;
+  district_name: string;
+  region_name: string;
+}
+
 export const fetchMasterRegions = () => apiRequest<MasterRegion[]>("/masters/regions/");
+export const fetchMasterDistricts = () => apiRequest<MasterDistrict[]>("/masters/districts/");
 export const fetchMasterCentres = () => apiRequest<MasterCentre[]>("/masters/centres/");
 export const fetchAllSubjects = () => apiRequest<Subject[]>("/v1/metadata/subjects/");
 export const createSubjectMetadata = (payload: { name: string; code: string }) =>

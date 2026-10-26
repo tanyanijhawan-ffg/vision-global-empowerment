@@ -8,11 +8,10 @@ from django.db.models import Q
 from django.utils.html import escape
 from rest_framework import generics, serializers, status
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.permissions import AllowAny
 
 from school.models.attendance import Attendance, AttendanceIntelligenceSetting
 from school.models.center import Center
@@ -20,6 +19,7 @@ from school.models.student import Student
 from school.models.user_profile import UserProfile
 from school.serializers.center import CenterSerializer
 from school.serializers.attendance import AttendanceIntelligenceSettingSerializer, AttendanceSerializer
+from school.services.scope import scope_attendance, scope_centres, scope_students
 
 User = get_user_model()
 
@@ -46,16 +46,12 @@ def _community_educators_for_centre(centre, region):
     if region is None:
         return []
     educators = list(UserProfile.objects.select_related('user', 'role').filter(
-        role__name='facilitator',
+        role__name__in=('facilitator', 'community_educator'),
+        centre_id=centre.pk,
         region_id=region.pk,
         is_active=True,
         user__is_active=True,
     ).exclude(user__email='').order_by('full_name', 'user__email'))
-    assigned_name = (centre.facilitator_name or '').strip().casefold()
-    if assigned_name:
-        assigned = [educator for educator in educators if (educator.full_name or educator.user.get_full_name()).strip().casefold() == assigned_name]
-        if assigned:
-            educators = assigned
     return [{
         'id': educator.user_id,
         'name': educator.full_name or educator.user.get_full_name() or educator.user.username,
@@ -199,6 +195,13 @@ class AttendanceBulkSerializer(serializers.Serializer):
     centre = serializers.PrimaryKeyRelatedField(queryset=Center.objects.all())
     attendance = serializers.ListField(child=serializers.DictField(), allow_empty=False)
 
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request is not None:
+            fields['centre'].queryset = scope_centres(Center.objects.all(), request.user)
+        return fields
+
     def validate_attendance(self, entries):
         required = {'student', 'status'}
         for entry in entries:
@@ -209,7 +212,7 @@ class AttendanceBulkSerializer(serializers.Serializer):
 
 
 class AttendanceBulkView(generics.GenericAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     serializer_class = AttendanceBulkSerializer
 
     @transaction.atomic
@@ -221,7 +224,7 @@ class AttendanceBulkView(generics.GenericAPIView):
         records = []
 
         for entry in serializer.validated_data['attendance']:
-            student = Student.objects.filter(student_id=entry['student'], centre=centre).first()
+            student = scope_students(Student.objects.filter(centre=centre), request.user).filter(student_id=entry['student']).first()
             if student is None:
                 raise serializers.ValidationError({'attendance': f'Student {entry["student"]} does not belong to centre {centre.pk}.'})
             payload = {
@@ -239,9 +242,12 @@ class AttendanceBulkView(generics.GenericAPIView):
 
 
 class AttendanceCentreListView(generics.ListAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = Center.objects.order_by('centre_name')
     serializer_class = CenterSerializer
+
+    def get_queryset(self):
+        return scope_centres(super().get_queryset(), self.request.user)
 
 
 class AttendanceIntelligenceSettingView(generics.RetrieveUpdateAPIView):
@@ -254,14 +260,20 @@ class AttendanceIntelligenceSettingView(generics.RetrieveUpdateAPIView):
 
 
 class AttendanceCreateView(generics.CreateAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = Attendance.objects.all()
     serializer_class = AttendanceSerializer
 
     def create(self, request, *args, **kwargs):
         student_id = request.data.get('student_id')
         attendance_date = request.data.get('attendance_date')
-        instance = Attendance.objects.filter(student_id=student_id, attendance_date=attendance_date).first()
+        scoped_students = scope_students(Student.objects.all(), request.user)
+        if not scoped_students.filter(pk=student_id).exists():
+            raise serializers.ValidationError({'student_id': 'Student is outside your assigned scope.'})
+        instance = scope_attendance(
+            Attendance.objects.filter(student_id=student_id, attendance_date=attendance_date),
+            request.user,
+        ).first()
         serializer = self.get_serializer(instance=instance, data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -270,14 +282,14 @@ class AttendanceCreateView(generics.CreateAPIView):
 
 
 class AttendanceListView(generics.ListAPIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = Attendance.objects.select_related('student', 'student__centre').all()
     serializer_class = AttendanceSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['attendance_date', 'status', 'student__centre__centre_id']
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = scope_attendance(super().get_queryset(), self.request.user)
         center_id = self.request.query_params.get('center_id') or self.request.query_params.get('centre_id')
         if center_id is not None:
             queryset = queryset.filter(student__centre__centre_id=center_id)
@@ -296,27 +308,10 @@ class AbsenceAlertListView(APIView):
                 'alerts': [],
             })
 
-        profile = getattr(request.user, 'profile', None)
-        if profile is None:
-            return Response({
-                'enabled': True,
-                'threshold_days': setting.absence_alert_days,
-                'alerts': [],
-            })
-
-        queryset = Attendance.objects.select_related('student', 'student__centre')
-        role_name = getattr(getattr(profile, 'role', None), 'name', None)
-        if role_name != 'super_admin':
-            if profile.region_id is None:
-                return Response({
-                    'enabled': True,
-                    'threshold_days': setting.absence_alert_days,
-                    'alerts': [],
-                })
-            queryset = queryset.filter(
-                Q(student__centre__region_id=profile.region_id)
-                | Q(student__centre__district__region_id=profile.region_id)
-            )
+        queryset = scope_attendance(
+            Attendance.objects.select_related('student', 'student__centre'),
+            request.user,
+        )
 
         rows = queryset.order_by('student_id', '-attendance_date').values(
             'student_id',
@@ -348,7 +343,7 @@ class AbsenceAlertListView(APIView):
         alerts = [
             {key: value for key, value in streak.items() if key != 'streak_ended'}
             for streak in streaks.values()
-            if streak['consecutive_absent_days'] > setting.absence_alert_days
+            if streak['consecutive_absent_days'] >= setting.absence_alert_days
         ]
         alerts.sort(key=lambda alert: (-alert['consecutive_absent_days'], alert['student_name']))
         return Response({

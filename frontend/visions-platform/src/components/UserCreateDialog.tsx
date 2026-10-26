@@ -7,6 +7,12 @@ interface RegionOption {
   name: string;
 }
 
+interface CentreOption {
+  id: number;
+  region_name: string;
+  centre_name: string;
+}
+
 interface UserCreateDialogProps {
   open: boolean;
   onClose: () => void;
@@ -65,9 +71,11 @@ export default function UserCreateDialog({
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'super_admin' | 'regional_admin' | 'community_educator'>('community_educator');
   const [region, setRegion] = useState<number | ''>('');
+  const [centreId, setCentreId] = useState<number | ''>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([]);
+  const [centreOptions, setCentreOptions] = useState<CentreOption[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -81,6 +89,12 @@ export default function UserCreateDialog({
       .then((response) => (response.ok ? response.json() : []))
       .then((regions: RegionOption[]) => setRegionOptions(regions))
       .catch(() => setRegionOptions([]));
+    fetch('/api/masters/centres/', {
+      headers: { Accept: 'application/json', ...getAuthHeaders() },
+    })
+      .then(response => response.ok ? response.json() : [])
+      .then((centres: CentreOption[]) => setCentreOptions(centres))
+      .catch(() => setCentreOptions([]));
   }, [open]);
 
   const filteredRegionOptions = useMemo(() => {
@@ -91,6 +105,11 @@ export default function UserCreateDialog({
     return regionOptions;
   }, [currentUserRole, currentUserRegion, regionOptions]);
 
+  const filteredCentreOptions = useMemo(
+    () => centreOptions.filter(candidate => filteredRegionOptions.some(item => item.id === region && item.name === candidate.region_name)),
+    [centreOptions, filteredRegionOptions, region],
+  );
+
   useEffect(() => {
     if (!open) return;
 
@@ -98,12 +117,15 @@ export default function UserCreateDialog({
       setRole('community_educator');
       const firstRegion = filteredRegionOptions[0]?.id ?? '';
       setRegion(firstRegion);
+      setCentreId('');
     } else if (currentUserRole === 'SUPER_ADMIN') {
       setRole('regional_admin');
       setRegion(filteredRegionOptions[0]?.id ?? '');
+      setCentreId('');
     } else {
       setRole('community_educator');
       setRegion('');
+      setCentreId('');
     }
   }, [open, currentUserRole, filteredRegionOptions]);
 
@@ -111,8 +133,8 @@ export default function UserCreateDialog({
     event.preventDefault();
     setError('');
 
-    if (!fullName.trim() || !username.trim() || !email.trim() || !mobileNumber.trim() || !password || !region) {
-      setError('Full name, username, email, mobile number, password, and region are required.');
+    if (!fullName.trim() || !username.trim() || !email.trim() || !mobileNumber.trim() || !password || !region || (role === 'community_educator' && !centreId)) {
+      setError('Complete all required fields and select an assigned centre for community educators.');
       return;
     }
 
@@ -156,6 +178,7 @@ export default function UserCreateDialog({
           mobile_number: mobileNumber,
           role,
           region: Number(region),
+          centre_id: role === 'community_educator' ? Number(centreId) : null,
         }),
       });
 
@@ -281,7 +304,7 @@ export default function UserCreateDialog({
               Region
               <select
                 value={region}
-                onChange={(e) => setRegion(e.target.value ? Number(e.target.value) : '')}
+                onChange={(e) => { setRegion(e.target.value ? Number(e.target.value) : ''); setCentreId(''); }}
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                 disabled={currentUserRole === 'FACILITATOR'}
               >
@@ -292,6 +315,20 @@ export default function UserCreateDialog({
                 ))}
               </select>
             </label>
+            {role === 'community_educator' ? (
+              <label className="block text-sm font-medium text-slate-700">
+                Assigned centre
+                <select
+                  value={centreId}
+                  onChange={e => setCentreId(e.target.value ? Number(e.target.value) : '')}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                  required
+                >
+                  <option value="">Select a centre</option>
+                  {filteredCentreOptions.map(item => <option key={item.id} value={item.id}>{item.centre_name}</option>)}
+                </select>
+              </label>
+            ) : null}
           </div>
 
           {error ? (

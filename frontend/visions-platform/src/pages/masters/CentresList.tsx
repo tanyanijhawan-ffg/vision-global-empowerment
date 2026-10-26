@@ -49,11 +49,11 @@ export default function CentresList() {
     fetch('/api/masters/districts/', { headers }).then(response => response.ok ? response.json() : []).then(setDistrictOptions).catch(() => setDistrictOptions([]));
   }, []);
 
-  const regions = useMemo(() => [...new Set(data.map(centre => centre.region_name))].filter(Boolean).sort(), [data]);
-  // Districts shown in the form, narrowed to the selected region when possible.
+  const regions = useMemo(() => regionOptions.map(region => region.region_name).filter(Boolean).sort(), [regionOptions]);
+  // Only show districts belonging to the selected region.
   const formDistrictOptions = useMemo(() => {
-    const inRegion = districtOptions.filter(district => !form.region_name || district.region_name === form.region_name);
-    return inRegion.length > 0 ? inRegion : districtOptions;
+    if (!form.region_name) return [];
+    return districtOptions.filter(district => district.region_name === form.region_name);
   }, [districtOptions, form.region_name]);
   const filteredData = data.filter(centre =>
     (filterRegion === 'All' || centre.region_name === filterRegion) &&
@@ -137,20 +137,20 @@ export default function CentresList() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <form onSubmit={createCentre} className="w-full max-w-lg space-y-3 rounded-lg bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">{editingId ? 'Edit Centre' : 'Add Centre'}</h2><button type="button" onClick={closeForm} aria-label="Close"><X size={18} /></button></div>
-            <label className="block text-sm font-medium text-slate-700">Region Name *
-              <select required value={form.region_name} onChange={event => setForm({ ...form, region_name: event.target.value, district_name: '' })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <label className="block text-sm font-medium text-slate-700"><span className="text-red-600">Region Name</span><span className="text-red-500"> *</span>
+              <select required value={form.region_name} onChange={event => setForm({ ...form, region_name: event.target.value, district_name: '' })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900">
                 <option value="">Select region</option>
                 {regionOptions.map(region => <option key={region.id} value={region.region_name}>{region.region_name}</option>)}
               </select>
             </label>
-            <label className="block text-sm font-medium text-slate-700">District Name *
-              <select required value={form.district_name} onChange={event => setForm({ ...form, district_name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" disabled={!form.region_name}>
+            <label className="block text-sm font-medium text-slate-700"><span className="text-red-600">District Name</span><span className="text-red-500"> *</span>
+              <select required value={form.district_name} onChange={event => setForm({ ...form, district_name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" disabled={!form.region_name}>
                 <option value="">{form.region_name ? 'Select district' : 'Select a region first'}</option>
                 {formDistrictOptions.map(district => <option key={district.id} value={district.district_name}>{district.district_name}</option>)}
               </select>
             </label>
-            {[['centre_name', 'Centre Name'], ['block', 'Block'], ['village', 'Village'], ['facilitator_name', 'Facilitator Name']].map(([field, label]) => <label key={field} className="block text-sm font-medium text-slate-700">{label}{field === 'centre_name' ? ' *' : ''}<input required={field === 'centre_name'} value={form[field as keyof typeof form]} onChange={event => setForm({ ...form, [field]: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>)}
-            <label className="block text-sm font-medium text-slate-700">Status<select value={form.status} onChange={event => setForm({ ...form, status: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+            {[['centre_name', 'Centre Name'], ['block', 'Block'], ['village', 'Village'], ['facilitator_name', 'Facilitator Name']].map(([field, label]) => { const required = field === 'centre_name'; return <label key={field} className="block text-sm font-medium text-slate-700">{required ? <span className="text-red-600">{label}</span> : label}{required && <span className="text-red-500"> *</span>}<input required={required} value={form[field as keyof typeof form]} onChange={event => setForm({ ...form, [field]: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" /></label>; })}
+            <label className="block text-sm font-medium text-slate-700">Status<select value={form.status} onChange={event => setForm({ ...form, status: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
             <button className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white">{editingId ? 'Save Centre' : 'Add Centre'}</button>
           </form>
         </div>

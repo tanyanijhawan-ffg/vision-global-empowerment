@@ -5,6 +5,8 @@ import {
   AttendanceCentre, AttendanceInput, AttentionLevel, Behaviour, LearningBehaviour, StudentListItem,
   fetchAttendance, fetchAttendanceCentres, fetchStudents, learningBehaviourOptions, saveAttendanceBulk,
 } from '../../lib/api';
+import { getCurrentUser } from '../../lib/auth';
+import { getUserScopedCentres } from '../../lib/centreScope';
 
 const attentionOptions: AttentionLevel[] = ['Focused', 'Distracted', 'Needs reminders'];
 const behaviourOptions: Behaviour[] = ['Cooperative', 'Disruptive', 'Silent', 'Leadership behavior'];
@@ -41,6 +43,7 @@ const emptyDraft = (): AttendanceDraft => ({
 });
 
 export default function AttendanceEntry() {
+  const currentUser = getCurrentUser();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
   const [selectedCentre, setSelectedCentre] = useState('');
@@ -55,6 +58,8 @@ export default function AttendanceEntry() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+
+  const availableCentres = getUserScopedCentres(centres, currentUser);
 
   useEffect(() => {
     Promise.all([fetchStudents(), fetchAttendanceCentres()]).then(([records, centreRecords]) => {
@@ -139,7 +144,7 @@ export default function AttendanceEntry() {
       <PageHeader title="Mark Attendance" subtitle="Record daily attendance, engagement, and tutor observations."
         action={<button onClick={handleSave} disabled={saving || loading || !filteredStudents.length} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"><Save size={16} />{saving ? 'Saving...' : 'Save Attendance'}</button>} />
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6"><div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <label className="space-y-1.5"><span className="block text-sm font-medium text-slate-700">Select Centre</span><select value={selectedCentre} onChange={event => { setSelectedCentre(event.target.value); setSelectedClass(''); }} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"><option value="">Select a centre</option>{centres.map(centre => <option key={centre.id} value={centre.id}>{centre.name}</option>)}</select></label>
+        <label className="space-y-1.5"><span className="block text-sm font-medium text-slate-700">Select Centre</span><select value={selectedCentre} onChange={event => { setSelectedCentre(event.target.value); setSelectedClass(''); }} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"><option value="">Select a centre</option>{availableCentres.map(centre => <option key={centre.id} value={centre.id}>{centre.name}</option>)}</select></label>
         <label className="space-y-1.5"><span className="block text-sm font-medium text-slate-700">Select Class</span><select value={selectedClass} onChange={event => setSelectedClass(event.target.value)} disabled={!selectedCentre} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm disabled:bg-slate-50 disabled:text-slate-400"><option value="">All classes</option>{classOptions.map(classGrade => <option key={classGrade} value={classGrade}>{classGrade}</option>)}</select></label>
         <label className="space-y-1.5"><span className="block text-sm font-medium text-slate-700">Date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm" /></label>
       </div></div>
@@ -152,7 +157,7 @@ export default function AttendanceEntry() {
               <div className="space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Student Name</span><div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-slate-900">{student.name}</p>{formatClassGrade(student.class) && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">Class {formatClassGrade(student.class)}</span>}</div></div><div><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Student ID</span><p className="font-semibold text-slate-900">{student.id}</p></div></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Status <b className="text-red-500">*</b></span><select required value={draft.status} onChange={event => updateDraft(student.id, { status: event.target.value as AttendanceInput['status'] })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="Present">Present</option><option value="Absent">Absent</option><option value="Late">Late</option></select></label>
+                  <label><span className="text-xs font-semibold text-red-600 uppercase tracking-wide block mb-2">Status <b className="text-red-500">*</b></span><select required value={draft.status} onChange={event => updateDraft(student.id, { status: event.target.value as AttendanceInput['status'] })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="Present">Present</option><option value="Absent">Absent</option><option value="Late">Late</option></select></label>
                   {draft.status === 'Present' && <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"><Info size={16} aria-label="Information" /><span>No Remarks required for Present.</span></div>}
                   {draft.status === 'Absent' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Absence <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.absence_reason} onChange={event => updateDraft(student.id, { absence_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}
                   {draft.status === 'Late' && <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Reason for Late <span className="normal-case font-normal text-slate-400">(optional)</span></span><input value={draft.late_reason} onChange={event => updateDraft(student.id, { late_reason: event.target.value })} placeholder="Add a reason if known" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" /></label>}

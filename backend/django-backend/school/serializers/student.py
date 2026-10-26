@@ -10,6 +10,7 @@ from school.models.student import Student
 from school.models.vulnerability import StudentVulnerability, VulnerabilityMaster
 from school.serializers.center import CenterSerializer
 from school.services.classes import resolve_school_class
+from school.services.scope import scope_centres
 
 
 class StudentSerializer(serializers.ModelSerializer):
@@ -63,6 +64,13 @@ class StudentSerializer(serializers.ModelSerializer):
             'aspirations_data',
             'aspirations',
         ]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request is not None and 'centre_id' in fields:
+            fields['centre_id'].queryset = scope_centres(Center.objects.all(), request.user)
+        return fields
 
     def get_family(self, instance):
         try:

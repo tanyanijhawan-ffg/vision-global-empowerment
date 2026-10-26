@@ -14,6 +14,7 @@ from school.models.family import Family
 from school.models.socio_economic import SocioEconomic
 from school.models.student import Student
 from school.models.vulnerability import StudentVulnerability
+from school.services.scope import scope_centres, scope_students
 
 
 def pct(numerator, denominator):
@@ -32,22 +33,22 @@ class DashboardSummaryView(APIView):
         # Optional filters (dashboard Region/Centre filter bar)
         region_id = request.query_params.get('region_id') or request.query_params.get('region')
         centre_id = request.query_params.get('centre_id') or request.query_params.get('centre')
+        centre_ids = request.query_params.get('centre_ids')
 
-        students = Student.objects.select_related('centre__region').all()
-        centres = Center.objects.all()
-        attendance_qs = Attendance.objects.all()
-        score_rows = AssessmentScore.objects.select_related('subject', 'assessment__assessment_type').all()
+        students = scope_students(Student.objects.select_related('centre__region').all(), request.user)
+        centres = scope_centres(Center.objects.all(), request.user)
 
         if region_id:
-            students = students.filter(centre__region_id=region_id)
-            centres = centres.filter(region_id=region_id)
-            attendance_qs = attendance_qs.filter(student__centre__region_id=region_id)
-            score_rows = score_rows.filter(student__centre__region_id=region_id)
+            students = students.filter(Q(centre__region_id=region_id) | Q(centre__district__region_id=region_id)).distinct()
+            centres = centres.filter(Q(region_id=region_id) | Q(district__region_id=region_id)).distinct()
         if centre_id:
             students = students.filter(centre_id=centre_id)
             centres = centres.filter(centre_id=centre_id)
-            attendance_qs = attendance_qs.filter(student__centre_id=centre_id)
-            score_rows = score_rows.filter(student__centre_id=centre_id)
+
+        attendance_qs = Attendance.objects.filter(student_id__in=students.values('pk'))
+        score_rows = AssessmentScore.objects.select_related('subject', 'assessment__assessment_type').filter(
+            student_id__in=students.values('pk')
+        )
 
         total_students = students.count()
         new_registrations = students.filter(created_at__date__gte=month_start).count()
@@ -74,8 +75,10 @@ class DashboardSummaryView(APIView):
             'stats': {
                 'total_students': total_students,
                 'active_centres': centres.filter(status__iexact='active').count() or centres.count(),
-                'regions': Region.objects.count(),
-                'districts': District.objects.count(),
+                'regions': Region.objects.filter(
+                    Q(pk__in=centres.values('region_id')) | Q(pk__in=centres.values('district__region_id'))
+                ).distinct().count(),
+                'districts': District.objects.filter(pk__in=centres.values('district_id')).distinct().count(),
                 'attendance_today': attendance_today,
                 'avg_academic_score': avg_academic,
                 'high_risk_students': high_risk,
@@ -85,7 +88,7 @@ class DashboardSummaryView(APIView):
             'attendance_trend': self._attendance_trend(eight_weeks_ago, attendance_qs),
             'academics_by_subject': self._academics_by_subject(score_rows),
             'students_by_region': self._students_by_region(students),
-            'activities': self._activities(today),
+            'activities': self._activities(today, students, attendance_qs, score_rows),
         }
         return Response(data)
 
@@ -155,10 +158,13 @@ class DashboardSummaryView(APIView):
             for row in rows if row['centre__region__region_name']
         ]
 
-    def _activities(self, today):
+    def _activities(self, today, students=None, attendance_qs=None, score_rows=None):
         activities = []
+        students = students if students is not None else Student.objects.all()
+        attendance_qs = attendance_qs if attendance_qs is not None else Attendance.objects.all()
+        score_rows = score_rows if score_rows is not None else AssessmentScore.objects.all()
 
-        for student in Student.objects.select_related('centre').order_by('-created_at')[:5]:
+        for student in students.select_related('centre').order_by('-created_at')[:5]:
             if student.created_at:
                 activities.append({
                     'id': f'student-{student.student_id}',
@@ -168,7 +174,7 @@ class DashboardSummaryView(APIView):
                 })
 
         recent_attendance = (
-            Attendance.objects.select_related('student__centre')
+            attendance_qs.select_related('student__centre')
             .order_by('-attendance_date')[:5]
         )
         for record in recent_attendance:
@@ -179,7 +185,7 @@ class DashboardSummaryView(APIView):
                 'timestamp': timezone.datetime.combine(record.attendance_date, timezone.datetime.min.time(), tzinfo=timezone.get_current_timezone()).isoformat(),
             })
 
-        for assessment in AssessmentScore.objects.select_related('assessment__assessment_type', 'assessment__centre').order_by('-created_at')[:5]:
+        for assessment in score_rows.select_related('assessment__assessment_type', 'assessment__centre').order_by('-created_at')[:5]:
             centre_name = assessment.assessment.centre.centre_name if assessment.assessment.centre else 'organisation'
             activities.append({
                 'id': f'assessment-{assessment.score_id}',
@@ -215,11 +221,11 @@ class DashboardDrilldownView(APIView):
         region_id = request.query_params.get('region_id') or request.query_params.get('region')
         centre_id = request.query_params.get('centre_id') or request.query_params.get('centre')
 
-        students = Student.objects.select_related('centre__region').all()
-        centres = Center.objects.select_related('region').all()
+        students = scope_students(Student.objects.select_related('centre__region').all(), request.user)
+        centres = scope_centres(Center.objects.select_related('region').all(), request.user)
         if region_id:
-            students = students.filter(centre__region_id=region_id)
-            centres = centres.filter(region_id=region_id)
+            students = students.filter(Q(centre__region_id=region_id) | Q(centre__district__region_id=region_id)).distinct()
+            centres = centres.filter(Q(region_id=region_id) | Q(district__region_id=region_id)).distinct()
         if centre_id:
             students = students.filter(centre_id=centre_id)
             centres = centres.filter(centre_id=centre_id)
@@ -238,7 +244,7 @@ class DashboardDrilldownView(APIView):
 
         if metric == 'high_risk_students':
             at_risk_ids = []
-            recent = Attendance.objects.filter(attendance_date__gte=last_30_days)
+            recent = Attendance.objects.filter(attendance_date__gte=last_30_days, student_id__in=students.values('pk'))
             if region_id:
                 recent = recent.filter(student__centre__region_id=region_id)
             if centre_id:
@@ -250,7 +256,7 @@ class DashboardDrilldownView(APIView):
             )
             pct_by_student = {row['student']: row['present'] / row['total'] for row in rows}
             at_risk_ids = [sid for sid, ratio in pct_by_student.items() if ratio < 0.75]
-            qs = Student.objects.select_related('centre__region').filter(student_id__in=at_risk_ids).order_by('full_name')
+            qs = students.filter(student_id__in=at_risk_ids).order_by('full_name')
             items = []
             for s in qs:
                 detail = _student_detail(s)
@@ -276,7 +282,9 @@ class DashboardDrilldownView(APIView):
                 'name': r.region_name,
                 'state': r.state or '',
                 'url': '/masters/regions',
-            } for r in Region.objects.order_by('region_name')]
+            } for r in Region.objects.filter(
+                Q(pk__in=centres.values('region_id')) | Q(pk__in=centres.values('district__region_id'))
+            ).distinct().order_by('region_name')]
             return Response({'title': 'Regions', 'kind': 'regions', 'items': items})
 
         return Response({'detail': 'Unknown metric.'}, status=400)
@@ -303,22 +311,25 @@ class StudentReportView(APIView):
     def get(self, request, *args, **kwargs):
         region_id = request.query_params.get('region_id') or request.query_params.get('region')
         centre_id = request.query_params.get('centre_id') or request.query_params.get('centre')
+        centre_ids = request.query_params.get('centre_ids')
 
-        students = Student.objects.select_related('centre__region', 'centre__district').all()
-        socio = SocioEconomic.objects.all()
-        family = Family.objects.all()
-        vulns = StudentVulnerability.objects.select_related('vulnerability').all()
+        students = scope_students(Student.objects.select_related('centre__region', 'centre__district').all(), request.user)
 
         if region_id:
-            students = students.filter(centre__region_id=region_id)
-            socio = socio.filter(student__centre__region_id=region_id)
-            family = family.filter(student__centre__region_id=region_id)
-            vulns = vulns.filter(student__centre__region_id=region_id)
+            students = students.filter(Q(centre__region_id=region_id) | Q(centre__district__region_id=region_id)).distinct()
         if centre_id:
             students = students.filter(centre_id=centre_id)
-            socio = socio.filter(student__centre_id=centre_id)
-            family = family.filter(student__centre_id=centre_id)
-            vulns = vulns.filter(student__centre_id=centre_id)
+        elif centre_ids is not None:
+            try:
+                allowed_centre_ids = [int(value) for value in centre_ids.split(',') if value.strip()]
+            except ValueError:
+                return Response({'centre_ids': ['Centre IDs must be comma-separated numbers.']}, status=400)
+            students = students.filter(centre_id__in=allowed_centre_ids)
+
+        student_ids = students.values('pk')
+        socio = SocioEconomic.objects.filter(student_id__in=student_ids)
+        family = Family.objects.filter(student_id__in=student_ids)
+        vulns = StudentVulnerability.objects.select_related('vulnerability').filter(student_id__in=student_ids)
 
         bool_map = {True: 'Yes', False: 'No'}
 

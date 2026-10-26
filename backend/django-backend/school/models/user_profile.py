@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from .center import Region
+from .center import Center, Region
 from .role import Role
 
 
@@ -11,6 +11,13 @@ class UserProfile(models.Model):
     mobile_number = models.CharField(max_length=20, blank=True, default='')
     role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name='user_profiles')
     region = models.ForeignKey(Region, on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profiles')
+    centre = models.ForeignKey(
+        Center,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='educator_profiles',
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
