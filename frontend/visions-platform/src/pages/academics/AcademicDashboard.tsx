@@ -537,19 +537,19 @@ export default function AcademicDashboard() {
 
     return {
       understanding: [
-        { name: 'Understands Clearly', value: 64, color: '#10B981' },
-        { name: 'Needs Repetition', value: 26, color: '#F59E0B' },
-        { name: 'Does Not Understand', value: 10, color: '#EF4444' },
+        { name: 'Understands Clearly', value: 0, color: '#10B981' },
+        { name: 'Needs Repetition', value: 0, color: '#F59E0B' },
+        { name: 'Does Not Understand', value: 0, color: '#EF4444' },
       ],
       application: [
-        { name: 'Applies Concepts', value: 58, color: '#10B981' },
-        { name: 'Memorises Only', value: 29, color: '#F59E0B' },
-        { name: 'Cannot Apply', value: 13, color: '#EF4444' },
+        { name: 'Applies Concepts', value: 0, color: '#10B981' },
+        { name: 'Memorises Only', value: 0, color: '#F59E0B' },
+        { name: 'Cannot Apply', value: 0, color: '#EF4444' },
       ],
       interest: [
-        { name: 'Interested', value: 70, color: '#10B981' },
-        { name: 'Neutral', value: 20, color: '#64748B' },
-        { name: 'Disinterested', value: 10, color: '#EF4444' },
+        { name: 'Interested', value: 0, color: '#10B981' },
+        { name: 'Neutral', value: 0, color: '#64748B' },
+        { name: 'Disinterested', value: 0, color: '#EF4444' },
       ],
     };
   }, [diagnosticsData]);
