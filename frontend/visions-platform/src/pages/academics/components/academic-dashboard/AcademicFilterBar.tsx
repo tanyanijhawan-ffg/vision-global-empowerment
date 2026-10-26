@@ -72,6 +72,10 @@ export const AcademicFilterBar: React.FC<AcademicFilterBarProps> = ({
   }, [classes]);
 
   const availableClasses = (classes && classes.length > 0) ? classes : internalClasses;
+
+  const selectedClass = availableClasses.find(
+    (c) => String(c.id) === String(filterClass)
+  );
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4">
       <div className="flex items-center justify-between mb-3">
@@ -193,7 +197,10 @@ export const AcademicFilterBar: React.FC<AcademicFilterBarProps> = ({
         <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
           <p className="text-xs text-slate-500 font-medium">
             Centre <span className="font-bold text-slate-800">{filterCentre}</span> &bull; Class{' '}
-            <span className="font-bold text-slate-800">{filterClass}</span> &bull;{' '}
+            <span className="font-bold text-slate-800">
+              {selectedClass?.name || 'Unknown class'}
+            </span>{' '}
+            &bull;{' '}
             <span className="font-bold text-indigo-600">{studentsInScopeCount}</span> students in scope
           </p>
         </div>
