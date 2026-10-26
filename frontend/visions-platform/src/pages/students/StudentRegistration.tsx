@@ -66,7 +66,14 @@ const initialRegistrationData: RegistrationData = {
   full_name: '', nick_name: '', gender: '', dob: '', photo: null, school_name: '',
   school_type: '', class_grade: '', medium_of_instruction: '', attendance_pattern: '',
   previous_academic_performance: '', centre_id: '',
-  family_data: {}, socio_economic_data: {}, vulnerabilities_data: [],
+  family_data: {},
+  socio_economic_data: {
+    electricity: true,
+    drinking_water: true,
+    study_space: true,
+    toilet: true,
+  },
+  vulnerabilities_data: [],
   motivation_data: [],
   aspirations_data: { career_goal: '', interests: '', strengths: '' },
 };
@@ -311,14 +318,12 @@ function Step4({ data, onChange, tribalCommunities = [] }: { data: RegistrationD
           <select value={booleanValue('electricity')} onChange={e => setSocio('electricity', e.target.value === 'Yes')} className={inputCls}>
             <option>Yes</option>
             <option>No</option>
-            <option>Partial</option>
           </select>
         </Field>
         <Field label="Access to Clean Water">
           <select value={booleanValue('drinking_water')} onChange={e => setSocio('drinking_water', e.target.value === 'Yes')} className={inputCls}>
             <option>Yes</option>
             <option>No</option>
-            <option>Partial</option>
           </select>
         </Field>
         <Field label="Study Space at Home">
