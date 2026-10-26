@@ -95,7 +95,7 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
               Low-Performing Students Requiring Intervention
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Showing {lowPerformersList.length} students in Class {filterClass} scoring below threshold
+              Showing {lowPerformersList.length} students in {/^class\b/i.test(String(filterClass || '').trim()) ? String(filterClass).trim() : `Class ${filterClass}`} scoring below threshold
             </p>
           </div>
 
@@ -122,7 +122,7 @@ export const LowPerformersTab: React.FC<LowPerformersTabProps> = ({
 
         {lowPerformersList.length === 0 ? (
           <div className="text-center py-12 text-slate-400 text-xs font-medium border border-dashed border-slate-200 rounded-xl">
-            No students found in Class {filterClass} with score below {lowPerformerThreshold}%.
+            No students found in {/^class\b/i.test(String(filterClass || '').trim()) ? String(filterClass).trim() : `Class ${filterClass}`} with score below {lowPerformerThreshold}%.
           </div>
         ) : (
           <>

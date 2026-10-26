@@ -124,7 +124,7 @@ export const StudentGradebookTab: React.FC<StudentGradebookTabProps> = ({
               Subject-Wise Student Gradebook
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Showing {filteredStudents.length} of {filteredStudentsWithScores.length} students in Class {filterClass}
+              Showing {filteredStudents.length} of {filteredStudentsWithScores.length} students in {/^class\b/i.test(String(filterClass || '').trim()) ? String(filterClass).trim() : `Class ${filterClass}`}
             </p>
           </div>
 
@@ -155,7 +155,7 @@ export const StudentGradebookTab: React.FC<StudentGradebookTabProps> = ({
 
         {filteredStudents.length === 0 ? (
           <div className="text-center py-12 text-slate-400 text-xs font-medium border border-dashed border-slate-200 rounded-xl">
-            {searchQuery ? `No students found matching "${searchQuery}"` : `No students found in Class ${filterClass}`}
+            {searchQuery ? `No students found matching "${searchQuery}"` : `No students found in ${/^class\b/i.test(String(filterClass || '').trim()) ? String(filterClass).trim() : `Class ${filterClass}`}`}
           </div>
         ) : (
           <>

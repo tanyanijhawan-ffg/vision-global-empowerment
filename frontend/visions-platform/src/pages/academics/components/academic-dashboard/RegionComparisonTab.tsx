@@ -35,7 +35,7 @@ export const RegionComparisonTab: React.FC<RegionComparisonTabProps> = ({
       <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
         <h3 className="text-base font-bold text-slate-900 mb-1">Region Comparison Report</h3>
         <p className="text-xs text-slate-500 mb-5">
-          Comparative evaluation of all operating states and regions for Class {filterClass}
+          Comparative evaluation of all operating states and regions for {/^class\b/i.test(String(filterClass || '').trim()) ? String(filterClass).trim() : `Class ${filterClass}`}
         </p>
 
         {/* Cards on small screens */}
