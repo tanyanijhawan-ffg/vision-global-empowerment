@@ -876,7 +876,7 @@ export default function AcademicDashboard() {
               currentAvgScore={currentAvgScore}
               previousAvgScore={previousAvgScore}
               ppChange={ppChange}
-              filterClass={filterClass}
+              filterClass={selectedClassObj?.name || filterClass}
               displaySubjectTrends={displaySubjectTrends}
               diagnosticSummary={diagnosticSummary}
               previousTermName={previousTermName}
@@ -888,7 +888,7 @@ export default function AcademicDashboard() {
           {activeTab === 'centre-report' && (
             <CentrePerformanceTab
               centrePerformanceReport={centrePerformanceReport}
-              filterClass={filterClass}
+              filterClass={selectedClassObj?.name || filterClass}
             />
           )}
 
@@ -896,7 +896,7 @@ export default function AcademicDashboard() {
           {activeTab === 'region-report' && (
             <RegionComparisonTab
               regionComparisonReport={regionComparisonReport}
-              filterClass={filterClass}
+              filterClass={selectedClassObj?.name || filterClass}
             />
           )}
 
@@ -906,7 +906,7 @@ export default function AcademicDashboard() {
               lowPerformersList={lowPerformersList}
               lowPerformerThreshold={lowPerformerThreshold}
               onThresholdChange={setLowPerformerThreshold}
-              filterClass={filterClass}
+              filterClass={selectedClassObj?.name || filterClass}
               observationsData={observationsData}
               diagnosticsData={diagnosticsData as any}
             />
@@ -915,7 +915,7 @@ export default function AcademicDashboard() {
           {/* Tab 5: Subject-Wise Student Gradebook */}
           {activeTab === 'class-tracking' && (
             <StudentGradebookTab
-              filterClass={filterClass}
+              filterClass={selectedClassObj?.name || filterClass}
               displaySubjects={displaySubjects}
               filteredStudentsWithScores={filteredStudentsWithScores}
               studentScoresMap={studentScoresMap}
