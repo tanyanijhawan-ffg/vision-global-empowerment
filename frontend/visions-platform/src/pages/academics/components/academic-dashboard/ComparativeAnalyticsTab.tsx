@@ -140,7 +140,7 @@ export const ComparativeAnalyticsTab: React.FC<ComparativeAnalyticsTabProps> = (
           Subject-Wise Performance & Trends
         </h3>
         <p className="text-xs text-slate-500 mb-4">
-          Auto-generated comparative analysis across all mandatory subjects for Class {filterClass}
+          Auto-generated comparative analysis across all mandatory subjects for {filterClass}
         </p>
 
         {/* Cards on small screens */}
