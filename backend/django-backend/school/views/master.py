@@ -88,7 +88,8 @@ class MasterDistrictListCreateView(MasterDataView):
 class MasterCentreListCreateView(MasterDataView):
 
     def get(self, request, *args, **kwargs):
-        return Response([serialize_centre(centre) for centre in Center.objects.select_related('region', 'district').order_by('centre_name')])
+        centres = Center.objects.select_related('region', 'district').order_by('centre_name')
+        return Response([serialize_centre(centre) for centre in centres])
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
@@ -307,8 +308,9 @@ def serialize_district(district):
 
 
 def serialize_centre(centre):
+    region = centre.region or (centre.district.region if centre.district else None)
     return {
-        'id': centre.centre_id, 'region_name': centre.region.region_name if centre.region else '',
+        'id': centre.centre_id, 'region_name': region.region_name if region else '',
         'district_name': centre.district.district_name if centre.district else '', 'centre_name': centre.centre_name,
         'block': centre.block, 'village': centre.village,
         'gps_location': centre.gps_location, 'facilitator_name': centre.facilitator_name,

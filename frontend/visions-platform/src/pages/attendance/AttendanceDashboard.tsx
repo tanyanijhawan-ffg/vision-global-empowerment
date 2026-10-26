@@ -3,12 +3,12 @@ import { AlertTriangle, Bell, CalendarDays, CheckCircle2, ChevronDown, Clock3, M
 import PageHeader from '../../components/PageHeader';
 import StatCard from '../../components/StatCard';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { AttendanceAlertRecipients, AttendanceCentre, AttendanceIntelligenceSetting, AttendanceRecord, StudentListItem, fetchAttendance, fetchAttendanceAlertRecipients, fetchAttendanceCentres, fetchAttendanceIntelligence, fetchStudents, sendAttendanceDefaultingEmail, saveAttendanceIntelligence } from '../../lib/api';
-import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
+import { AttendanceAlertRecipients, AttendanceCentre, AttendanceIntelligenceSetting, AttendanceRecord, MasterCentre, MasterDistrict, MasterRegion, SchoolClass, StudentListItem, fetchAttendance, fetchAttendanceAlertRecipients, fetchAttendanceCentres, fetchAttendanceIntelligence, fetchMasterCentres, fetchMasterDistricts, fetchMasterRegions, fetchSchoolClasses, fetchStudents, sendAttendanceDefaultingEmail, saveAttendanceIntelligence } from '../../lib/api';
+import { getCurrentUser } from '../../lib/auth';
+import { getUserScopedCentres } from '../../lib/centreScope';
 
 const selectClass = 'w-full appearance-none px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none shadow-sm';
 type View = 'region' | 'district' | 'centre' | 'class';
-type FilterableStudent = StudentListItem & { centre: string };
 
 function localDateString(date: Date): string {
   const year = date.getFullYear();
@@ -23,6 +23,14 @@ function rateForStudent(studentId: string, records: AttendanceRecord[], throughD
   return Math.round(history.filter(record => record.status === 'Present' || record.status === 'Late').length / history.length * 100);
 }
 
+function normalizeScopeValue(value?: string | null): string {
+  return value?.trim().toLocaleLowerCase() ?? '';
+}
+
+function matchesScopeValue(left?: string | null, right?: string | null): boolean {
+  return normalizeScopeValue(left) === normalizeScopeValue(right);
+}
+
 export default function AttendanceDashboard() {
   const currentUser = useMemo(() => getCurrentUser(), []);
   const [view, setView] = useState<View>('region');
@@ -33,6 +41,10 @@ export default function AttendanceDashboard() {
   const [filterClass, setFilterClass] = useState('');
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
+  const [masterCentres, setMasterCentres] = useState<MasterCentre[]>([]);
+  const [masterDistricts, setMasterDistricts] = useState<MasterDistrict[]>([]);
+  const [masterRegions, setMasterRegions] = useState<MasterRegion[]>([]);
+  const [masterClasses, setMasterClasses] = useState<SchoolClass[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -48,16 +60,16 @@ export default function AttendanceDashboard() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([fetchStudents(), fetchAttendanceCentres(), fetchAttendance()])
-      .then(([studentRows, centreRows, attendanceRows]) => {
+    Promise.all([fetchStudents(), fetchAttendanceCentres(), fetchAttendance(), fetchMasterCentres(), fetchMasterDistricts(), fetchMasterRegions(), fetchSchoolClasses()])
+      .then(([studentRows, centreRows, attendanceRows, masterCentreRows, districtRows, regionRows, classRows]) => {
         if (!active) return;
         setStudents(studentRows);
         setCentres(centreRows);
+        setMasterCentres(masterCentreRows);
+        setMasterDistricts(districtRows);
+        setMasterRegions(regionRows);
+        setMasterClasses(classRows);
         setRecords(attendanceRows);
-        if (currentUser?.role === 'FACILITATOR' && currentUser.centre && currentUser.centre !== 'All') {
-          const ownCentre = centreRows.find(centre => centre.name === currentUser.centre);
-          if (ownCentre) setFilterCentre(String(ownCentre.id));
-        }
         setError('');
       })
       .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Unable to load attendance dashboard.'); })
@@ -94,29 +106,47 @@ export default function AttendanceDashboard() {
     return () => { active = false; };
   }, [canSendAttendanceEmail, filterCentre]);
 
-  const scopedStudents = useMemo(
-    () => filterUserScopedRows(students as FilterableStudent[], currentUser),
-    [students, currentUser],
-  );
-  const scopedCentres = useMemo(() => centres.filter(centre => {
-    if (!currentUser || currentUser.role === 'SUPER_ADMIN') return true;
-    if (currentUser.role === 'REGIONAL_ADMIN') return currentUser.region === 'All' || centre.region === currentUser.region;
-    return centre.region === currentUser.region && centre.name === currentUser.centre;
-  }), [centres, currentUser]);
-  const regions = useMemo(() => [...new Set(scopedCentres.map(centre => centre.region).filter((value): value is string => Boolean(value)))].sort(), [scopedCentres]);
-  const districts = useMemo(() => [...new Set(scopedCentres
-    .filter(centre => !filterRegion || centre.region === filterRegion)
-    .map(centre => centre.district).filter((value): value is string => Boolean(value)))].sort(), [scopedCentres, filterRegion]);
-  const filteredCentres = useMemo(() => scopedCentres.filter(centre =>
-    (!filterRegion || centre.region === filterRegion) && (!filterDistrict || centre.district === filterDistrict),
-  ), [scopedCentres, filterRegion, filterDistrict]);
+  const scopedMasterCentres = useMemo(() => getUserScopedCentres(masterCentres, currentUser), [masterCentres, currentUser]);
+  const scopedCentres = useMemo(() => centres.filter(centre => scopedMasterCentres.some(masterCentre => masterCentre.id === centre.id)), [centres, scopedMasterCentres]);
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+  const isCommunityEducator = currentUser?.role === 'FACILITATOR';
+  const regions = useMemo(() => {
+    const assignedRegion = normalizeScopeValue(currentUser?.region);
+    return masterRegions.map(region => region.region_name).filter(region =>
+      isSuperAdmin || (assignedRegion && assignedRegion !== 'all' && normalizeScopeValue(region) === assignedRegion),
+    ).sort();
+  }, [masterRegions, currentUser, isSuperAdmin]);
+  const activeRegionFilter = isSuperAdmin ? filterRegion : regions[0] || '';
+  const educatorDistrictNames = useMemo(() => new Set(scopedMasterCentres.map(centre => centre.district_name)), [scopedMasterCentres]);
+  const scopedDistricts = useMemo(() => masterDistricts.filter(district => {
+    if (isSuperAdmin) return true;
+    const sameRegion = matchesScopeValue(district.region_name, currentUser?.region);
+    if (!sameRegion) return false;
+    return !isCommunityEducator || educatorDistrictNames.has(district.district_name);
+  }), [masterDistricts, currentUser, isSuperAdmin, isCommunityEducator, educatorDistrictNames]);
+  const districts = useMemo(() => [...new Set(scopedDistricts
+    .filter(district => !activeRegionFilter || matchesScopeValue(district.region_name, activeRegionFilter))
+    .map(district => district.district_name))].sort(), [scopedDistricts, activeRegionFilter]);
+  const activeDistrictFilter = filterDistrict;
+  const filteredCentres = useMemo(() => scopedMasterCentres.filter(centre =>
+    (!activeRegionFilter || matchesScopeValue(centre.region_name, activeRegionFilter)) &&
+    (!activeDistrictFilter || matchesScopeValue(centre.district_name, activeDistrictFilter)),
+  ), [scopedMasterCentres, activeRegionFilter, activeDistrictFilter]);
+  const activeCentreFilter = filterCentre;
+  const scopedCentreIds = useMemo(() => new Set(scopedCentres.map(centre => centre.id)), [scopedCentres]);
+  const scopedStudents = useMemo(() => students.filter(student => scopedCentreIds.has(Number(student.centreId))), [students, scopedCentreIds]);
   const filteredStudents = useMemo(() => scopedStudents.filter(student =>
-    (!filterRegion || student.region === filterRegion) &&
-    (!filterDistrict || student.district === filterDistrict) &&
-    (!filterCentre || String(student.centreId) === filterCentre) &&
+    (!activeRegionFilter || student.region === activeRegionFilter) &&
+    (!activeDistrictFilter || student.district === activeDistrictFilter) &&
+    (!activeCentreFilter || String(student.centreId) === activeCentreFilter) &&
     (!filterClass || student.class === filterClass),
-  ), [scopedStudents, filterRegion, filterDistrict, filterCentre, filterClass]);
-  const classOptions = useMemo(() => [...new Set(filteredStudents.map(student => student.class).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [filteredStudents]);
+  ), [scopedStudents, activeRegionFilter, activeDistrictFilter, activeCentreFilter, filterClass]);
+  const classOptions = useMemo(() => {
+    const availableInScope = new Set(scopedStudents.map(student => student.class).filter(Boolean));
+    const classes = masterClasses.map(schoolClass => schoolClass.name).filter(Boolean);
+    const scopedClasses = isSuperAdmin ? classes : classes.filter(className => availableInScope.has(className));
+    return [...new Set(scopedClasses)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [masterClasses, scopedStudents, isSuperAdmin]);
 
   const selectedStudentIds = useMemo(() => new Set(filteredStudents.map(student => Number(student.id))), [filteredStudents]);
   const selectedRecords = useMemo(() => records.filter(record =>
@@ -170,15 +200,15 @@ export default function AttendanceDashboard() {
     })).sort((left, right) => left.name.localeCompare(right.name));
   }, [filteredStudents, historicalRates, view]);
 
-  const clearFilters = () => { setFilterRegion(''); setFilterDistrict(''); setFilterCentre(''); setFilterClass(''); };
+  const clearFilters = () => {
+    if (isSuperAdmin) setFilterRegion('');
+    setFilterDistrict('');
+    setFilterCentre('');
+    setFilterClass('');
+  };
   const updateIntelligence = (changes: Partial<AttendanceIntelligenceSetting>) => {
     setIntelligence(previous => previous ? { ...previous, ...changes } : previous);
     setIntelligenceMessage('');
-  };
-  const toggleIntelligenceValue = (field: 'notification_channels' | 'absence_alert_recipients' | 'engagement_alert_recipients', value: string) => {
-    if (!intelligence || (field === 'notification_channels' && value !== 'email')) return;
-    const current = intelligence[field];
-    updateIntelligence({ [field]: current.includes(value) ? current.filter(item => item !== value) : [...current, value] });
   };
   useEffect(() => {
     if (intelligence?.alert_student_mode === 'combined') {
@@ -221,7 +251,7 @@ export default function AttendanceDashboard() {
       setSendingDefaultingEmail(false);
     }
   };
-  const hasFilters = Boolean(filterRegion || filterDistrict || filterCentre || filterClass);
+  const hasFilters = Boolean((isSuperAdmin && filterRegion) || filterDistrict || filterCentre || filterClass);
   const views: { key: View; label: string }[] = [
     { key: 'region', label: 'Region-wise' }, { key: 'district', label: 'District-wise' },
     { key: 'centre', label: 'Centre-wise' }, { key: 'class', label: 'Class-wise' },
@@ -237,13 +267,13 @@ export default function AttendanceDashboard() {
             <span className="relative mt-1 block"><CalendarDays size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /><input type="date" value={selectedDate} onChange={event => setSelectedDate(event.target.value)} className={`${selectClass} pl-9`} /></span>
           </label>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Region
-            <span className="relative mt-1 block"><select className={selectClass} value={filterRegion} onChange={event => { setFilterRegion(event.target.value); setFilterDistrict(''); setFilterCentre(''); }}><option value="">All Regions</option>{regions.map(region => <option key={region} value={region}>{region}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
+            <span className="relative mt-1 block"><select className={selectClass} value={isSuperAdmin ? filterRegion : activeRegionFilter} disabled={!isSuperAdmin} onChange={event => { setFilterRegion(event.target.value); setFilterDistrict(''); setFilterCentre(''); }}>{isSuperAdmin && <option value="">All Regions</option>}{regions.map(region => <option key={region} value={region}>{region}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
           </label>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">District
-            <span className="relative mt-1 block"><select className={selectClass} value={filterDistrict} onChange={event => { setFilterDistrict(event.target.value); setFilterCentre(''); }}><option value="">All Districts</option>{districts.map(district => <option key={district} value={district}>{district}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
+            <span className="relative mt-1 block"><select className={selectClass} value={activeDistrictFilter} onChange={event => { setFilterDistrict(event.target.value); setFilterCentre(''); }}><option value="">All Districts</option>{districts.map(district => <option key={district} value={district}>{district}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
           </label>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Centre
-            <span className="relative mt-1 block"><select className={selectClass} value={filterCentre} onChange={event => setFilterCentre(event.target.value)}><option value="">All Centres</option>{filteredCentres.map(centre => <option key={centre.id} value={centre.id}>{centre.name}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
+            <span className="relative mt-1 block"><select className={selectClass} value={activeCentreFilter} onChange={event => setFilterCentre(event.target.value)}><option value="">All Centres</option>{filteredCentres.map(centre => <option key={centre.id} value={centre.id}>{centre.centre_name}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
           </label>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Class
             <span className="relative mt-1 block"><select className={selectClass} value={filterClass} onChange={event => setFilterClass(event.target.value)}><option value="">All Classes</option>{classOptions.map(className => <option key={className} value={className}>{className}</option>)}</select><ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></span>
@@ -260,14 +290,11 @@ export default function AttendanceDashboard() {
           <div><h2 className="flex items-center gap-2 text-base font-bold text-slate-900"><Bell size={18} className="text-indigo-600" />System Intelligence</h2><p className="text-sm text-slate-500 mt-1">Configure attendance alerts and notification preferences.</p></div>
           <button onClick={handleIntelligenceSave} disabled={savingIntelligence} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"><Save size={16} />{savingIntelligence ? 'Saving...' : 'Save Settings'}</button>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <label><span className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Notification format</span><select value={intelligence.notification_mode} onChange={event => updateIntelligence({ notification_mode: event.target.value as AttendanceIntelligenceSetting['notification_mode'] })} className={selectClass}><option value="separate">Separate notifications</option><option value="combined">Combined notification</option></select></label>
-          <fieldset><legend className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Notification medium</legend><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={intelligence.notification_channels.includes('email')} onChange={() => toggleIntelligenceValue('notification_channels', 'email')} />Email only</label><p className="text-xs text-slate-500 mt-1">SMS and WhatsApp are not enabled.</p></fieldset>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <fieldset><legend className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Alert students</legend><div className="flex flex-wrap gap-4 mb-3 text-sm">{(['individual', 'combined'] as const).map(mode => <label key={mode} className="flex items-center gap-1.5"><input type="radio" name="dashboard-alert-mode" checked={intelligence.alert_student_mode === mode} onChange={() => updateIntelligence({ alert_student_mode: mode, ...(mode === 'combined' ? { alert_student_ids: filteredStudents.map(student => Number(student.id)) } : {}) })} />{mode === 'individual' ? 'Individual student' : 'All students'}</label>)}</div>{intelligence.alert_student_mode === 'individual' ? <select value={String(intelligence.alert_student_ids[0] || '')} onChange={event => updateIntelligence({ alert_student_ids: event.target.value ? [Number(event.target.value)] : [] })} className={selectClass}><option value="">Select a student</option>{filteredStudents.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}</select> : <p className="text-sm text-slate-600">All {filteredStudents.length} students are selected.</p>}</fieldset>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 border-t border-slate-100 pt-5">
-          <fieldset><legend className="text-sm font-semibold text-slate-800 mb-2"><label className="flex items-center gap-2"><input type="checkbox" checked={intelligence.absence_alert_enabled} onChange={event => updateIntelligence({ absence_alert_enabled: event.target.checked })} />Alert after</label></legend><div className="flex flex-wrap items-center gap-3 pl-6"><input type="number" min={1} max={30} value={intelligence.absence_alert_days} onChange={event => updateIntelligence({ absence_alert_days: Number(event.target.value) })} className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm" aria-label="Consecutive absent days" /><span className="text-sm text-slate-600">consecutive absent days</span>{[['facilitator', 'Community Educator'], ['admin', 'Admin']].map(([value, label]) => <label key={value} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={intelligence.absence_alert_recipients.includes(value)} onChange={() => toggleIntelligenceValue('absence_alert_recipients', value)} />{label}</label>)}</div></fieldset>
-          <fieldset><legend className="text-sm font-semibold text-slate-800 mb-2"><label className="flex items-center gap-2"><input type="checkbox" checked={intelligence.engagement_alert_enabled} onChange={event => updateIntelligence({ engagement_alert_enabled: event.target.checked })} />Alert when participation drops below</label></legend><div className="flex flex-wrap items-center gap-3 pl-6"><select value={intelligence.engagement_alert_level} onChange={event => updateIntelligence({ engagement_alert_level: Number(event.target.value) })} className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm" aria-label="Participation alert level">{[1, 2, 3, 4, 5].map(level => <option key={level} value={level}>{level}</option>)}</select>{[['facilitator', 'Community Educator'], ['admin', 'Admin']].map(([value, label]) => <label key={value} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={intelligence.engagement_alert_recipients.includes(value)} onChange={() => toggleIntelligenceValue('engagement_alert_recipients', value)} />{label}</label>)}</div></fieldset>
+        <div className="grid grid-cols-1 gap-5 border-t border-slate-100 pt-5">
+          <fieldset><legend className="text-sm font-semibold text-slate-800 mb-2"><label className="flex items-center gap-2"><input type="checkbox" checked={intelligence.absence_alert_enabled} onChange={event => updateIntelligence({ absence_alert_enabled: event.target.checked })} />Alert after</label></legend><div className="flex flex-wrap items-center gap-3 pl-6"><input type="number" min={1} max={30} value={intelligence.absence_alert_days} onChange={event => updateIntelligence({ absence_alert_days: Number(event.target.value) })} className="w-20 px-3 py-2 border border-slate-300 rounded-lg text-sm" aria-label="Consecutive absent days" /><span className="text-sm text-slate-600">consecutive absent days</span></div></fieldset>
         </div>
         {intelligenceMessage && <p role="status" className={`text-sm ${intelligenceMessage.includes('successfully') ? 'text-emerald-600' : 'text-red-600'}`}>{intelligenceMessage}</p>}
       </section>}

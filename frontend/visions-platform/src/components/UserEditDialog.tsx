@@ -10,6 +10,7 @@ interface EditableUser {
   mobile_number?: string | null;
   role: string;
   region_id?: number | null;
+  centre_id?: number | null;
 }
 
 interface UserEditDialogProps {
@@ -23,6 +24,12 @@ interface RegionOption {
   name: string;
 }
 
+interface CentreOption {
+  id: number;
+  region_name: string;
+  centre_name: string;
+}
+
 export default function UserEditDialog({ user, onClose, onSaved }: UserEditDialogProps) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -30,7 +37,9 @@ export default function UserEditDialog({ user, onClose, onSaved }: UserEditDialo
   const [mobileNumber, setMobileNumber] = useState('');
   const [role, setRole] = useState('community_educator');
   const [regionId, setRegionId] = useState('');
+  const [centreId, setCentreId] = useState('');
   const [regions, setRegions] = useState<RegionOption[]>([]);
+  const [centres, setCentres] = useState<CentreOption[]>([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -42,15 +51,23 @@ export default function UserEditDialog({ user, onClose, onSaved }: UserEditDialo
       setMobileNumber(user.mobile_number || '');
       setRole(user.role === 'facilitator' ? 'community_educator' : user.role || 'community_educator');
       setRegionId(user.region_id ? String(user.region_id) : '');
+      setCentreId(user.centre_id ? String(user.centre_id) : '');
       setError('');
       fetch('/api/regions/', { headers: { Accept: 'application/json', ...getAuthHeaders() } })
         .then(response => response.ok ? response.json() : [])
         .then(setRegions)
         .catch(() => setRegions([]));
+      fetch('/api/masters/centres/', { headers: { Accept: 'application/json', ...getAuthHeaders() } })
+        .then(response => response.ok ? response.json() : [])
+        .then(setCentres)
+        .catch(() => setCentres([]));
     }
   }, [user]);
 
   if (!user) return null;
+
+  const selectedRegionName = regions.find(region => String(region.id) === regionId)?.name;
+  const availableCentres = centres.filter(centre => centre.region_name === selectedRegionName);
 
   const save = async () => {
     setSaving(true);
@@ -65,7 +82,7 @@ export default function UserEditDialog({ user, onClose, onSaved }: UserEditDialo
       const response = await fetch(`/api/users/${user.id}/`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ username, email, full_name: fullName, mobile_number: mobileNumber, role: role === 'facilitator' ? 'community_educator' : role, region_id: regionId ? Number(regionId) : null }),
+        body: JSON.stringify({ username, email, full_name: fullName, mobile_number: mobileNumber, role: role === 'facilitator' ? 'community_educator' : role, region_id: regionId ? Number(regionId) : null, centre_id: role === 'community_educator' ? (centreId ? Number(centreId) : null) : null }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.detail || 'Unable to update user.');
@@ -91,7 +108,8 @@ export default function UserEditDialog({ user, onClose, onSaved }: UserEditDialo
           <label className="text-sm text-slate-700 sm:col-span-2">Full name<input value={fullName} onChange={e => setFullName(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
           <label className="text-sm text-slate-700 sm:col-span-2">Mobile number<input value={mobileNumber} onChange={e => setMobileNumber(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" inputMode="numeric" pattern="[0-9]{10}" /></label>
           <label className="text-sm text-slate-700">Role<select value={role} onChange={e => setRole(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"><option value="super_admin">Super Admin</option><option value="regional_admin">Regional Admin</option><option value="community_educator">Community Educator</option></select></label>
-          <label className="text-sm text-slate-700">Region<select value={regionId} onChange={e => setRegionId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">No region</option>{regions.map(region => <option key={region.id} value={region.id}>{region.name}</option>)}</select></label>
+          <label className="text-sm text-slate-700">Region<select value={regionId} onChange={e => { setRegionId(e.target.value); setCentreId(''); }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">No region</option>{regions.map(region => <option key={region.id} value={region.id}>{region.name}</option>)}</select></label>
+          {role === 'community_educator' ? <label className="text-sm text-slate-700">Assigned centre<select required value={centreId} onChange={e => setCentreId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">Select a centre</option>{availableCentres.map(centre => <option key={centre.id} value={centre.id}>{centre.centre_name}</option>)}</select></label> : null}
         </div>
         {error && <p className="px-6 text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4"><button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">Cancel</button><button type="button" disabled={saving} onClick={save} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{saving ? 'Saving...' : 'Save changes'}</button></div>

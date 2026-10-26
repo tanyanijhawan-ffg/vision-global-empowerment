@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Search, GraduationCap, Calendar, Users } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import { fetchAcademicYears, fetchSchoolClasses, fetchAttendanceCentres, type AcademicYear, type SchoolClass, type AttendanceCentre } from '../../lib/api';
+import { getCurrentUser } from '../../lib/auth';
+import { getUserScopedCentres } from '../../lib/centreScope';
 
 interface ClassHistoryRecord {
   student_id: number;
@@ -15,6 +17,7 @@ interface ClassHistoryRecord {
 }
 
 export default function ClassHistory() {
+  const currentUser = getCurrentUser();
   const [records, setRecords] = useState<ClassHistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -28,6 +31,7 @@ export default function ClassHistory() {
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedCentre, setSelectedCentre] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const availableCentres = getUserScopedCentres(centres, currentUser);
 
   useEffect(() => {
     Promise.all([
@@ -41,12 +45,24 @@ export default function ClassHistory() {
       // Default to current year
       const current = years.find(y => y.isCurrent) || years[0];
       if (current) setSelectedYear(current.name);
+      if (currentUser?.role === 'FACILITATOR' && centreList.length) {
+        const scoped = getUserScopedCentres(centreList, currentUser);
+        if (scoped[0]) setSelectedCentre(String(scoped[0].id));
+        else {
+          setError('No centre is assigned to this account. Contact an administrator.');
+          setLoading(false);
+        }
+      } else if (currentUser?.role === 'FACILITATOR') {
+        setError('No centre is assigned to this account. Contact an administrator.');
+        setLoading(false);
+      }
     });
   }, []);
 
   useEffect(() => {
+    if (currentUser?.role === 'FACILITATOR' && !selectedCentre) return;
     fetchClassHistory();
-  }, [selectedYear, selectedClass, selectedCentre]);
+  }, [selectedYear, selectedClass, selectedCentre, currentUser?.role]);
 
   const fetchClassHistory = async () => {
     setLoading(true);
@@ -142,8 +158,8 @@ export default function ClassHistory() {
               onChange={e => setSelectedCentre(e.target.value)}
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
             >
-              <option value="">All Centres</option>
-              {centres.map(c => (
+              {currentUser?.role !== 'FACILITATOR' && <option value="">All Centres</option>}
+              {availableCentres.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>

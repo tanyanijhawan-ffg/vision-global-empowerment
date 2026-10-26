@@ -38,7 +38,6 @@ export default function DistrictsList() {
     (filterRegion === 'All' || district.region_name === filterRegion) &&
     district.district_name.toLowerCase().includes(search.toLowerCase()),
   );
-  const regionsWithDistricts = [...new Set(data.map(district => district.region_name).filter(Boolean))].sort();
 
   const closeForm = () => { setIsFormOpen(false); setEditingId(null); setForm(blankDistrict); };
   const openAddForm = () => { setEditingId(null); setForm(blankDistrict); setIsFormOpen(true); };
@@ -82,7 +81,7 @@ export default function DistrictsList() {
             <Filter size={16} className="text-slate-400" />
             <select value={filterRegion} onChange={event => setFilterRegion(event.target.value)} className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm">
               <option value="All">All Regions</option>
-              {regionsWithDistricts.map(region => <option key={region} value={region}>{region}</option>)}
+              {regions.map(region => <option key={region.id} value={region.region_name}>{region.region_name}</option>)}
             </select>
           </div>
         </div>
@@ -145,11 +144,11 @@ export default function DistrictsList() {
               <h2 className="text-lg font-semibold">{editingId ? 'Edit District' : 'Add District'}</h2>
               <button type="button" onClick={closeForm} aria-label="Close"><X size={18} /></button>
             </div>
-            <label className="block text-sm font-medium text-slate-700">District Name *
-              <input required value={form.district_name} onChange={event => setForm({ ...form, district_name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <label className="block text-sm font-medium text-slate-700"><span className="text-red-600">District Name</span><span className="text-red-500"> *</span>
+              <input required value={form.district_name} onChange={event => setForm({ ...form, district_name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
             </label>
-            <label className="block text-sm font-medium text-slate-700">Region *
-              <select required value={form.region_name} onChange={event => setForm({ ...form, region_name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <label className="block text-sm font-medium text-slate-700"><span className="text-red-600">Region</span><span className="text-red-500"> *</span>
+              <select required value={form.region_name} onChange={event => setForm({ ...form, region_name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900">
                 <option value="">Select region</option>
                 {regions.map(region => <option key={region.id} value={region.region_name}>{region.region_name}</option>)}
               </select>

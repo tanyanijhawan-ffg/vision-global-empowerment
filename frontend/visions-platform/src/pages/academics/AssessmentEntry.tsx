@@ -16,6 +16,8 @@ import { SuccessModal, type SuccessDetails } from './components/assessment-entry
 import { AssessmentFilterBar } from './components/assessment-entry/AssessmentFilterBar';
 import { StudentAssessmentTable, type StatusFilter } from './components/assessment-entry/StudentAssessmentTable';
 import { type StudentAssessmentData } from './components/assessment-entry/ExpandedStudentCard';
+import { getCurrentUser } from '../../lib/auth';
+import { getUserScopedCentres } from '../../lib/centreScope';
 
 export const DEFAULT_UNDERSTANDING = 'CLEAR';
 export const DEFAULT_APPLICATION = 'APPLIES';
@@ -33,8 +35,10 @@ const newStudentData = (): StudentAssessmentData => ({
 });
 
 export default function AssessmentEntry() {
+  const currentUser = getCurrentUser();
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [centres, setCentres] = useState<AttendanceCentre[]>([]);
+  const availableCentres = useMemo(() => getUserScopedCentres(centres, currentUser), [centres, currentUser]);
   const [selectedCentreId, setSelectedCentreId] = useState<string>('');
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('2025 - 2026');
@@ -981,7 +985,7 @@ export default function AssessmentEntry() {
         academicYears={academicYears}
         selectedAcademicYear={selectedAcademicYear}
         onAcademicYearChange={setSelectedAcademicYear}
-        centres={centres}
+          centres={availableCentres}
         selectedCentreId={selectedCentreId}
         onCentreChange={handleCentreChange}
         classes={classes}

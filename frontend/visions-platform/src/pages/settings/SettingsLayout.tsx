@@ -1,10 +1,9 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
-import { User, Building, Bell } from 'lucide-react';
+import { User, Bell } from 'lucide-react';
 
 const tabs = [
   { id: 'profile', name: 'Profile Settings', icon: User, path: '/settings/profile' },
-  { id: 'organization', name: 'Organization', icon: Building, path: '/settings/organization' },
   { id: 'notifications', name: 'Notifications', icon: Bell, path: '/settings/notifications' },
 ];
 

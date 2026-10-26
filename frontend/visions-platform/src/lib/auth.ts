@@ -7,7 +7,9 @@ export interface AppUser {
   mobile_number?: string;
   role: Role;
   region: string;
+  regionId?: number | null;
   centre: string;
+  centreId?: number | null;
   status: 'Active' | 'Inactive';
 }
 
@@ -93,6 +95,8 @@ export const setCurrentUserFromApi = (payload: {
   role?: string;
   region_id?: number | null;
   region_name?: string | null;
+  centre_id?: number | null;
+  centre_name?: string | null;
 }) => {
   const backendUser = payload ?? {};
   const user: AppUser = {
@@ -102,7 +106,9 @@ export const setCurrentUserFromApi = (payload: {
     mobile_number: backendUser.mobile_number || '',
     role: normalizeRole(backendUser.role),
     region: backendUser.region_name || 'All',
-    centre: 'All',
+    regionId: backendUser.region_id ?? null,
+    centre: backendUser.centre_name || 'All',
+    centreId: backendUser.centre_id ?? null,
     status: 'Active',
   };
 

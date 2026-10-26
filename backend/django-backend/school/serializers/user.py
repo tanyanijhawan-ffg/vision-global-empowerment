@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from school.models.center import Region
+from school.models.center import Center, Region
 from school.models.role import Role
 from school.models.user_profile import UserProfile
 
@@ -35,10 +35,12 @@ def validate_mobile_number(value):
 class UserProfileSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     region_id = serializers.IntegerField(source='region.region_id', read_only=True)
+    centre_id = serializers.IntegerField(source='centre.centre_id', read_only=True)
+    centre_name = serializers.CharField(source='centre.centre_name', read_only=True)
 
     class Meta:
         model = UserProfile
-        fields = ['full_name', 'mobile_number', 'role', 'region_id', 'is_active', 'created_at']
+        fields = ['full_name', 'mobile_number', 'role', 'region_id', 'centre_id', 'centre_name', 'is_active', 'created_at']
 
     def get_role(self, obj):
         return obj.role.name if obj.role else None
@@ -48,6 +50,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=True, allow_blank=False, trim_whitespace=True)
     role = serializers.CharField(required=True)
     region = serializers.PrimaryKeyRelatedField(queryset=Region.objects.all(), required=True, allow_null=False)
+    centre_id = serializers.PrimaryKeyRelatedField(queryset=Center.objects.all(), source='centre', required=False, allow_null=True)
     full_name = serializers.CharField(required=True, allow_blank=False, allow_null=False)
     password = serializers.CharField(write_only=True, required=True, allow_blank=False)
     mobile_number = serializers.CharField(required=True, allow_blank=False, trim_whitespace=True)
@@ -67,7 +70,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'password', 'full_name', 'role', 'region', 'mobile_number']
+        fields = ['id', 'username', 'email', 'password', 'full_name', 'role', 'region', 'centre_id', 'mobile_number']
 
     def validate_mobile_number(self, value):
         return validate_mobile_number(value)
@@ -80,6 +83,16 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
         if attrs.get('region') is None:
             raise serializers.ValidationError({'region': 'Region is required.'})
+
+        centre = attrs.get('centre')
+        if role_name == 'community_educator':
+            if centre is None:
+                raise serializers.ValidationError({'centre_id': 'Select the educator\'s assigned centre.'})
+            centre_region = centre.region or (centre.district.region if centre.district_id else None)
+            if centre_region is None or centre_region.pk != attrs['region'].pk:
+                raise serializers.ValidationError({'centre_id': 'The assigned centre must belong to the selected region.'})
+        elif centre is not None:
+            raise serializers.ValidationError({'centre_id': 'Only community educators can be assigned a centre.'})
 
         if not attrs.get('full_name', '').strip():
             raise serializers.ValidationError({'full_name': 'Full name is required.'})
@@ -110,6 +123,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         role_name = normalize_role_name(validated_data.pop('role'))
         region = validated_data.pop('region', None)
+        centre = validated_data.pop('centre', None)
         full_name = validated_data.pop('full_name', '').strip()
         mobile_number = validated_data.pop('mobile_number', '').strip()
         password = validated_data.pop('password')
@@ -133,6 +147,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             mobile_number=mobile_number,
             role=role,
             region=region,
+            centre=centre,
             created_by=requester,
             is_active=True,
         )
@@ -146,10 +161,12 @@ class UserSerializer(serializers.ModelSerializer):
     region_name = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
     mobile_number = serializers.SerializerMethodField()
+    centre_id = serializers.SerializerMethodField()
+    centre_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'full_name', 'mobile_number', 'role', 'region_id', 'region_name']
+        fields = ['id', 'username', 'email', 'full_name', 'mobile_number', 'role', 'region_id', 'region_name', 'centre_id', 'centre_name']
 
     def update(self, instance, validated_data):
         profile = getattr(instance, 'profile', None)
@@ -157,8 +174,9 @@ class UserSerializer(serializers.ModelSerializer):
         mobile_number = validated_data.pop('mobile_number', None)
         role_name = normalize_role_name(validated_data.pop('role', None))
         region_id = validated_data.pop('region_id', None)
+        centre_id = validated_data.pop('centre_id', None)
 
-        role_or_region_requested = 'role' in self.initial_data or 'region_id' in self.initial_data
+        role_or_region_requested = any(field in self.initial_data for field in ('role', 'region_id', 'centre_id'))
         if role_or_region_requested:
             request = self.context.get('request')
             requester = getattr(request, 'user', None)
@@ -180,6 +198,31 @@ class UserSerializer(serializers.ModelSerializer):
             except Region.DoesNotExist as error:
                 raise serializers.ValidationError({'region_id': 'Selected region does not exist.'}) from error
 
+        selected_centre = None
+        if centre_id is not None:
+            try:
+                selected_centre = Center.objects.select_related('region', 'district__region').get(pk=centre_id)
+            except Center.DoesNotExist as error:
+                raise serializers.ValidationError({'centre_id': 'Selected centre does not exist.'}) from error
+
+        target_role = role_name or normalize_role_name(getattr(getattr(profile, 'role', None), 'name', None))
+        target_region_id = selected_region.pk if selected_region is not None else (
+            None if 'region_id' in self.initial_data else getattr(profile, 'region_id', None)
+        )
+        if target_role == 'community_educator':
+            if 'centre_id' in self.initial_data:
+                if selected_centre is None:
+                    raise serializers.ValidationError({'centre_id': 'Select the educator\'s assigned centre.'})
+            elif profile is not None:
+                selected_centre = profile.centre
+            if selected_centre is None:
+                raise serializers.ValidationError({'centre_id': 'Select the educator\'s assigned centre.'})
+            centre_region = selected_centre.region or (selected_centre.district.region if selected_centre.district_id else None)
+            if centre_region is None or centre_region.pk != target_region_id:
+                raise serializers.ValidationError({'centre_id': 'The assigned centre must belong to the selected region.'})
+        elif selected_centre is not None:
+            raise serializers.ValidationError({'centre_id': 'Only community educators can be assigned a centre.'})
+
         if mobile_number is not None:
             mobile_number = validate_mobile_number(mobile_number)
 
@@ -199,13 +242,17 @@ class UserSerializer(serializers.ModelSerializer):
                 profile.region = selected_region
             elif 'region_id' in self.initial_data:
                 profile.region = None
+            if target_role == 'community_educator':
+                profile.centre = selected_centre
+            else:
+                profile.centre = None
             profile.save()
         return instance
 
     def to_internal_value(self, data):
         editable_profile_fields = {
             field: data[field]
-            for field in ('full_name', 'mobile_number', 'role', 'region_id')
+            for field in ('full_name', 'mobile_number', 'role', 'region_id', 'centre_id')
             if field in data
         }
         user_data = {field: value for field, value in data.items() if field not in editable_profile_fields}
@@ -234,3 +281,11 @@ class UserSerializer(serializers.ModelSerializer):
     def get_mobile_number(self, obj):
         profile = getattr(obj, 'profile', None)
         return profile.mobile_number if profile else ''
+
+    def get_centre_id(self, obj):
+        profile = getattr(obj, 'profile', None)
+        return profile.centre_id if profile else None
+
+    def get_centre_name(self, obj):
+        profile = getattr(obj, 'profile', None)
+        return profile.centre.centre_name if profile and profile.centre else None

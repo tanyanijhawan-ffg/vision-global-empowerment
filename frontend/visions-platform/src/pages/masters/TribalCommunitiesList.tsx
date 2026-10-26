@@ -124,8 +124,8 @@ export default function TribalCommunitiesList() {
               <h2 className="text-lg font-semibold">{editingId ? 'Edit Community' : 'Add Community'}</h2>
               <button type="button" onClick={closeForm} aria-label="Close"><X size={18} /></button>
             </div>
-            <label className="block text-sm font-medium text-slate-700">Community / Sub-Caste Name *
-              <input required value={name} onChange={event => setName(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <label className="block text-sm font-medium text-slate-700"><span className="text-red-600">Community / Sub-Caste Name</span><span className="text-red-500"> *</span>
+              <input required value={name} onChange={event => setName(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
             </label>
             <button className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white">{editingId ? 'Save Community' : 'Add Community'}</button>
           </form>

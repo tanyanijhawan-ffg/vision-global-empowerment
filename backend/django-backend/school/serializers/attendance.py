@@ -3,6 +3,7 @@ from rest_framework import serializers
 from school.models.attendance import Attendance, AttendanceIntelligenceSetting, LearningBehaviour
 from school.models.student import Student
 from school.serializers.student import StudentSerializer
+from school.services.scope import scope_students
 
 
 class AttendanceSerializer(serializers.ModelSerializer):
@@ -28,6 +29,13 @@ class AttendanceSerializer(serializers.ModelSerializer):
         attendance = super().create(validated_data)
         self._save_learning_behaviour(attendance, values)
         return attendance
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request is not None and 'student_id' in fields:
+            fields['student_id'].queryset = scope_students(Student.objects.all(), request.user)
+        return fields
 
     def update(self, instance, validated_data):
         values = validated_data.pop('learning_behaviour', None)

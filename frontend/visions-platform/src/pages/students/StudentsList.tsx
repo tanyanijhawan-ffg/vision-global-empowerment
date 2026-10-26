@@ -5,7 +5,10 @@ import PageHeader from '../../components/PageHeader';
 import MasterDataActions from '../../components/MasterDataActions';
 import StatusChip from '../../components/StatusChip';
 import { fetchMasterCentres, fetchMasterRegions, fetchSchoolClasses, fetchStudents, type MasterCentre, type MasterRegion, type SchoolClass, type StudentListItem } from '../../lib/api';
-import { filterUserScopedRows, getCurrentUser } from '../../lib/auth';
+import { getCurrentUser } from '../../lib/auth';
+import { getUserScopedCentres } from '../../lib/centreScope';
+
+const normalizeScopeValue = (value?: string | null) => value?.trim().toLocaleLowerCase() ?? '';
 
 export default function StudentsList() {
   const currentUser = getCurrentUser();
@@ -14,7 +17,7 @@ export default function StudentsList() {
   const [masterCentres, setMasterCentres] = useState<MasterCentre[]>([]);
   const [masterClasses, setMasterClasses] = useState<SchoolClass[]>([]);
   const [filterRegion, setFilterRegion] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.region : 'All');
-  const [filterCentre, setFilterCentre] = useState(currentUser?.role === 'FACILITATOR' ? currentUser.centre : 'All');
+  const [filterCentre, setFilterCentre] = useState('All');
   const [filterClass, setFilterClass] = useState('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,28 +70,35 @@ export default function StudentsList() {
     };
   }, []);
 
-  const scopedData = useMemo(() => filterUserScopedRows(data, currentUser), [data, currentUser]);
+  const scopedCentres = useMemo(() => getUserScopedCentres(masterCentres, currentUser), [masterCentres, currentUser]);
+  const scopedCentreIds = useMemo(() => new Set(scopedCentres.map(centre => centre.id)), [scopedCentres]);
+  const scopedData = useMemo(() => data.filter(student => scopedCentreIds.has(Number(student.centreId))), [data, scopedCentreIds]);
 
   const availableRegions = useMemo(() => {
     const all = masterRegions.map(region => region.region_name).filter(Boolean);
     if (currentUser?.role === 'SUPER_ADMIN' || !currentUser) return Array.from(new Set(all)).sort();
     // Non-super-admins only see their own region.
-    return all.filter(region => region === currentUser.region).sort();
+    return all.filter(region => normalizeScopeValue(region) === normalizeScopeValue(currentUser.region)).sort();
   }, [masterRegions, currentUser]);
 
   const availableCentres = useMemo(() => {
-    return masterCentres
-      .filter(centre => (filterRegion === 'All' || centre.region_name === filterRegion) && (!currentUser || currentUser.role === 'SUPER_ADMIN' || centre.region_name === currentUser.region))
+    return scopedCentres
+      .filter(centre => (filterRegion === 'All' || normalizeScopeValue(centre.region_name) === normalizeScopeValue(filterRegion)))
       .map(centre => centre.centre_name)
       .filter(Boolean)
       .sort();
-  }, [masterCentres, filterRegion, currentUser]);
+  }, [scopedCentres, filterRegion]);
+
+  const effectiveCentreId = filterCentre === 'All' || !filterCentre
+    ? null
+    : scopedCentres.find(centre => normalizeScopeValue(centre.centre_name) === normalizeScopeValue(filterCentre))?.id;
 
   const availableClasses = useMemo(() => {
     // Prefer the full class master list (shows all classes, even with no students).
     // Fall back to classes present in the loaded students if the master list is empty.
     if (masterClasses.length > 0) {
-      return masterClasses.map(schoolClass => schoolClass.name).filter(Boolean);
+      return [...new Set(masterClasses.map(schoolClass => schoolClass.name).filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
     }
     return Array.from(new Set(scopedData.map(student => student.class)))
       .filter(value => Boolean(value) && value !== 'All')
@@ -96,8 +106,8 @@ export default function StudentsList() {
   }, [masterClasses, scopedData]);
 
   const filteredData = scopedData.filter(s => 
-    (filterRegion === 'All' || s.region === filterRegion) &&
-    (filterCentre === 'All' || s.centre === filterCentre) &&
+    (filterRegion === 'All' || normalizeScopeValue(s.region) === normalizeScopeValue(filterRegion)) &&
+    (effectiveCentreId === null || Number(s.centreId) === effectiveCentreId) &&
     (filterClass === 'All' || s.class === filterClass)
   );
 
@@ -135,6 +145,7 @@ export default function StudentsList() {
               <Filter size={16} className="text-slate-400" />
               <select 
                 value={filterRegion}
+                disabled={currentUser?.role === 'FACILITATOR'}
                 onChange={(e) => { setFilterRegion(e.target.value); setFilterCentre('All'); setFilterClass('All'); }}
                 className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
               >

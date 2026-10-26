@@ -15,6 +15,8 @@ interface UserRow {
   role: string;
   region_id?: number | null;
   region_name?: string | null;
+  centre_id?: number | null;
+  centre_name?: string | null;
 }
 
 export default function UsersList() {
@@ -191,6 +193,10 @@ export default function UsersList() {
                       <div className="text-slate-700">{user.region_name ?? '—'}</div>
                     </div>
                     <div>
+                      <div className="text-xs text-slate-400">Assigned centre</div>
+                      <div className="text-slate-700">{user.centre_name ?? '—'}</div>
+                    </div>
+                    <div>
                       <div className="text-xs text-slate-400">Mobile</div>
                       <div className="text-slate-700">{user.mobile_number || '—'}</div>
                     </div>
@@ -212,6 +218,7 @@ export default function UsersList() {
                   <th className="px-6 py-3">User</th>
                   <th className="px-6 py-3">Role</th>
                   <th className="px-6 py-3">Region</th>
+                  <th className="px-6 py-3">Assigned centre</th>
                   <th className="px-6 py-3">Status</th>
                   <th className="px-6 py-3">Mobile</th>
                   <th className="px-6 py-3 text-right">Actions</th>
@@ -220,7 +227,7 @@ export default function UsersList() {
               <tbody className="divide-y divide-slate-100">
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-10 text-center text-slate-500">
+                    <td colSpan={7} className="px-6 py-10 text-center text-slate-500">
                       No users found.
                     </td>
                   </tr>
@@ -252,6 +259,9 @@ export default function UsersList() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-slate-900">{user.region_name ?? '—'}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-slate-900">{user.centre_name ?? '—'}</div>
                         </td>
                         <td className="px-6 py-4">
                           <StatusChip status="Active" />

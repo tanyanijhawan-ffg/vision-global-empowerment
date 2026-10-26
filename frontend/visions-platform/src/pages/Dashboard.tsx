@@ -59,6 +59,23 @@ export default function Dashboard() {
 
   const [drilldown, setDrilldown] = useState<DrilldownPayload | null>(null);
   const [drilldownLoading, setDrilldownLoading] = useState(false);
+  const isCommunityEducator = currentUser?.role === 'FACILITATOR';
+  const assignedRegion = isCommunityEducator
+    ? regions.find(region => currentUser?.regionId != null
+      ? region.id === currentUser.regionId
+      : region.region_name.trim().toLocaleLowerCase() === currentUser?.region?.trim().toLocaleLowerCase())
+      ?? regions.find(region => centres.some(centre =>
+        centre.id === currentUser?.centreId && centre.region_name.trim().toLocaleLowerCase() === region.region_name.trim().toLocaleLowerCase()))
+    : undefined;
+
+  useEffect(() => {
+    if (!isCommunityEducator || !assignedRegion) return;
+    const assignedId = String(assignedRegion.id);
+    if (filterRegion !== assignedId) {
+      setFilterRegion(assignedId);
+      setFilterCentre('');
+    }
+  }, [isCommunityEducator, assignedRegion, filterRegion]);
 
   // Load master lists for the filter dropdowns
   useEffect(() => {
@@ -67,21 +84,27 @@ export default function Dashboard() {
   }, []);
 
   const filteredCentres = centres.filter(c => !filterRegion || c.region_name === regions.find(r => String(r.id) === filterRegion)?.region_name);
+  const visibleRegions = isCommunityEducator ? (assignedRegion ? [assignedRegion] : []) : regions;
 
   // Load dashboard summary, refetching whenever the filters change
   useEffect(() => {
     setLoading(true);
+    setError('');
+    let active = true;
+    const controller = new AbortController();
     const params = new URLSearchParams();
     if (filterRegion) params.append('region_id', filterRegion);
     if (filterCentre) params.append('centre_id', filterCentre);
     const qs = params.toString() ? `?${params.toString()}` : '';
-    fetch(`/api/dashboard/summary/${qs}`, { headers: { ...getAuthHeaders(), Accept: 'application/json' } })
+    fetch(`/api/dashboard/summary/${qs}`, { headers: { ...getAuthHeaders(), Accept: 'application/json' }, signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('Unable to load dashboard data.');
-        setData(await response.json());
+        const result = await response.json();
+        if (active) setData(result);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load dashboard data.'))
-      .finally(() => setLoading(false));
+      .catch((err) => { if (active && err.name !== 'AbortError') setError(err instanceof Error ? err.message : 'Unable to load dashboard data.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; controller.abort(); };
   }, [filterRegion, filterCentre]);
 
   const openDrilldown = (metric: string) => {
@@ -117,8 +140,8 @@ export default function Dashboard() {
             onChange={(e) => { setFilterRegion(e.target.value); setFilterCentre(''); }}
             className="py-2 pl-3 pr-8 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
           >
-            <option value="">All Regions</option>
-            {regions.map(r => <option key={r.id} value={String(r.id)}>{r.region_name}</option>)}
+            {!isCommunityEducator && <option value="">All Regions</option>}
+            {visibleRegions.map(r => <option key={r.id} value={String(r.id)}>{r.region_name}</option>)}
           </select>
           <select
             value={filterCentre}

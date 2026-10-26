@@ -27,7 +27,7 @@ export default function NotificationSettings() {
 					<p>
 						{summary?.enabled === false
 							? 'Absence notifications are currently disabled in Attendance settings.'
-							: `A notification appears after more than ${summary?.threshold_days ?? 3} consecutive recorded attendance sessions are marked absent. A Present or Late record resets the streak.`}
+							: `A notification appears after ${summary?.threshold_days ?? 3} consecutive recorded attendance sessions are marked absent. A Present or Late record resets the streak.`}
 					</p>
 				</div>
 			</div>

@@ -32,7 +32,7 @@ class LoginView(APIView):
         if user is None:
             return Response({'detail': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        profile = UserProfile.objects.select_related('role', 'region').filter(user=user).first()
+        profile = UserProfile.objects.select_related('role', 'region', 'centre').filter(user=user).first()
         if profile is None:
             return Response({'detail': 'User profile not found.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -52,6 +52,8 @@ class LoginView(APIView):
                 'role': normalized_role,
                 'region_id': profile.region_id,
                 'region_name': profile.region.region_name if profile.region else None,
+                'centre_id': profile.centre_id,
+                'centre_name': profile.centre.centre_name if profile.centre else None,
             }
         }, status=status.HTTP_200_OK)
 
