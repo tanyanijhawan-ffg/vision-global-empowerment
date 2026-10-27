@@ -198,7 +198,7 @@ export const AcademicFilterBar: React.FC<AcademicFilterBarProps> = ({
           <p className="text-xs text-slate-500 font-medium">
             Centre <span className="font-bold text-slate-800">{filterCentre}</span> &bull; Class{' '}
             <span className="font-bold text-slate-800">
-              {selectedClass?.name || 'Unknown class'}
+              {selectedClass?.name ? selectedClass.name.replace(/^(Class|Grade)\s*/i, '') : 'Unknown class'}
             </span>{' '}
             &bull;{' '}
             <span className="font-bold text-indigo-600">{studentsInScopeCount}</span> students in scope

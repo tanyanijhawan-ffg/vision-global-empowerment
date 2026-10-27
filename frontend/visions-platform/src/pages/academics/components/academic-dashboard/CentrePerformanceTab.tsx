@@ -43,7 +43,7 @@ export const CentrePerformanceTab: React.FC<CentrePerformanceTabProps> = ({
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Aggregated academic performance across {centrePerformanceReport.length} learning
-              centres for Class {filterClass}
+              centres for {/^class\b/i.test(String(filterClass || '').trim()) ? String(filterClass).trim() : `Class ${filterClass}`}
             </p>
           </div>
         </div>
