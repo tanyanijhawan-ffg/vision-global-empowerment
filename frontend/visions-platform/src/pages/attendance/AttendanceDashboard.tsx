@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bell, CalendarDays, CheckCircle2, ChevronDown, Clock3, Mail, RefreshCw, Save, Users, XCircle } from 'lucide-react';
+import { AlertTriangle, Bell, CalendarDays, CheckCircle2, ChevronDown, Clock3, RefreshCw, Save, Users, XCircle } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import StatCard from '../../components/StatCard';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { AttendanceAlertRecipients, AttendanceCentre, AttendanceIntelligenceSetting, AttendanceRecord, MasterCentre, MasterDistrict, MasterRegion, SchoolClass, StudentListItem, fetchAttendance, fetchAttendanceAlertRecipients, fetchAttendanceCentres, fetchAttendanceIntelligence, fetchMasterCentres, fetchMasterDistricts, fetchMasterRegions, fetchSchoolClasses, fetchStudents, sendAttendanceDefaultingEmail, saveAttendanceIntelligence } from '../../lib/api';
+import { AttendanceCentre, AttendanceIntelligenceSetting, AttendanceRecord, MasterCentre, MasterDistrict, MasterRegion, SchoolClass, StudentListItem, fetchAttendance, fetchAttendanceCentres, fetchAttendanceIntelligence, fetchMasterCentres, fetchMasterDistricts, fetchMasterRegions, fetchSchoolClasses, fetchStudents, saveAttendanceIntelligence } from '../../lib/api';
 import { getCurrentUser } from '../../lib/auth';
 import { getUserScopedCentres } from '../../lib/centreScope';
 
@@ -51,11 +51,6 @@ export default function AttendanceDashboard() {
   const [intelligence, setIntelligence] = useState<AttendanceIntelligenceSetting | null>(null);
   const [savingIntelligence, setSavingIntelligence] = useState(false);
   const [intelligenceMessage, setIntelligenceMessage] = useState('');
-  const [alertRecipients, setAlertRecipients] = useState<AttendanceAlertRecipients | null>(null);
-  const [selectedEducatorId, setSelectedEducatorId] = useState('');
-  const [loadingRecipients, setLoadingRecipients] = useState(false);
-  const [sendingDefaultingEmail, setSendingDefaultingEmail] = useState(false);
-  const [defaultingEmailMessage, setDefaultingEmailMessage] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -84,27 +79,6 @@ export default function AttendanceDashboard() {
     })).catch(reason => setIntelligenceMessage(reason instanceof Error ? reason.message : 'Unable to load system intelligence settings.'));
   }, []);
 
-  const canSendAttendanceEmail = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'REGIONAL_ADMIN';
-  useEffect(() => {
-    if (!canSendAttendanceEmail || !filterCentre) {
-      setAlertRecipients(null);
-      setSelectedEducatorId('');
-      return;
-    }
-    let active = true;
-    setLoadingRecipients(true);
-    setAlertRecipients(null);
-    setSelectedEducatorId('');
-    setDefaultingEmailMessage('');
-    fetchAttendanceAlertRecipients(Number(filterCentre)).then(recipients => {
-      if (!active) return;
-      setAlertRecipients(recipients);
-      setSelectedEducatorId(String(recipients.community_educators[0]?.id || ''));
-    }).catch(reason => {
-      if (active) setDefaultingEmailMessage(reason instanceof Error ? reason.message : 'Unable to load email addresses.');
-    }).finally(() => { if (active) setLoadingRecipients(false); });
-    return () => { active = false; };
-  }, [canSendAttendanceEmail, filterCentre]);
 
   const scopedMasterCentres = useMemo(() => getUserScopedCentres(masterCentres, currentUser), [masterCentres, currentUser]);
   const scopedCentres = useMemo(() => centres.filter(centre => scopedMasterCentres.some(masterCentre => masterCentre.id === centre.id)), [centres, scopedMasterCentres]);
@@ -232,25 +206,6 @@ export default function AttendanceDashboard() {
       setSavingIntelligence(false);
     }
   };
-  const handleSendDefaultingEmail = async () => {
-    if (!filterCentre || !selectedEducatorId || !atRiskStudents.length) return;
-    setSendingDefaultingEmail(true);
-    setDefaultingEmailMessage('');
-    try {
-      const result = await sendAttendanceDefaultingEmail({
-        centre_id: Number(filterCentre),
-        attendance_date: selectedDate,
-        educator_id: Number(selectedEducatorId),
-        class_grade: filterClass,
-        student_ids: atRiskStudents.map(student => Number(student.id)),
-      });
-      setDefaultingEmailMessage(`Email sent to ${result.recipient} for ${result.student_count} defaulting students.`);
-    } catch (reason) {
-      setDefaultingEmailMessage(reason instanceof Error ? reason.message : 'Unable to send attendance email.');
-    } finally {
-      setSendingDefaultingEmail(false);
-    }
-  };
   const hasFilters = Boolean((isSuperAdmin && filterRegion) || filterDistrict || filterCentre || filterClass);
   const views: { key: View; label: string }[] = [
     { key: 'region', label: 'Region-wise' }, { key: 'district', label: 'District-wise' },
@@ -336,24 +291,6 @@ export default function AttendanceDashboard() {
               </div>
             ))}
           </div>
-          {canSendAttendanceEmail && <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
-            <h3 className="text-sm font-semibold text-slate-800">Notify Community Educator</h3>
-            {!filterCentre ? <p className="text-xs text-slate-500">Select a centre above to load its Community Educator email.</p> : loadingRecipients ? <p className="text-xs text-slate-500">Loading email addresses…</p> : alertRecipients && <>
-              <label className="block text-xs font-medium text-slate-600">Community Educator
-                <select value={selectedEducatorId} onChange={event => setSelectedEducatorId(event.target.value)} className={`${selectClass} mt-1`}>
-                  <option value="">Select a Community Educator</option>
-                  {alertRecipients.community_educators.map(educator => <option key={educator.id} value={educator.id}>{educator.name} — {educator.email}</option>)}
-                </select>
-              </label>
-              {selectedEducatorId && <p className="text-xs text-slate-500">To: {alertRecipients.community_educators.find(educator => String(educator.id) === selectedEducatorId)?.email}</p>}
-              <p className="text-xs text-slate-500">CC Admin: {alertRecipients.admin.email || 'No email address configured'}</p>
-              <button onClick={handleSendDefaultingEmail} disabled={sendingDefaultingEmail || !selectedEducatorId || !atRiskStudents.length || !alertRecipients.admin.email} className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
-                <Mail size={15} />{sendingDefaultingEmail ? 'Sending…' : `Send ${atRiskStudents.length} defaulting student${atRiskStudents.length === 1 ? '' : 's'}`}
-              </button>
-            </>}
-            {alertRecipients && !alertRecipients.community_educators.length && <p className="text-xs text-amber-700">No Community Educator email is configured for this centre’s region.</p>}
-            {defaultingEmailMessage && <p role="status" className={`text-xs ${defaultingEmailMessage.startsWith('Email sent') ? 'text-emerald-700' : 'text-red-600'}`}>{defaultingEmailMessage}</p>}
-          </div>}
         </section>
       </div>
 
