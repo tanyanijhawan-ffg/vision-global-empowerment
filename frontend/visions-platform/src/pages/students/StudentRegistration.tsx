@@ -330,13 +330,12 @@ function Step4({ data, onChange, tribalCommunities = [] }: { data: RegistrationD
           <select value={booleanValue('study_space')} onChange={e => setSocio('study_space', e.target.value === 'Yes')} className={inputCls}>
             <option>Yes</option>
             <option>No</option>
-            <option value="">Select</option>
           </select>
         </Field>
       </div>
       <Field label="Access to Toilet">
         <select value={booleanValue('toilet')} onChange={e => setSocio('toilet', e.target.value === 'Yes')} className={inputCls}>
-          <option value="">Select</option><option>Yes</option><option>No</option>
+          <option>Yes</option><option>No</option>
         </select>
       </Field>
     </div>
@@ -537,7 +536,10 @@ export default function StudentRegistration() {
         centre_id: String(student.centre.id),
         photo: null,
         family_data: cleanRecord(student.family) as RegistrationData['family_data'],
-        socio_economic_data: cleanRecord(student.socio_economic) as RegistrationData['socio_economic_data'],
+        socio_economic_data: {
+          ...initialRegistrationData.socio_economic_data,
+          ...cleanRecord(student.socio_economic),
+        } as RegistrationData['socio_economic_data'],
         vulnerabilities_data: (student.vulnerabilities ?? []).map(item => ({ name: item.name, ...(item.remarks ? { remarks: item.remarks } : {}) })),
         motivation_data: (student.motivations ?? []).map(item => ({ category: item.category, reason: item.reason, ...(item.narrative ? { narrative: item.narrative } : {}) })),
         aspirations_data: { career_goal: student.aspirations?.[0]?.career_goal ?? '', interests: student.aspirations?.[0]?.interests ?? '', strengths: student.aspirations?.[0]?.strengths ?? '' },
