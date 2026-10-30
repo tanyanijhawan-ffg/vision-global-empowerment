@@ -336,7 +336,8 @@ class UserRBACAPITests(TestCase):
 
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('/reset-password?uid=', mail.outbox[0].body)
+        self.assertIn('/reset-password#uid=', mail.outbox[0].body)
+        self.assertNotIn('/reset-password?uid=', mail.outbox[0].body)
 
         uid = urlsafe_base64_encode(force_bytes(self.regional_user.pk))
         token = default_token_generator.make_token(self.regional_user)

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function ResetPassword() {
-  const [searchParams] = useSearchParams();
+  const { hash } = useLocation();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -22,8 +22,9 @@ export default function ResetPassword() {
     event.preventDefault();
     setError('');
 
-    const uid = searchParams.get('uid');
-    const token = searchParams.get('token');
+    const resetParams = new URLSearchParams(hash.slice(1));
+    const uid = resetParams.get('uid');
+    const token = resetParams.get('token');
     if (!uid || !token) {
       setError('This reset link is invalid or has expired.');
       return;
