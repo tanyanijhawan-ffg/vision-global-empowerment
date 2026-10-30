@@ -58,7 +58,7 @@ export default function Login() {
   return (
     <div className="min-h-screen w-full flex bg-white font-sans text-slate-900">
       {/* Left Panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-slate-900 flex-col justify-between p-12 relative overflow-hidden">
+      <div className="hidden md:flex md:w-1/2 bg-slate-900 flex-col justify-between p-12 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-indigo-400 via-slate-900 to-slate-900"></div>
         
         <div className="relative z-10">
@@ -85,7 +85,7 @@ export default function Login() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-sm mx-auto"
         >
-          <div className="mb-10 text-center lg:text-left lg:hidden">
+          <div className="mb-10 text-center md:hidden">
             <h1 className="text-3xl font-bold text-slate-900 mb-2">Visions LEP</h1>
             <p className="text-slate-500">Learning & Empowerment Platform</p>
           </div>
