@@ -71,7 +71,7 @@ class PasswordResetRequestView(APIView):
         if user:
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             token = default_token_generator.make_token(user)
-            reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?uid={uid}&token={token}"
+            reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password#uid={uid}&token={token}"
             send_mail(
                 subject='Reset your Visions LEP password',
                 message=(
