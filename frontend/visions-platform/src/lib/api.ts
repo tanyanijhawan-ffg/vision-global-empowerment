@@ -232,8 +232,17 @@ interface StudentApiRecord {
 }
 
 export async function fetchStudent(id: string): Promise<StudentRecord> {
-  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, { headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error(`Failed to load student (${response.status})`);
+  const response = await fetch(`${getApiBaseUrl()}/students/${id}/`, {
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to load student (${response.status})`);
+  }
+
   return response.json() as Promise<StudentRecord>;
 }
 
