@@ -895,7 +895,7 @@ export default function AssessmentEntry() {
         message: `Marks and observations for ${stats.completed} student(s) have been recorded.`,
         assessmentId: id,
         centreName: currentCentre?.name || 'Selected Centre',
-        className: `Class ${classId}`,
+        className: classes.find((c) => c.id === Number(classId))?.name || `Class ${classId}`,
         typeName: typeObj?.name || 'Exam',
         submittedAt: readableTime,
         studentCount: stats.completed,
